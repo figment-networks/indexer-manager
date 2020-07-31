@@ -38,6 +38,8 @@ func (t *ParserTask) GetName() string {
 }
 
 func (t *ParserTask) Run(ctx context.Context, p pipeline.Payload) error {
+	fmt.Println("[ParserTask]")
+
 	payload := (p).(*payload)
 
 	raw := payload.RawTransactions

@@ -3,7 +3,9 @@ package indexer
 import (
 	"context"
 	"errors"
+	"math"
 
+	"github.com/figment-networks/cosmos-indexer/util"
 	"github.com/figment-networks/indexing-engine/pipeline"
 )
 
@@ -14,6 +16,8 @@ var (
 )
 
 type source struct {
+	client CosmosClient
+
 	startHeight   int64
 	batchIndex    int64
 	batchSize     int64
@@ -21,8 +25,9 @@ type source struct {
 	err           error
 }
 
-func NewSource(config *Config) (*source, error) {
+func NewSource(config *Config, client CosmosClient) (*source, error) {
 	src := &source{
+		client:        client,
 		rangeInterval: config.HeightRangeInterval,
 	}
 
@@ -78,10 +83,19 @@ func (s *source) setStart(config *Config) error {
 }
 
 func (s *source) setEnd(config *Config) error {
-	// todo fetch latest block (`/block` endpoint returns latest block)
-	// then calculate batchsize. doesn't make sense to index blocks that don't exist yet
+	block, err := s.client.GetBlock()
+	if err != nil {
+		return err
+	}
 
-	s.batchSize = config.BatchSize
+	batchSize := config.BatchSize
+	maxStartHeight := util.MustInt64(block.Header.Height)
+	maxBatchSize := math.Ceil((float64(maxStartHeight-s.startHeight) / float64(s.rangeInterval)))
+	if float64(batchSize) > (maxBatchSize) {
+		batchSize = int64(maxBatchSize)
+	}
+
+	s.batchSize = batchSize
 	return nil
 }
 

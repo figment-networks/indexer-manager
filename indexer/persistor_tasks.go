@@ -2,6 +2,7 @@ package indexer
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/figment-networks/indexing-engine/pipeline"
 )
@@ -25,6 +26,8 @@ func (t *persistorTask) GetName() string {
 }
 
 func (t *persistorTask) Run(ctx context.Context, p pipeline.Payload) error {
+	fmt.Println("[persistorTask")
+
 	payload := p.(*payload)
 
 	for _, tx := range payload.Transactions {

@@ -3,15 +3,17 @@ package indexer
 import (
 	"context"
 
-	"github.com/davecgh/go-spew/spew"
 	"github.com/figment-networks/cosmos-indexer/cosmos"
 	"github.com/figment-networks/cosmos-indexer/model"
 	"github.com/figment-networks/indexing-engine/pipeline"
 )
 
-type TransactionClient interface {
+type CosmosClient interface {
 	// GetByHeightRange fetcehs raw cosmos transactions for all block heights within range
 	GetByHeightRange(heightRange *model.HeightRange) ([]*cosmos.ResultTx, error) //should be range
+
+	// GetBlock fetches latest cosmos block
+	GetBlock() (*cosmos.Block, error)
 }
 
 type TransactionStore interface {
@@ -32,11 +34,11 @@ type Config struct {
 }
 
 type Pipeline struct {
-	client TransactionClient
+	client CosmosClient
 	store  TransactionStore
 }
 
-func NewPipeline(c TransactionClient, s TransactionStore) *Pipeline {
+func NewPipeline(c CosmosClient, s TransactionStore) *Pipeline {
 	return &Pipeline{
 		client: c,
 		store:  s,
@@ -45,8 +47,6 @@ func NewPipeline(c TransactionClient, s TransactionStore) *Pipeline {
 
 func (txp *Pipeline) Start(config *Config) error {
 	//todo validate config
-	spew.Dump(config)
-
 	p := pipeline.NewCustom(NewPayloadFactory(config))
 
 	p.AddStage(
@@ -63,7 +63,7 @@ func (txp *Pipeline) Start(config *Config) error {
 
 	ctx := context.Background()
 
-	src, err := NewSource(config)
+	src, err := NewSource(config, txp.client)
 	if err != nil {
 		return err
 	}

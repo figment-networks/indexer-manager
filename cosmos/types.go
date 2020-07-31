@@ -1,6 +1,6 @@
 package cosmos
 
-// Result of querying for a tx
+// ResultTx is result of querying for a tx
 type ResultTx struct {
 	Hash     string            `json:"hash"`
 	Height   string            `json:"height"`
@@ -13,4 +13,18 @@ type ResultTx struct {
 type ResponseDeliverTx struct {
 	GasWanted string `json:"gasWanted"`
 	GasUsed   string `json:"gasUsed"`
+}
+
+// ResultBlock is result of fetching block
+type ResultBlock struct {
+	Block Block `json:"block"`
+}
+
+// Block is cosmos block data
+type Block struct {
+	Header BlockHeader `json:"header`
+}
+
+type BlockHeader struct {
+	Height string `json:"height"`
 }

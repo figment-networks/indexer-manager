@@ -13,9 +13,10 @@ import (
 
 const (
 	txSearchEndpoint = "/tx_search"
+	blockEndpoint    = "/block"
 )
 
-type GetByHeightResponse struct {
+type GetTxResponse struct {
 	ID     string          `json:"id"`
 	RPC    string          `json:"jsonrpc"`
 	Result *ResultTxSearch `json:"result"`
@@ -56,12 +57,18 @@ func NewClient(url, key string, c *http.Client) *Client {
 	}
 }
 
+type GetBlockResponse struct {
+	ID     string       `json:"id"`
+	RPC    string       `json:"jsonrpc"`
+	Result *ResultBlock `json:"result"`
+	Error  *Error       `json:"error"`
+}
+
 // GetByHeightRange fetches transactions for all block heights within given range
 func (c Client) GetByHeightRange(r *model.HeightRange) ([]*ResultTx, error) {
 	fmt.Println("[GetByHeightRange] StartHeight ", r.StartHeight)
 
 	req, err := http.NewRequest(http.MethodGet, c.baseURL+txSearchEndpoint, nil)
-
 	if err != nil {
 		return nil, err
 	}
@@ -81,7 +88,7 @@ func (c Client) GetByHeightRange(r *model.HeightRange) ([]*ResultTx, error) {
 	defer resp.Body.Close()
 	decoder := json.NewDecoder(resp.Body)
 
-	var result *GetByHeightResponse
+	var result *GetTxResponse
 
 	if err = decoder.Decode(&result); err != nil {
 		log.WithError(err).Error("unable to decode result body")
@@ -89,8 +96,40 @@ func (c Client) GetByHeightRange(r *model.HeightRange) ([]*ResultTx, error) {
 	}
 
 	if result.Error != nil {
-		return nil, errors.New("foo result.error")
+		return nil, errors.New("error fetching transactions") //todo make more descriptive
 	}
 
 	return result.Result.Txs, nil
+}
+
+// GetBlock fetches most recent block from chain
+func (c Client) GetBlock() (*Block, error) {
+	req, err := http.NewRequest(http.MethodGet, c.baseURL+blockEndpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", "application/json")
+	req.Header.Add("Authorization", c.key)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	defer resp.Body.Close()
+	decoder := json.NewDecoder(resp.Body)
+
+	var result *GetBlockResponse
+
+	if err = decoder.Decode(&result); err != nil {
+		log.WithError(err).Error("unable to decode result body")
+		return nil, err
+	}
+
+	if result.Error != nil {
+		return nil, errors.New("error fetching block") //todo make more descriptive
+	}
+
+	return &result.Result.Block, nil
 }

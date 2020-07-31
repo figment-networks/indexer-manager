@@ -60,7 +60,10 @@ func main() {
 
 	pipeline := indexer.NewPipeline(c, db)
 
-	pipeline.Start(idxConfig(flags, cfg))
+	err = pipeline.Start(idxConfig(flags, cfg))
+	if err != nil {
+		panic(fmt.Errorf("error starting pipeline [ERR: %+v]", err))
+	}
 }
 
 func initConfig(path string) (*config.Config, error) {
