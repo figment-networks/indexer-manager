@@ -5,7 +5,6 @@ import (
 	"errors"
 	"math"
 
-	"github.com/figment-networks/cosmos-indexer/util"
 	"github.com/figment-networks/indexing-engine/pipeline"
 )
 

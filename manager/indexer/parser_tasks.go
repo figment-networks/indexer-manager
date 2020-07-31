@@ -18,7 +18,6 @@ import (
 	"github.com/cosmos/cosmos-sdk/x/staking"
 
 	"github.com/figment-networks/cosmos-indexer/model"
-	"github.com/figment-networks/cosmos-indexer/util"
 	"github.com/figment-networks/indexing-engine/pipeline"
 )
 

@@ -3,12 +3,17 @@ package main
 import (
 	"flag"
 	"fmt"
+	"log"
+	"os"
+	"path/filepath"
 
-	"github.com/figment-networks/cosmos-indexer/cosmos"
+	"github.com/figment-networks/cosmos-indexer/cmd/manager/config"
 	"github.com/figment-networks/cosmos-indexer/indexer"
 	"github.com/figment-networks/cosmos-indexer/store"
-	"github.com/figment-networks/cosmos-indexer/worker/config"
-	"github.com/figment-networks/cosmos-indexer/worker/migration"
+
+	"github.com/golang-migrate/migrate/v4"
+	_ "github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 )
 
 type flags struct {
@@ -19,40 +24,34 @@ type flags struct {
 	heightRangeInterval int64
 }
 
-func (c *flags) Setup() {
-	flag.BoolVar(&c.showVersion, "v", false, "Show application version")
-	flag.StringVar(&c.configPath, "config", "", "Path to config")
-	flag.BoolVar(&c.runMigration, "migrate", false, "Command to run")
-	flag.Int64Var(&c.batchSize, "batch_size", 0, "pipeline batch size")
-	flag.Int64Var(&c.heightRangeInterval, "range_int", 0, "pipeline batch size")
+var configFlags = flags{}
+
+func init() {
+	flag.BoolVar(&configFlags.showVersion, "v", false, "Show application version")
+	flag.StringVar(&configFlags.configPath, "config", "", "Path to config")
+	flag.BoolVar(&configFlags.runMigration, "migrate", false, "Command to run")
+	flag.Int64Var(&configFlags.batchSize, "batch_size", 0, "pipeline batch size")
+	flag.Int64Var(&configFlags.heightRangeInterval, "range_int", 0, "pipeline batch size")
+	flag.Parse()
 }
 
 func main() {
-	flags := flags{}
-	flags.Setup()
-	flag.Parse()
-
-	if flags.showVersion {
-		fmt.Println(config.VersionString())
-		return
-	}
-
 	// Initialize configuration
-	cfg, err := initConfig(flags.configPath)
+	cfg, err := initConfig(configFlags.configPath)
 	if err != nil {
 		panic(fmt.Errorf("error initializing config [ERR: %+v]", err))
 	}
 
-	if flags.runMigration {
-		err := migration.Run(cfg.DatabaseURL)
+	if configFlags.runMigration {
+		err := RunMigrations(cfg.DatabaseURL)
 		if err != nil {
 			panic(fmt.Errorf("error running migrations [ERR: %+v]", err))
 		}
 		return // todo should we continue running worker after migration?
 	}
-
-	c := cosmos.NewClient(cfg.TendermintRPCAddr, cfg.DatahubKey, nil)
-
+	/*
+		c := cosmos.NewClient(cfg.TendermintRPCAddr, cfg.DatahubKey, nil)
+	*/
 	db, err := store.New(cfg.DatabaseURL)
 	if err != nil {
 		panic(fmt.Errorf("error initializing store [ERR: %+v]", err))
@@ -60,7 +59,7 @@ func main() {
 
 	pipeline := indexer.NewPipeline(c, db)
 
-	err = pipeline.Start(idxConfig(flags, cfg))
+	err = pipeline.Start(idxConfig(configFlags, cfg))
 	if err != nil {
 		panic(fmt.Errorf("error starting pipeline [ERR: %+v]", err))
 	}
@@ -102,4 +101,22 @@ func idxConfig(flags flags, cfg *config.Config) *indexer.Config {
 		HeightRangeInterval: heightRange,
 		StartHeight:         0,
 	}
+}
+
+func RunMigrations(dbURL string) error {
+	log.Println("getting current directory")
+	dir, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+	srcDir := filepath.Join(dir, "migrations")
+	srcPath := fmt.Sprintf("file://%s", srcDir) //todo pass file location in config? or move this package or migrations folder
+	log.Println("using migrations from", srcPath)
+	m, err := migrate.New(srcPath, dbURL)
+	if err != nil {
+		return err
+	}
+
+	log.Println("running migrations")
+	return m.Up()
 }
