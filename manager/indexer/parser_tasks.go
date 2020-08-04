@@ -4,8 +4,9 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"strconv"
 
-	"github.com/figment-networks/cosmos-indexer/cosmos"
+	"github.com/figment-networks/cosmos-indexer/worker/cosmos"
 
 	"github.com/cosmos/cosmos-sdk/codec"
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -17,7 +18,7 @@ import (
 	"github.com/cosmos/cosmos-sdk/x/slashing"
 	"github.com/cosmos/cosmos-sdk/x/staking"
 
-	"github.com/figment-networks/cosmos-indexer/model"
+	"github.com/figment-networks/cosmos-indexer/manager/model"
 	"github.com/figment-networks/indexing-engine/pipeline"
 )
 
@@ -70,11 +71,24 @@ func rawToTransaction(raw *cosmos.ResultTx, cdc *codec.Codec) (*model.Transactio
 		return nil, err
 	}
 
+	intHeight, err := strconv.ParseUint(raw.Height, 10, 64)
+	if err != nil {
+		return nil, err
+	}
+	intGasWanted, err := strconv.ParseUint(raw.TxResult.GasWanted, 10, 64)
+	if err != nil {
+		return nil, err
+	}
+	intGasUsed, err := strconv.ParseUint(raw.TxResult.GasUsed, 10, 64)
+	if err != nil {
+		return nil, err
+	}
+
 	return &model.Transaction{
-		Height:    util.MustUInt64(raw.Height),
+		Height:    intHeight,
 		Hash:      raw.Hash,
-		GasWanted: util.MustUInt64(raw.TxResult.GasWanted),
-		GasUsed:   util.MustUInt64(raw.TxResult.GasUsed),
+		GasWanted: intGasWanted,
+		GasUsed:   intGasUsed,
 		Memo:      parsed.Memo,
 	}, nil
 }

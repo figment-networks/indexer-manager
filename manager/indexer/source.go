@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"math"
+	"strconv"
 
 	"github.com/figment-networks/indexing-engine/pipeline"
 )
@@ -88,7 +89,11 @@ func (s *source) setEnd(config *Config) error {
 	}
 
 	batchSize := config.BatchSize
-	maxStartHeight := util.MustInt64(block.Header.Height)
+	maxStartHeight, err := strconv.ParseInt(block.Header.Height, 10, 64)
+	if err != nil {
+		return err
+	}
+
 	maxBatchSize := math.Ceil((float64(maxStartHeight-s.startHeight) / float64(s.rangeInterval)))
 	if float64(batchSize) > (maxBatchSize) {
 		batchSize = int64(maxBatchSize)

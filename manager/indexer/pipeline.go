@@ -3,8 +3,8 @@ package indexer
 import (
 	"context"
 
-	"github.com/figment-networks/cosmos-indexer/cosmos"
-	"github.com/figment-networks/cosmos-indexer/model"
+	"github.com/figment-networks/cosmos-indexer/manager/model"
+	"github.com/figment-networks/cosmos-indexer/worker/cosmos"
 	"github.com/figment-networks/indexing-engine/pipeline"
 )
 

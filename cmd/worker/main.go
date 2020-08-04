@@ -1,12 +1,21 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
+	"log"
+	"net"
+	"time"
+
+	"github.com/google/uuid"
+	grpc "google.golang.org/grpc"
 
 	"github.com/figment-networks/cosmos-indexer/cmd/worker/config"
-	"github.com/figment-networks/cosmos-indexer/cosmos"
-	"github.com/figment-networks/cosmos-indexer/indexer"
+	"github.com/figment-networks/cosmos-indexer/worker/client"
+	"github.com/figment-networks/cosmos-indexer/worker/connectivity"
+	grpcIndexer "github.com/figment-networks/cosmos-indexer/worker/transport/grpc"
+	grpcProtoIndexer "github.com/figment-networks/cosmos-indexer/worker/transport/grpc/indexer"
 )
 
 type flags struct {
@@ -22,7 +31,6 @@ var configFlags = flags{}
 func init() {
 	flag.BoolVar(&configFlags.showVersion, "v", false, "Show application version")
 	flag.StringVar(&configFlags.configPath, "config", "", "Path to config")
-	flag.BoolVar(&configFlags.runMigration, "migrate", false, "Command to run")
 	flag.Int64Var(&configFlags.batchSize, "batch_size", 0, "pipeline batch size")
 	flag.Int64Var(&configFlags.heightRangeInterval, "range_int", 0, "pipeline batch size")
 	flag.Parse()
@@ -30,12 +38,12 @@ func init() {
 
 func main() {
 	// Initialize configuration
-	cfg, err := initConfig(configFlags.configPath)
-	if err != nil {
-		panic(fmt.Errorf("error initializing config [ERR: %+v]", err))
-	}
-
-	c := cosmos.NewClient(cfg.TendermintRPCAddr, cfg.DatahubKey, nil)
+	/*	cfg, err := initConfig(configFlags.configPath)
+		if err != nil {
+			panic(fmt.Errorf("error initializing config [ERR: %+v]", err))
+		}
+	*/
+	//	c := cosmos.NewClient(cfg.TendermintRPCAddr, cfg.DatahubKey, nil)
 
 	//	pipeline := indexer.NewPipeline(c, db)
 	/*
@@ -44,6 +52,30 @@ func main() {
 			panic(fmt.Errorf("error starting pipeline [ERR: %+v]", err))
 		}
 	*/
+
+	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", 3000))
+	if err != nil {
+		log.Fatalf("failed to listen: %v", err)
+	}
+
+	grpcServer := grpc.NewServer()
+
+	workerRunID, err := uuid.NewRandom() // UUID V4
+	if err != nil {
+		log.Fatalf("error generating UUID: %v", err)
+	}
+
+	c := connectivity.NewWorkerConnections(workerRunID.String(), "localhost:3000")
+	c.AddManager("localhost:8085/client_ping")
+
+	go c.Run(context.Background(), time.Second*2)
+
+	workerClient := client.NewIndexerClient()
+	worker := grpcIndexer.NewIndexerServer(workerClient)
+	grpcProtoIndexer.RegisterIndexerServiceServer(grpcServer, worker)
+
+	// (lukanus): blocking call on grpc server
+	grpcServer.Serve(lis)
 }
 
 func initConfig(path string) (*config.Config, error) {
@@ -61,6 +93,7 @@ func initConfig(path string) (*config.Config, error) {
 	return cfg, nil
 }
 
+/*
 func idxConfig(flags flags, cfg *config.Config) *indexer.Config {
 	batchSize := flags.batchSize
 	if batchSize == 0 {
@@ -78,3 +111,4 @@ func idxConfig(flags flags, cfg *config.Config) *indexer.Config {
 		StartHeight:         0,
 	}
 }
+*/

@@ -16,11 +16,7 @@ const (
 type Config struct {
 	AppEnv      string `json:"app_env" envconfig:"APP_ENV" default:"development"`
 	DatabaseURL string `json:"database_url" envconfig:"DATABASE_URL" required:"true"`
-}
-
-// New returns a new config
-func New() *Config {
-	return &Config{}
+	Address     string `json:"address" envconfig:"ADDRESS" default:"127.0.0.1:8085"`
 }
 
 // FromFile reads the config from a file

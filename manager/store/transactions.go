@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/figment-networks/cosmos-indexer/model"
+	"github.com/figment-networks/cosmos-indexer/manager/model"
 	"github.com/jinzhu/gorm"
 )
 

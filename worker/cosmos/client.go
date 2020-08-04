@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/figment-networks/cosmos-indexer/model"
+	"github.com/figment-networks/cosmos-indexer/worker/model"
 	log "github.com/sirupsen/logrus"
 )
 

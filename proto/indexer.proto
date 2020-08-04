@@ -1,0 +1,22 @@
+
+syntax = "proto3";
+
+package indexer;
+
+
+service IndexerService {
+  rpc TaskRPC (stream TaskRequest) returns (stream TaskResponse) {}
+}
+message TaskRequest {
+  string version = 1;
+  string id = 2;
+  string type = 3;
+  bytes payload = 4;
+}
+
+message TaskResponse {
+  string version = 1;
+  string id = 2;
+  string type = 3;
+  bytes payload = 4;
+}
