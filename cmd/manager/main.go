@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -44,6 +45,7 @@ func init() {
 }
 
 func main() {
+	ctx := context.Background()
 	// Initialize configuration
 	cfg, err := initConfig(configFlags.configPath)
 	if err != nil {
@@ -59,9 +61,6 @@ func main() {
 	}
 
 	/*
-		c := cosmos.NewClient(cfg.TendermintRPCAddr, cfg.DatahubKey, nil)
-	*/
-	/*
 		db, err := store.New(cfg.DatabaseURL)
 		if err != nil {
 			log.Fatal(fmt.Errorf("error initializing store [ERR: %+v]", err))
@@ -76,9 +75,12 @@ func main() {
 	*/
 
 	connManager := connectivity.NewManager()
+
 	hubbleClient := client.NewHubbleClient()
 	grpcCli := grpcTransport.NewClient(hubbleClient)
 	connManager.AddTransport(grpcCli)
+
+	go connManager.Run(ctx, hubbleClient.Out())
 
 	hubbleHTTPTransport := httpTransport.NewHubbleConnector(hubbleClient)
 
@@ -209,5 +211,17 @@ func attachConnectionManager(mgr *connectivity.Manager, mux *http.ServeMux) {
 			}},
 		})
 		w.WriteHeader(http.StatusOK)
+	})
+
+	mux.HandleFunc("/get_workers", func(w http.ResponseWriter, r *http.Request) {
+		m, err := json.Marshal(mgr.GetAllWorkers())
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(`{"error": "Error marshaling data"}`))
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(m)
+		return
 	})
 }

@@ -13,6 +13,7 @@ import (
 	"google.golang.org/grpc/keepalive"
 
 	"github.com/figment-networks/cosmos-indexer/cmd/worker/config"
+	"github.com/figment-networks/cosmos-indexer/worker/api/tendermint"
 	"github.com/figment-networks/cosmos-indexer/worker/client"
 	"github.com/figment-networks/cosmos-indexer/worker/connectivity"
 	grpcIndexer "github.com/figment-networks/cosmos-indexer/worker/transport/grpc"
@@ -39,11 +40,11 @@ func init() {
 
 func main() {
 	// Initialize configuration
-	/*	cfg, err := initConfig(configFlags.configPath)
-		if err != nil {
-			panic(fmt.Errorf("error initializing config [ERR: %+v]", err))
-		}
-	*/
+	cfg, err := initConfig(configFlags.configPath)
+	if err != nil {
+		panic(fmt.Errorf("error initializing config [ERR: %+v]", err))
+	}
+
 	//	c := cosmos.NewClient(cfg.TendermintRPCAddr, cfg.DatahubKey, nil)
 
 	//	pipeline := indexer.NewPipeline(c, db)
@@ -72,7 +73,8 @@ func main() {
 
 	go c.Run(context.Background(), time.Second*10)
 
-	workerClient := client.NewIndexerClient(context.Background())
+	tendermintClient := tendermint.NewClient(cfg.TendermintRPCAddr, cfg.DatahubKey, nil)
+	workerClient := client.NewIndexerClient(context.Background(), tendermintClient)
 	worker := grpcIndexer.NewIndexerServer(workerClient)
 	grpcProtoIndexer.RegisterIndexerServiceServer(grpcServer, worker)
 
@@ -81,7 +83,6 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
-	log.Print(5)
 	log.Printf("Listening on %s", address)
 	// (lukanus): blocking call on grpc server
 	grpcServer.Serve(lis)

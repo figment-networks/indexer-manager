@@ -7,6 +7,12 @@ package indexer;
 service IndexerService {
   rpc TaskRPC (stream TaskRequest) returns (stream TaskResponse) {}
 }
+
+message TaskError {
+  string msg = 1;
+  string type = 2;
+}
+
 message TaskRequest {
   string version = 1;
   string id = 2;
@@ -20,6 +26,7 @@ message TaskResponse {
   string type = 3;
   int64 order = 4;
   bool final = 5;
-  bytes payload = 6;
+  TaskError error = 6;
+  bytes payload = 7;
 
 }

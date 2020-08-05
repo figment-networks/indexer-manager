@@ -1,5 +1,6 @@
 package indexer
 
+/*
 import (
 	"context"
 	"fmt"
@@ -36,3 +37,4 @@ func (t *FetcherTask) Run(ctx context.Context, p pipeline.Payload) error {
 	payload.RawTransactions = txs
 	return nil
 }
+*/

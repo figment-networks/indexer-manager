@@ -1,5 +1,6 @@
 package indexer
 
+/*
 import (
 	"sync"
 
@@ -51,3 +52,4 @@ type payload struct {
 func (p *payload) MarkAsProcessed() {
 	payloadPool.Put(p)
 }
+*/

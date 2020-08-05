@@ -9,6 +9,7 @@ import (
 
 	"github.com/figment-networks/cosmos-indexer/manager/client"
 	"github.com/figment-networks/cosmos-indexer/manager/connectivity"
+	"github.com/figment-networks/cosmos-indexer/manager/connectivity/structs"
 	"github.com/figment-networks/cosmos-indexer/manager/transport/grpc/indexer"
 	"github.com/google/uuid"
 	grpc "google.golang.org/grpc"
@@ -16,19 +17,18 @@ import (
 )
 
 type Client struct {
-	clienter client.IndexerClienter
-	state    connectivity.State
+	state connectivity.State
 }
 
 func NewClient(clienter client.IndexerClienter) *Client {
-	return &Client{clienter, connectivity.StateInitialized}
+	return &Client{}
 }
 
 func (c *Client) Type() string {
 	return "grpc"
 }
 
-func (c *Client) Run(ctx context.Context, wc connectivity.WorkerConnection) {
+func (c *Client) Run(ctx context.Context, id string, wc connectivity.WorkerConnection, input <-chan structs.TaskRequest, removeWorkerCh chan<- string) {
 
 	log.Printf("Running connections %+v", wc)
 	var conn *grpc.ClientConn
@@ -71,18 +71,20 @@ func (c *Client) Run(ctx context.Context, wc connectivity.WorkerConnection) {
 
 	receiverClosed := make(chan error)
 	defer close(receiverClosed)
-	responsesCh := make(chan client.TaskResponse)
+	responsesCh := make(chan structs.TaskResponse)
 	defer close(responsesCh)
 
 	lookupTable := NewLookupTable()
 
-	go Recv(ctx, taskStream, lookupTable, receiverClosed)
+	go Recv(taskStream, lookupTable, receiverClosed)
 CONTROLRPC:
 	for {
 		select {
+		case <-ctx.Done():
+			break CONTROLRPC
 		case <-receiverClosed:
 			break CONTROLRPC
-		case req := <-c.clienter.Out():
+		case req := <-input:
 			log.Printf("SENDING MESSAGE %+v", req)
 			messageID, _ := uuid.NewRandom() // UUID V4
 			id := messageID.String()
@@ -100,12 +102,13 @@ CONTROLRPC:
 		}
 	}
 
+	// (lukanus): has to be closed, otherwise Recv would be running forever
 	taskStream.CloseSend()
 	log.Printf("Finished")
-
+	removeWorkerCh <- id
 }
 
-func Recv(ctx context.Context, stream indexer.IndexerService_TaskRPCClient, lookupTable *LookupTable, finishCh chan error) {
+func Recv(stream indexer.IndexerService_TaskRPCClient, lookupTable *LookupTable, finishCh chan error) {
 
 	log.Println("Started receive")
 	for {
@@ -130,7 +133,7 @@ func Recv(ctx context.Context, stream indexer.IndexerService_TaskRPCClient, look
 			}
 
 			log.Printf("Sending TaskResponse %d %d", len(req.ResponseCh), cap(req.ResponseCh))
-			req.ResponseCh <- client.TaskResponse{
+			req.ResponseCh <- structs.TaskResponse{
 				Order:   in.Order,
 				Final:   in.Final,
 				Type:    in.Type,
@@ -147,7 +150,7 @@ func Recv(ctx context.Context, stream indexer.IndexerService_TaskRPCClient, look
 			log.Printf("Received message with  unknown id (%s): %+v", string(in.Id), in)
 			continue
 		}
-		req.ResponseCh <- client.TaskResponse{
+		req.ResponseCh <- structs.TaskResponse{
 			Order:   in.Order,
 			Type:    in.Type,
 			Payload: in.Payload,
@@ -157,24 +160,24 @@ func Recv(ctx context.Context, stream indexer.IndexerService_TaskRPCClient, look
 }
 
 type LookupTable struct {
-	table map[string]*client.TaskRequest
+	table map[string]*structs.TaskRequest
 	lock  sync.RWMutex
 }
 
 func NewLookupTable() *LookupTable {
 	return &LookupTable{
-		table: make(map[string]*client.TaskRequest),
+		table: make(map[string]*structs.TaskRequest),
 	}
 }
 
-func (lt *LookupTable) Get(id string) (*client.TaskRequest, bool) {
+func (lt *LookupTable) Get(id string) (*structs.TaskRequest, bool) {
 	lt.lock.RLock()
 	defer lt.lock.RUnlock()
 	respCh, ok := lt.table[id]
 	return respCh, ok
 }
 
-func (lt *LookupTable) Set(id string, req *client.TaskRequest) error {
+func (lt *LookupTable) Set(id string, req *structs.TaskRequest) error {
 	lt.lock.Lock()
 	defer lt.lock.Unlock()
 
@@ -195,7 +198,7 @@ func (lt *LookupTable) Delete(id string) {
 	delete(lt.table, id)
 }
 
-func (lt *LookupTable) Take(id string) (*client.TaskRequest, bool) {
+func (lt *LookupTable) Take(id string) (*structs.TaskRequest, bool) {
 	lt.lock.Lock()
 	defer lt.lock.Unlock()
 	req, ok := lt.table[id]
