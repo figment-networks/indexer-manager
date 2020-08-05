@@ -2,7 +2,24 @@ package client
 
 import (
 	"context"
+	"encoding/json"
+	"log"
 )
+
+type TaskRequest struct {
+	Type    string
+	Payload json.RawMessage
+
+	ResponseCh chan TaskResponse
+}
+
+type TaskResponse struct {
+	Version string
+	Type    string
+	Order   int64
+	Final   bool
+	Payload json.RawMessage
+}
 
 // HubbleContractor a format agnostic
 type HubbleContractor interface {
@@ -18,11 +35,20 @@ type HubbleContractor interface {
 	GetAccount(ctx context.Context)
 }
 
+type IndexerClienter interface {
+	Out() <-chan TaskRequest
+}
+
 type HubbleClient struct {
+	taskOutput chan TaskRequest
 }
 
 func NewHubbleClient() *HubbleClient {
-	return &HubbleClient{}
+	return &HubbleClient{make(chan TaskRequest, 20)}
+}
+
+func (hc *HubbleClient) Out() <-chan TaskRequest {
+	return hc.taskOutput
 }
 
 func (hc *HubbleClient) GetCurrentHeight(ctx context.Context) {
@@ -53,8 +79,31 @@ func (hc *HubbleClient) GetTransaction(ctx context.Context) {
 
 }
 
-func (hc *HubbleClient) GetTransactions(ctx context.Context) {
+type TransactionRequest struct {
+	A string `json:"a"`
+	B string `json:"b"`
+}
 
+func (hc *HubbleClient) GetTransactions(ctx context.Context) {
+	respCh := make(chan TaskResponse, 3)
+
+	b, _ := json.Marshal(TransactionRequest{"asdf", "xcvb"})
+	hc.taskOutput <- TaskRequest{
+		Type:       "GetTransactions",
+		Payload:    b,
+		ResponseCh: respCh,
+	}
+	log.Println("waiting for transactions")
+WAIT_FOR_ALL_TRANSACTIONS:
+	for {
+		select {
+		case response := <-respCh:
+			log.Println("Got Response !!!")
+			if response.Final {
+				break WAIT_FOR_ALL_TRANSACTIONS
+			}
+		}
+	}
 }
 
 func (hc *HubbleClient) GetAccounts(ctx context.Context) {
@@ -62,9 +111,5 @@ func (hc *HubbleClient) GetAccounts(ctx context.Context) {
 }
 
 func (hc *HubbleClient) GetAccount(ctx context.Context) {
-
-}
-
-func (hc *HubbleClient) RouteMessage() {
 
 }

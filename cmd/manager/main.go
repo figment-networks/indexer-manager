@@ -11,12 +11,12 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
-	"time"
 
 	"github.com/figment-networks/cosmos-indexer/cmd/manager/config"
 	"github.com/figment-networks/cosmos-indexer/manager/client"
 	"github.com/figment-networks/cosmos-indexer/manager/connectivity"
 	"github.com/figment-networks/cosmos-indexer/manager/store"
+	grpcTransport "github.com/figment-networks/cosmos-indexer/manager/transport/grpc"
 	httpTransport "github.com/figment-networks/cosmos-indexer/manager/transport/http"
 
 	"github.com/golang-migrate/migrate/v4"
@@ -77,6 +77,8 @@ func main() {
 
 	connManager := connectivity.NewManager()
 	hubbleClient := client.NewHubbleClient()
+	grpcCli := grpcTransport.NewClient(hubbleClient)
+	connManager.AddTransport(grpcCli)
 
 	hubbleHTTPTransport := httpTransport.NewHubbleConnector(hubbleClient)
 
@@ -88,10 +90,10 @@ func main() {
 	attachConnectionManager(connManager, mux)
 
 	s := &http.Server{
-		Addr:         cfg.Address,
-		Handler:      mux,
-		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 10 * time.Second,
+		Addr:    cfg.Address,
+		Handler: mux,
+		//	ReadTimeout:  10 * time.Second,
+		//	WriteTimeout: 10 * time.Second,
 	}
 	log.Printf("Running server on %s", cfg.Address)
 	log.Fatal(s.ListenAndServe())
@@ -154,11 +156,16 @@ func attachChecks(db *store.Store, mux *http.ServeMux) {
 
 }
 
-// contract is defined here
+// PingInfo contract is defined here
 type PingInfo struct {
-	ID      string `json:"id"`
-	Kind    string `json:"kind"`
+	ID           string           `json:"id"`
+	Kind         string           `json:"kind"`
+	Connectivity ConnectivityInfo `json:"connectivity"`
+}
+type ConnectivityInfo struct {
 	Address string `json:"address"`
+	Version string `json:"version"`
+	Type    string `json:"type"`
 }
 
 func attachConnectionManager(mgr *connectivity.Manager, mux *http.ServeMux) {
@@ -193,11 +200,14 @@ func attachConnectionManager(mgr *connectivity.Manager, mux *http.ServeMux) {
 		if fwd != "" {
 			ipTo = net.ParseIP(fwd)
 		}
-		mgr.Register(pi.ID, pi.Kind, connectivity.WorkerAddress{
-			IP:     ipTo,
-			Domain: pi.Address,
+		mgr.Register(pi.ID, pi.Kind, connectivity.WorkerConnection{
+			Version: pi.Connectivity.Version,
+			Type:    pi.Connectivity.Type,
+			Addresses: []connectivity.WorkerAddress{{
+				IP:      ipTo,
+				Address: pi.Connectivity.Address,
+			}},
 		})
-
 		w.WriteHeader(http.StatusOK)
 	})
 }

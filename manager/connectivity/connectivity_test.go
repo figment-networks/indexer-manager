@@ -1,6 +1,7 @@
 package connectivity
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -8,9 +9,9 @@ import (
 
 func TestManager_Register(t *testing.T) {
 	type args struct {
-		id      string
-		kind    string
-		address WorkerAddress
+		id             string
+		kind           string
+		connectionInfo WorkerConnection
 	}
 	tests := []struct {
 		name         string
@@ -18,17 +19,28 @@ func TestManager_Register(t *testing.T) {
 		expectedKind string
 		expected     []WorkerInfo
 	}{
-		{name: "happy path ",
+		{name: "happy path",
 			expectedKind: "cosmos",
 			args: []args{
-				{id: "asdf", kind: "cosmos", address: WorkerAddress{Domain: "something.test"}},
+				{id: "asdf",
+					kind: "cosmos",
+					connectionInfo: WorkerConnection{
+						Version:   "0.0.1",
+						Type:      "asdf",
+						Addresses: []WorkerAddress{{Address: "something.test"}},
+					},
+				},
 			},
 			expected: []WorkerInfo{
 				{
 					State:      StateInitialized,
 					NodeSelfID: "asdf",
 					Type:       "cosmos",
-					Address:    WorkerAddress{Domain: "something.test"},
+					ConnectionInfo: WorkerConnection{
+						Version:   "0.0.1",
+						Type:      "asdf",
+						Addresses: []WorkerAddress{{Address: "something.test"}},
+					},
 				},
 			},
 		},
@@ -38,7 +50,7 @@ func TestManager_Register(t *testing.T) {
 			m := NewManager()
 
 			for _, a := range tt.args {
-				m.Register(a.id, a.kind, a.address)
+				m.Register(a.id, a.kind, a.connectionInfo)
 			}
 
 			var found bool
@@ -50,8 +62,7 @@ func TestManager_Register(t *testing.T) {
 				for _, w := range workers {
 					if w.NodeSelfID == exp.NodeSelfID &&
 						w.State == StateInitialized &&
-						w.Address.Domain == exp.Address.Domain &&
-						w.Address.IP.String() == exp.Address.IP.String() &&
+						reflect.DeepEqual(w.ConnectionInfo, exp.ConnectionInfo) &&
 						!w.LastCheck.IsZero() {
 						found = true
 						break

@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	grpc "google.golang.org/grpc"
+	"google.golang.org/grpc/keepalive"
 
 	"github.com/figment-networks/cosmos-indexer/cmd/worker/config"
 	"github.com/figment-networks/cosmos-indexer/worker/client"
@@ -53,12 +54,13 @@ func main() {
 		}
 	*/
 
-	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", 3000))
-	if err != nil {
-		log.Fatalf("failed to listen: %v", err)
-	}
-
-	grpcServer := grpc.NewServer()
+	grpcServer := grpc.NewServer(
+		grpc.KeepaliveEnforcementPolicy(
+			keepalive.EnforcementPolicy{
+				MinTime:             (time.Duration(4000) * time.Second),
+				PermitWithoutStream: true,
+			},
+		))
 
 	workerRunID, err := uuid.NewRandom() // UUID V4
 	if err != nil {
@@ -68,12 +70,19 @@ func main() {
 	c := connectivity.NewWorkerConnections(workerRunID.String(), "localhost:3000")
 	c.AddManager("localhost:8085/client_ping")
 
-	go c.Run(context.Background(), time.Second*2)
+	go c.Run(context.Background(), time.Second*10)
 
-	workerClient := client.NewIndexerClient()
+	workerClient := client.NewIndexerClient(context.Background())
 	worker := grpcIndexer.NewIndexerServer(workerClient)
 	grpcProtoIndexer.RegisterIndexerServiceServer(grpcServer, worker)
 
+	address := fmt.Sprintf("localhost:%d", 3000)
+	lis, err := net.Listen("tcp", address)
+	if err != nil {
+		log.Fatalf("failed to listen: %v", err)
+	}
+	log.Print(5)
+	log.Printf("Listening on %s", address)
 	// (lukanus): blocking call on grpc server
 	grpcServer.Serve(lis)
 }

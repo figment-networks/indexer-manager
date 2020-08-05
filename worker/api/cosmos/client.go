@@ -11,11 +11,6 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-const (
-	txSearchEndpoint = "/tx_search"
-	blockEndpoint    = "/block"
-)
-
 type GetTxResponse struct {
 	ID     string          `json:"id"`
 	RPC    string          `json:"jsonrpc"`
@@ -68,7 +63,7 @@ type GetBlockResponse struct {
 func (c Client) GetByHeightRange(r *model.HeightRange) ([]*ResultTx, error) {
 	fmt.Println("[GetByHeightRange] StartHeight ", r.StartHeight)
 
-	req, err := http.NewRequest(http.MethodGet, c.baseURL+txSearchEndpoint, nil)
+	req, err := http.NewRequest(http.MethodGet, c.baseURL+"/tx_search", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -104,7 +99,7 @@ func (c Client) GetByHeightRange(r *model.HeightRange) ([]*ResultTx, error) {
 
 // GetBlock fetches most recent block from chain
 func (c Client) GetBlock() (*Block, error) {
-	req, err := http.NewRequest(http.MethodGet, c.baseURL+blockEndpoint, nil)
+	req, err := http.NewRequest(http.MethodGet, c.baseURL+"/block", nil)
 	if err != nil {
 		return nil, err
 	}

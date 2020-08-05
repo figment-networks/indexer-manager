@@ -18,5 +18,8 @@ message TaskResponse {
   string version = 1;
   string id = 2;
   string type = 3;
-  bytes payload = 4;
+  int64 order = 4;
+  bool final = 5;
+  bytes payload = 6;
+
 }

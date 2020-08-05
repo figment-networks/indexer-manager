@@ -38,7 +38,7 @@ func (wc *WorkerConnections) Run(ctx context.Context, dur time.Duration) {
 
 	client := &http.Client{}
 
-	readr := strings.NewReader(fmt.Sprintf(`{"id":"%s","kind":"cosmos","address": "%s"}`, wc.workerid, wc.workerAccessibleAddress))
+	readr := strings.NewReader(fmt.Sprintf(`{"id":"%s","kind":"cosmos", "connectivity": {"version": "0.0.1", "type":"grpc", "address": "%s" }}`, wc.workerid, wc.workerAccessibleAddress))
 
 	for {
 		select {
@@ -56,7 +56,10 @@ func (wc *WorkerConnections) Run(ctx context.Context, dur time.Duration) {
 				resp, err := client.Do(req)
 				if err != nil || resp.StatusCode > 399 {
 					log.Println(fmt.Errorf("Error connecting to manager on %s, %w", address, err))
+					continue
 				}
+
+				resp.Body.Close()
 			}
 			wc.managerAddressesLock.RUnlock()
 		}
