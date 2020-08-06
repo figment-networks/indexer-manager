@@ -1,6 +1,7 @@
 package tendermint
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -19,13 +20,14 @@ import (
 	"github.com/cosmos/cosmos-sdk/x/gov"
 	"github.com/cosmos/cosmos-sdk/x/slashing"
 	"github.com/cosmos/cosmos-sdk/x/staking"
-	"github.com/figment-networks/cosmos-indexer/worker/model"
+	"github.com/figment-networks/cosmos-indexer/structs"
+	shared "github.com/figment-networks/cosmos-indexer/structs"
 
 	log "github.com/sirupsen/logrus"
 )
 
 type OutTx struct {
-	Tx    model.Transaction
+	Tx    shared.Transaction
 	Error error
 	All   int64
 }
@@ -63,8 +65,8 @@ func NewClient(url, key string, c *http.Client) *Client {
 }
 
 // SearchTx is making search api call
-func (c *Client) SearchTx(r model.HeightRange, page, perPage int, out chan OutTx) (count int64, err error) {
-	fmt.Println("[SearchTx] StartHeight ", r.StartHeight)
+func (c *Client) SearchTx(r structs.HeightRange, page, perPage int, out chan OutTx) (count int64, err error) {
+	log.Println("[SearchTx] StartHeight ", r.StartHeight)
 
 	req, err := http.NewRequest(http.MethodGet, c.baseURL+"/tx_search", nil)
 	if err != nil {
@@ -78,14 +80,30 @@ func (c *Client) SearchTx(r model.HeightRange, page, perPage int, out chan OutTx
 
 	log.Printf("GOT %+v", r)
 	q := req.URL.Query()
-	q.Add("query", fmt.Sprintf(`"tx.height>=%d AND tx.height<=%d"`, r.StartHeight, r.EndHeight))
+
+	s := strings.Builder{}
+
+	s.WriteString(`"`)
+	s.WriteString("tx.height>= ")
+	s.WriteString(strconv.Itoa(int(r.StartHeight)))
+
+	if r.EndHeight > 0 && r.EndHeight != r.StartHeight {
+		s.WriteString(" AND ")
+		s.WriteString("tx.height<=")
+		s.WriteString(strconv.Itoa(int(r.EndHeight)))
+	}
+	s.WriteString(`"`)
+
+	//fmt.Sprintf(`"tx.height>=%d AND tx.height<=%d"`, r.StartHeight, r.EndHeight))
+
+	q.Add("query", s.String())
 	q.Add("page", strconv.Itoa(page))
 	q.Add("per_page", strconv.Itoa(perPage))
 	req.URL.RawQuery = q.Encode()
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		log.Println("err:", err)
+		return 0, err
 		// TODO(lukanus): return error
 	}
 
@@ -99,6 +117,8 @@ func (c *Client) SearchTx(r model.HeightRange, page, perPage int, out chan OutTx
 
 	if result.Error.Message != "" {
 		log.Println("err:", result.Error.Message)
+
+		return 0, fmt.Errorf("Error getting search: %s", result.Error.Message)
 		// TODO(lukanus): return error
 		//0, fmt.Errorf("error fetching transactions: %d %s", result.Error.Code, result.Error.Message)
 	}
@@ -121,17 +141,98 @@ func (c *Client) SearchTx(r model.HeightRange, page, perPage int, out chan OutTx
 	return totalCount, nil
 }
 
+type LogFormat struct {
+	MsgIndex float64     `json:"msg_index"`
+	Success  bool        `json:"success"`
+	Log      string      `json:"log"`
+	Events   []LogEvents `json:"events"`
+}
+
+type LogEvents struct {
+	Type string `json:"type"`
+	//Attributes []string `json:"attributes"`
+	Attributes []*LogEventsAttributes `json:"attributes"`
+
+	//ParsedAttributes map[string]string `json:"parsedAttributes"`
+}
+
+type LogEventsAttributes struct {
+	Module string
+	Action []string
+	Sender []string
+	Others map[string][]string
+}
+
+type kvHolder struct {
+	Key   string `json:"key"`
+	Value string `json:value`
+}
+
+func (lea *LogEventsAttributes) UnmarshalJSON(b []byte) error {
+	lea = &LogEventsAttributes{}
+	lea.Others = make(map[string][]string)
+
+	dec := json.NewDecoder(bytes.NewReader(b))
+	/*	_, err := dec.Token()
+		if err != nil {
+			return err
+		}
+	*/
+	kc := &kvHolder{}
+	for dec.More() {
+		err := dec.Decode(kc)
+		if err != nil {
+			return err
+		}
+
+		switch kc.Key {
+		case "module":
+			lea.Module = kc.Value
+		case "sender":
+			lea.Sender = append(lea.Sender, kc.Value)
+		case "action":
+			lea.Action = append(lea.Action, kc.Value)
+		default:
+			k, ok := lea.Others[kc.Key]
+			if !ok {
+				k = []string{}
+			}
+			k = append(k, kc.Value)
+			lea.Others[kc.Key] = k
+		}
+	}
+	/*
+		_, err = dec.Token()
+		if err != nil {
+			return err
+		}
+	*/
+	return nil
+}
+
 func rawToTransaction(in chan TxResponse, out chan OutTx, totalCount int64, cdc *codec.Codec) {
 
+	readr := strings.NewReader("")
+	dec := json.NewDecoder(readr)
 	for txRaw := range in {
-
+		log.Printf("Inc  %+v", txRaw)
 		tx := &auth.StdTx{}
+		readr.Reset(txRaw.TxResult.Log)
+		lf := &[]LogFormat{}
+		err := dec.Decode(lf)
+		if err != nil {
+			log.Printf("Err  %w", err)
+		}
+
+		log.Printf("lf %+v", lf)
+
 		base64Dec := base64.NewDecoder(base64.StdEncoding, strings.NewReader(txRaw.TxData))
-		_, err := cdc.UnmarshalBinaryLengthPrefixedReader(base64Dec, tx, 0)
+		_, err = cdc.UnmarshalBinaryLengthPrefixedReader(base64Dec, tx, 0)
+		//_, err := cdc.UnmarshalBinaryLengthPrefixedReader(base64Dec, tx, 0)
 
 		outTX := OutTx{
 			All: totalCount,
-			Tx: model.Transaction{
+			Tx: shared.Transaction{
 				Hash: txRaw.Hash,
 				Memo: tx.GetMemo(),
 			},
@@ -150,6 +251,18 @@ func rawToTransaction(in chan TxResponse, out chan OutTx, totalCount int64, cdc 
 			outTX.Error = err
 		}
 
+		msgs := tx.GetMsgs()
+		for _, m := range msgs {
+			outTX.Tx.Type += "  --  " + m.Type()
+
+		}
+
+		for _, s := range tx.GetSigners() {
+			outTX.Tx.Sender += "  --  " + s.String()
+		}
+
+		log.Printf("Tx  %+v", tx)
+		log.Printf("Transaction %+v", outTX)
 		out <- outTX
 	}
 }

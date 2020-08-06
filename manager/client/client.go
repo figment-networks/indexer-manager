@@ -4,11 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 
 	"github.com/figment-networks/cosmos-indexer/manager/connectivity/structs"
-	"github.com/figment-networks/cosmos-indexer/manager/model"
 
 	shared "github.com/figment-networks/cosmos-indexer/structs"
 )
@@ -41,7 +41,7 @@ type HubbleClient struct {
 }
 
 func NewHubbleClient() *HubbleClient {
-	return &HubbleClient{make(chan structs.TaskRequest, 20)}
+	return &HubbleClient{make(chan structs.TaskRequest, 200)}
 }
 
 func (hc *HubbleClient) Out() <-chan structs.TaskRequest {
@@ -72,19 +72,15 @@ func (hc *HubbleClient) GetBlockTimesInterval(ctx context.Context, nv NetworkVer
 
 }
 
-func (hc *HubbleClient) GetTransaction(ctx context.Context, nv NetworkVersion, id string) ([]model.Transaction, error) {
-	return hc.GetTransactions(ctx, nv, 0)
+func (hc *HubbleClient) GetTransaction(ctx context.Context, nv NetworkVersion, id string) ([]shared.Transaction, error) {
+	return hc.GetTransactions(ctx, nv, shared.HeightRange{"", 0, 0})
 }
 
-func (hc *HubbleClient) GetTransactions(ctx context.Context, nv NetworkVersion, startHeight int) ([]model.Transaction, error) {
+func (hc *HubbleClient) GetTransactions(ctx context.Context, nv NetworkVersion, heightRange shared.HeightRange) ([]shared.Transaction, error) {
 	respCh := make(chan structs.TaskResponse, 3)
 	defer close(respCh)
 
-	b, _ := json.Marshal(shared.HeightRange{
-		Epoch:       "",
-		StartHeight: int64(startHeight),
-		EndHeight:   int64(startHeight) + 400,
-	})
+	b, _ := json.Marshal(heightRange)
 	hc.taskOutput <- structs.TaskRequest{
 		Network:    nv.Network,
 		Version:    nv.Version,
@@ -93,7 +89,7 @@ func (hc *HubbleClient) GetTransactions(ctx context.Context, nv NetworkVersion, 
 		ResponseCh: respCh,
 	}
 
-	trs := []model.Transaction{}
+	trs := []shared.Transaction{}
 	log.Println("waiting for transactions")
 
 	buff := &bytes.Buffer{}
@@ -102,15 +98,16 @@ func (hc *HubbleClient) GetTransactions(ctx context.Context, nv NetworkVersion, 
 WAIT_FOR_ALL_TRANSACTIONS:
 	for {
 		select {
+		case <-ctx.Done():
+			return nil, errors.New("Request timed out")
 		case response := <-respCh:
-			log.Printf("Got Response !!! %+v", response)
 			log.Printf("Got Response !!! %s ", string(response.Payload))
 			if response.Error.Msg != "" {
 				return nil, fmt.Errorf("Error getting response: %s", response.Error.Msg)
 			}
 			buff.Reset()
 			buff.ReadFrom(bytes.NewReader(response.Payload))
-			m := &model.Transaction{}
+			m := &shared.Transaction{}
 			dec.Decode(m)
 			trs = append(trs, *m)
 			if response.Final {

@@ -1,11 +1,14 @@
 package http
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/figment-networks/cosmos-indexer/manager/client"
+	shared "github.com/figment-networks/cosmos-indexer/structs"
 )
 
 type HubbleConnector struct {
@@ -77,18 +80,31 @@ func (hc *HubbleConnector) GetTransactions(w http.ResponseWriter, req *http.Requ
 
 	strHeight := req.URL.Query().Get("height")
 	intHeight, _ := strconv.Atoi(strHeight)
+
+	endHeight := req.URL.Query().Get("end_height")
+	intEndHeight, _ := strconv.Atoi(endHeight)
+
 	nv := client.NetworkVersion{"cosmos", "0.0.1"}
-	transactions, err := hc.cli.GetTransactions(req.Context(), nv, intHeight)
+
+	ctx, cancel := context.WithTimeout(req.Context(), 5*time.Second)
+	defer cancel()
+
+	transactions, err := hc.cli.GetTransactions(ctx, nv, shared.HeightRange{
+		Epoch:       "",
+		StartHeight: int64(intHeight),
+		EndHeight:   int64(intEndHeight),
+	})
 
 	if err != nil {
-		w.Write([]byte(err.Error()))
 		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
 		return
 	}
+
+	w.WriteHeader(http.StatusOK)
 	enc := json.NewEncoder(w)
 	enc.Encode(transactions)
 
-	w.WriteHeader(http.StatusOK)
 }
 
 func (hc *HubbleConnector) GetAccounts(w http.ResponseWriter, req *http.Request) {

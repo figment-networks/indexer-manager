@@ -9,7 +9,6 @@ import (
 
 	"github.com/figment-networks/cosmos-indexer/structs"
 	"github.com/figment-networks/cosmos-indexer/worker/api/tendermint"
-	"github.com/figment-networks/cosmos-indexer/worker/model"
 )
 
 const page = 30
@@ -93,7 +92,7 @@ func (ic *IndexerClient) GetTransactions(ctx context.Context, tr TaskRequest) {
 
 	go sendTransactions(ctx, tr.Id, txs, tr.ResponseCh)
 
-	count, err := ic.client.SearchTx(model.HeightRange{
+	count, err := ic.client.SearchTx(structs.HeightRange{
 		StartHeight: hr.StartHeight,
 		EndHeight:   hr.EndHeight,
 	}, 1, page, txs)
@@ -102,7 +101,7 @@ func (ic *IndexerClient) GetTransactions(ctx context.Context, tr TaskRequest) {
 		if count > page {
 			toBeDone := int(math.Ceil(float64(count-page) / page))
 			for i := 2; i < toBeDone+2; i++ {
-				go ic.client.SearchTx(model.HeightRange{
+				go ic.client.SearchTx(structs.HeightRange{
 					StartHeight: hr.StartHeight,
 					EndHeight:   hr.EndHeight,
 				}, i, page, txs)
@@ -121,7 +120,10 @@ SEND_LOOP:
 	for {
 		select {
 		case <-ctx.Done():
+			break
 		case t, ok := <-txs:
+			log.Printf("Task: %d,  %+v", order, t)
+
 			if !ok {
 				resp <- TaskResponse{
 					Id:      id,
@@ -133,25 +135,23 @@ SEND_LOOP:
 			}
 			all = t.All
 
-			/*if !ok {
-				resp <- TaskResponse{
-					Id:      id,
-					Order:   order,
-					Payload: nil,
-					Final:   true,
-				}
-				break SEND_LOOP
-			}*/
 			b.Reset()
 
-			enc.Encode(t.Tx)
+			err := enc.Encode(t.Tx)
+			if err != nil {
+				log.Printf("%s", err.Error())
+			}
 
-			resp <- TaskResponse{
+			tr := TaskResponse{
 				Id:      id,
 				Order:   order,
-				Payload: b.Bytes(),
 				Final:   (order == all-1),
+				Payload: make([]byte, b.Len()),
 			}
+			b.Read(tr.Payload)
+
+			log.Printf("Task out: %d,  %+v %s", order, tr, string(tr.Payload))
+			resp <- tr
 
 			if order == all {
 				defer close(txs)

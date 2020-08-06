@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -94,6 +95,9 @@ func main() {
 	s := &http.Server{
 		Addr:    cfg.Address,
 		Handler: mux,
+		TLSConfig: &tls.Config{
+			InsecureSkipVerify: true,
+		},
 		//	ReadTimeout:  10 * time.Second,
 		//	WriteTimeout: 10 * time.Second,
 	}

@@ -54,7 +54,13 @@ func main() {
 			panic(fmt.Errorf("error starting pipeline [ERR: %+v]", err))
 		}
 	*/
-
+	/*
+		creds, err := credentials.NewServerTLSFromFile(*certFile, *keyFile)
+		if err != nil {
+			log.Fatalf("Failed to generate credentials %v", err)
+		}
+		opts = []grpc.ServerOption{grpc.Creds(creds)}
+	*/
 	grpcServer := grpc.NewServer(
 		grpc.KeepaliveEnforcementPolicy(
 			keepalive.EnforcementPolicy{

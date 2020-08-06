@@ -2,18 +2,25 @@ package tendermint
 
 // TxResponse is result of querying for a tx
 type TxResponse struct {
-	Hash     string            `json:"hash"`
-	Height   string            `json:"height"`
-	Index    float64           `json:"index"`
+	Hash   string  `json:"hash"`
+	Height string  `json:"height"`
+	Index  float64 `json:"index"`
+
 	TxResult ResponseDeliverTx `json:"tx_result"`
 	// TxData is base64 encoded transaction data
 	TxData string `json:"tx"`
 }
 
 type ResponseDeliverTx struct {
-	Log       string `json:"log"`
-	GasWanted string `json:"gasWanted"`
-	GasUsed   string `json:"gasUsed"`
+	Log       string   `json:"log"`
+	GasWanted string   `json:"gasWanted"`
+	GasUsed   string   `json:"gasUsed"`
+	Tags      []TxTags `json:"tags"`
+}
+
+type TxTags struct {
+	Key   string `json:"key"`
+	Value string `json:"value"`
 }
 
 // ResultBlock is result of fetching block
@@ -23,7 +30,7 @@ type ResultBlock struct {
 
 // Block is cosmos block data
 type Block struct {
-	Header BlockHeader `json:"header`
+	Header BlockHeader `json:"header"`
 }
 
 type BlockHeader struct {

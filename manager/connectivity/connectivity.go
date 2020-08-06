@@ -99,6 +99,7 @@ func (m *Manager) Run(ctx context.Context, taskCh <-chan structs.TaskRequest) {
 
 			failedID, err := w.SendNext(t)
 			if failedID != "" {
+				log.Println("FAILED: ", failedID, err)
 				m.removeWorker(t.Network, failedID)
 				// (lukanus): if thats only one worker failure, try few times
 				for i := 0; i < 2; i++ {
@@ -109,6 +110,7 @@ func (m *Manager) Run(ctx context.Context, taskCh <-chan structs.TaskRequest) {
 				}
 			}
 			if err != nil {
+				log.Printf("Error sending TaskResponse: %w", err)
 				t.ResponseCh <- structs.TaskResponse{Error: structs.TaskError{
 					Msg: err.Error(),
 				}}
@@ -182,7 +184,7 @@ func (m *Manager) GetAllWorkers() map[string]map[string]WorkerInfo {
 	m.networkLock.RLock()
 	defer m.networkLock.RUnlock()
 
-	// unlink pointers
+	// (lukanus): unlink pointers
 	winfos := make(map[string]map[string]WorkerInfo)
 	for k, netw := range m.networks {
 		wif := make(map[string]WorkerInfo)

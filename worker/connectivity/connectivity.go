@@ -58,7 +58,6 @@ func (wc *WorkerConnections) Run(ctx context.Context, dur time.Duration) {
 					log.Println(fmt.Errorf("Error connecting to manager on %s, %w", address, err))
 					continue
 				}
-
 				resp.Body.Close()
 			}
 			wc.managerAddressesLock.RUnlock()

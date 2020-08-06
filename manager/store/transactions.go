@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/figment-networks/cosmos-indexer/manager/model"
+	shared "github.com/figment-networks/cosmos-indexer/structs"
 	"github.com/jinzhu/gorm"
 )
 
@@ -13,7 +13,7 @@ var (
 )
 
 // CreateIfNotExists creates the transaction if it does not exist
-func (s *Store) CreateIfNotExists(t *model.Transaction) error {
+func (s *Store) CreateIfNotExists(t *shared.Transaction) error {
 	_, err := s.findByHash(t.Hash)
 	if isNotFound(err) {
 		err := s.db.Create(t).Error
@@ -23,12 +23,12 @@ func (s *Store) CreateIfNotExists(t *model.Transaction) error {
 }
 
 // findByHash returns a transaction for a given hash
-func (s *Store) findByHash(hash string) (*model.Transaction, error) {
+func (s *Store) findByHash(hash string) (*shared.Transaction, error) {
 	return s.findBy("hash", hash)
 }
 
-func (s *Store) findBy(key string, value interface{}) (*model.Transaction, error) {
-	result := &model.Transaction{}
+func (s *Store) findBy(key string, value interface{}) (*shared.Transaction, error) {
+	result := &shared.Transaction{}
 	err := s.db.
 		Model(result).
 		Where(fmt.Sprintf("%s = ?", key), value).

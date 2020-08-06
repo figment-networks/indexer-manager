@@ -32,35 +32,47 @@ func (c *Client) Run(ctx context.Context, id string, wc connectivity.WorkerConne
 
 	log.Printf("Running connections %+v", wc)
 	var conn *grpc.ClientConn
-	var err error
+	var errSet []error
+	var dialErr error
 	var connectedTo string
 	// (lukanus): try every possibility
 	for _, address := range wc.Addresses {
 		if address.Address != "" {
 			connectedTo = address.Address
-			conn, err = grpc.Dial(address.Address, grpc.WithInsecure(), grpc.WithKeepaliveParams(keepalive.ClientParameters{
+			/*conn, err = grpc.Dial(address.Address, grpc.WithInsecure(), grpc.WithKeepaliveParams(keepalive.ClientParameters{
+				PermitWithoutStream: false,
+			})) */
+
+			conn, dialErr = grpc.Dial(address.Address, grpc.WithInsecure(), grpc.WithKeepaliveParams(keepalive.ClientParameters{
 				PermitWithoutStream: false,
 			}))
 		} else {
 			connectedTo = address.IP.String()
-			conn, err = grpc.Dial(address.IP.String(), grpc.WithInsecure(), grpc.WithKeepaliveParams(keepalive.ClientParameters{
-				PermitWithoutStream: false}))
+			/*conn, err = grpc.Dial(address.IP.String(), grpc.WithInsecure(), grpc.WithKeepaliveParams(keepalive.ClientParameters{
+			PermitWithoutStream: false}))*/
+
+			conn, dialErr = grpc.Dial(address.IP.String(), grpc.WithInsecure(), grpc.WithKeepaliveParams(keepalive.ClientParameters{
+				PermitWithoutStream: false,
+			}))
 		}
 
-		if err == nil && conn != nil {
+		if dialErr != nil {
+			errSet = append(errSet, dialErr)
+		}
+
+		if dialErr == nil && conn != nil {
 			break
 		}
-		log.Printf("Error on %s, %+v", connectedTo, err)
 	}
 
-	if conn == nil || err != nil {
-		//log.Errorf(ctx, "Cannot connect to any address given by worker : %+v", wc)
-		log.Printf("Cannot connect to any address given by worker : %+v", wc)
+	if conn == nil || len(errSet) > 0 {
+		log.Printf("Cannot connect to any address given by worker:   %+v", errSet)
+		return
 	}
 	defer conn.Close()
 
 	gIndexer := indexer.NewIndexerServiceClient(conn)
-	taskStream, err := gIndexer.TaskRPC(ctx)
+	taskStream, err := gIndexer.TaskRPC(ctx, grpc.WaitForReady(true))
 	if err != nil {
 		//log.Errorf(ctx, "Cannot connect to any address given by worker : %+v", wc)
 		log.Printf("Cannot connect to any address given by worker : %+v", wc)
@@ -150,6 +162,8 @@ func Recv(stream indexer.IndexerService_TaskRPCClient, lookupTable *LookupTable,
 			log.Printf("Received message with  unknown id (%s): %+v", string(in.Id), in)
 			continue
 		}
+
+		// BUG(lukanus): send on closed channel
 		req.ResponseCh <- structs.TaskResponse{
 			Order:   in.Order,
 			Type:    in.Type,
