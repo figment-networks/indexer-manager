@@ -87,8 +87,9 @@ func (ic *IndexerClient) GetTransactions(ctx context.Context, tr cStructs.TaskRe
 	fin := make(chan string, 2)
 	defer close(fin)
 
+	uniqueRID, _ := uuid.NewRandom()
 	sCtx, cancel := context.WithCancel(ctx)
-	count, err := ic.client.SearchTx(sCtx, tr.Id, structs.HeightRange{
+	count, err := ic.client.SearchTx(sCtx, tr.Id, uniqueRID, structs.HeightRange{
 		StartHeight: hr.StartHeight,
 		EndHeight:   hr.EndHeight,
 	}, 1, page, fin)
@@ -105,7 +106,7 @@ func (ic *IndexerClient) GetTransactions(ctx context.Context, tr cStructs.TaskRe
 	toBeDone := int(math.Ceil(float64(count-page) / page))
 	if count > page {
 		for i := 2; i < toBeDone+2; i++ {
-			go ic.client.SearchTx(sCtx, tr.Id, structs.HeightRange{
+			go ic.client.SearchTx(sCtx, tr.Id, uniqueRID, structs.HeightRange{
 				StartHeight: hr.StartHeight,
 				EndHeight:   hr.EndHeight,
 			}, i, page, fin)
@@ -136,7 +137,7 @@ type TData struct {
 
 func sendResp(ctx context.Context, resp chan cStructs.OutResp, stream *cStructs.StreamAccess) {
 
-	opened := make(map[uuid.UUID]*TData)
+	opened := make(map[[2]uuid.UUID]*TData)
 
 	b := &bytes.Buffer{}
 	enc := json.NewEncoder(b)
@@ -147,14 +148,15 @@ SEND_LOOP:
 		case <-ctx.Done():
 			break SEND_LOOP
 		case t := <-resp:
-			// log.Printf("Task: %d,  %+v", order, t)
 
-			n, ok := opened[t.ID]
+			n, ok := opened[[2]uuid.UUID{t.ID, t.RunID}]
 			if !ok {
 				n = &TData{0, t.All}
-				opened[t.ID] = n
+				opened[[2]uuid.UUID{t.ID, t.RunID}] = n
 			}
 			b.Reset()
+
+			log.Printf("Task to send: %s, %d - %d , new(%d)", t.ID.String(), n.Order, t.All, ok)
 
 			if n.All == 0 {
 				n.All = t.All
@@ -179,8 +181,9 @@ SEND_LOOP:
 			if err != nil {
 				log.Printf("%s", err.Error())
 			}
+
 			if final {
-				delete(opened, t.ID)
+				delete(opened, [2]uuid.UUID{t.ID, t.RunID})
 			}
 			n.Order++
 		}

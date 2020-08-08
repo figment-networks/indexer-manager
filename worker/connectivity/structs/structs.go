@@ -46,12 +46,14 @@ const (
 )
 
 type StreamAccess struct {
-	sync.RWMutex
 	Finish           chan bool
 	State            StreamState
 	StreamID         uuid.UUID
 	ResponseListener chan TaskResponse
-	RequestListener  chan TaskRequest
+	respLock         sync.RWMutex
+
+	RequestListener chan TaskRequest
+	reqLock         sync.RWMutex
 }
 
 func NewStreamAccess() *StreamAccess {
@@ -69,8 +71,8 @@ func NewStreamAccess() *StreamAccess {
 
 func (sa *StreamAccess) Send(tr TaskResponse) error {
 
-	sa.Lock()
-	defer sa.Unlock()
+	sa.respLock.RLock()
+	defer sa.respLock.RUnlock()
 	if sa.State != StreamOnline {
 		return errors.New("Stream is not Online")
 	}
@@ -81,8 +83,8 @@ func (sa *StreamAccess) Send(tr TaskResponse) error {
 }
 
 func (sa *StreamAccess) Req(tr TaskRequest) error {
-	sa.Lock()
-	defer sa.Unlock()
+	sa.reqLock.RLock()
+	defer sa.reqLock.RUnlock()
 	if sa.State != StreamOnline {
 		return errors.New("Stream is not Online")
 	}
@@ -92,8 +94,10 @@ func (sa *StreamAccess) Req(tr TaskRequest) error {
 }
 
 func (sa *StreamAccess) Close() error {
-	sa.Lock()
-	defer sa.Unlock()
+	sa.reqLock.Lock()
+	sa.respLock.RLock()
+	defer sa.respLock.RUnlock()
+	defer sa.reqLock.Unlock()
 
 	if sa.State == StreamOffline {
 		return nil
@@ -106,6 +110,7 @@ func (sa *StreamAccess) Close() error {
 
 type OutResp struct {
 	ID      uuid.UUID
+	RunID   uuid.UUID
 	Payload interface{} // to be encoded
 	Error   error
 	All     uint64

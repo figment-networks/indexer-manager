@@ -12,7 +12,13 @@ type TxResponse struct {
 	// TxData is base64 encoded transaction data
 	TxData string `json:"tx"`
 
-	All    int64
+	All int64
+
+	TaskID TxID
+}
+
+type TxID struct {
+	RunID  uuid.UUID
 	TaskID uuid.UUID
 }
 

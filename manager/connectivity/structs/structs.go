@@ -77,7 +77,12 @@ func (aw *Await) Send(tr *TaskResponse) (bool, error) {
 		aw.ReceivedFinals++
 	}
 
-	aw.Resp <- tr
+	select {
+	case aw.Resp <- tr:
+		log.Printf("Successfully sent")
+	default:
+		log.Printf("STREAM ERROR")
+	}
 
 	if len(aw.Uids) == aw.ReceivedFinals {
 		log.Printf("Received All %s ", time.Now().Sub(aw.Created).String())
@@ -88,46 +93,28 @@ func (aw *Await) Send(tr *TaskResponse) (bool, error) {
 }
 
 func (aw *Await) Close() {
+
+	log.Println("CLOSING AWAIT")
 	aw.Lock()
 	defer aw.Unlock()
 	aw.State = StreamOffline
-	close(aw.Resp)
-	for range aw.Resp {
+
+DRAIN:
+	for {
+		select {
+		case <-aw.Resp:
+		default:
+			break DRAIN
+		}
 	}
+	close(aw.Resp)
+	aw.Resp = nil
+
+	log.Println("CLOSED AWAIT")
 }
 
 type IndexerClienter interface {
 	RegisterStream(ctx context.Context, stream *StreamAccess) error
-}
-
-// ---------------------
-
-var TaskResponseChanPool = NewtaskResponsePool(40)
-
-type taskResponsePool struct {
-	pool chan chan TaskResponse
-}
-
-func NewtaskResponsePool(size int) *taskResponsePool {
-	return &taskResponsePool{make(chan chan TaskResponse, size)}
-}
-
-func (tr *taskResponsePool) Get() chan TaskResponse {
-	select {
-	case t := <-tr.pool:
-		return t
-	default:
-	}
-
-	return make(chan TaskResponse, 40)
-}
-
-func (tr *taskResponsePool) Put(t chan TaskResponse) {
-	select {
-	case tr.pool <- t:
-	default:
-		close(t)
-	}
 }
 
 type StreamState int
@@ -143,7 +130,7 @@ type StreamAccess struct {
 	State           StreamState
 	StreamID        uuid.UUID
 	ResponseMap     map[uuid.UUID]*Await
-	RequestListener chan *TaskRequest
+	RequestListener chan TaskRequest
 
 	respLock sync.RWMutex
 	reqLock  sync.RWMutex
@@ -158,7 +145,7 @@ func NewStreamAccess() *StreamAccess {
 		State:    StreamOnline,
 
 		ResponseMap:     make(map[uuid.UUID]*Await),
-		RequestListener: make(chan *TaskRequest, 30),
+		RequestListener: make(chan TaskRequest, 30),
 	}
 }
 
@@ -184,26 +171,28 @@ func (sa *StreamAccess) Recv(tr *TaskResponse) error {
 
 	if all {
 		sa.respLock.Lock()
+		sa.reqLock.Lock()
 		for _, u := range resAwait.Uids {
 			delete(sa.ResponseMap, u)
-
 		}
+		sa.reqLock.Unlock()
 		sa.respLock.Unlock()
 	}
 
 	return nil
-
 }
 
-func (sa *StreamAccess) Req(tr *TaskRequest, aw *Await) error {
+func (sa *StreamAccess) Req(tr TaskRequest, aw *Await) error {
 
 	sa.reqLock.RLock()
-	defer sa.reqLock.RUnlock()
 	if sa.State != StreamOnline {
 		return errors.New("Stream is not Online")
 	}
+	sa.reqLock.RUnlock()
 
+	sa.reqLock.Lock()
 	sa.ResponseMap[tr.ID] = aw
+	sa.reqLock.Unlock()
 
 	sa.RequestListener <- tr
 	return nil

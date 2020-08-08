@@ -78,7 +78,7 @@ func (c *Client) Out() chan cStruct.OutResp {
 }
 
 // SearchTx is making search api call
-func (c *Client) SearchTx(ctx context.Context, taskID uuid.UUID, r structs.HeightRange, page, perPage int, fin chan string) (count int64, err error) {
+func (c *Client) SearchTx(ctx context.Context, taskID, runUUID uuid.UUID, r structs.HeightRange, page, perPage int, fin chan string) (count int64, err error) {
 
 	req, err := http.NewRequest(http.MethodGet, c.baseURL+"/tx_search", nil)
 	if err != nil {
@@ -149,7 +149,8 @@ func (c *Client) SearchTx(ctx context.Context, taskID uuid.UUID, r structs.Heigh
 		}
 
 		tx.All = totalCount
-		tx.TaskID = taskID
+		tx.TaskID.TaskID = taskID
+		tx.TaskID.RunID = runUUID
 		c.inTx <- tx
 	}
 	fin <- ""
@@ -279,7 +280,7 @@ func rawToTransaction(in chan TxResponse, out chan cStruct.OutResp, cdc *codec.C
 		_, err = cdc.UnmarshalBinaryLengthPrefixedReader(base64Dec, tx, 0)
 
 		outTX := cStruct.OutResp{
-			ID:  txRaw.TaskID,
+			ID:  txRaw.TaskID.TaskID,
 			All: uint64(txRaw.All),
 		}
 

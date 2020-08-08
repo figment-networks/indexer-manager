@@ -3,6 +3,7 @@ package http
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -101,6 +102,7 @@ func (hc *HubbleConnector) GetTransactions(w http.ResponseWriter, req *http.Requ
 		return
 	}
 
+	log.Printf("Returning %d transactions", len(transactions))
 	w.WriteHeader(http.StatusOK)
 	enc := json.NewEncoder(w)
 	enc.Encode(transactions)

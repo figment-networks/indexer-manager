@@ -16,7 +16,7 @@ type TaskWorkerRecord struct {
 
 type RoundRobinWorkers struct {
 	next chan *TaskWorkerRecord
-	lock sync.Mutex
+	lock sync.RWMutex
 }
 
 func NewRoundRobinWorkers() *RoundRobinWorkers {
@@ -38,9 +38,9 @@ func (rrw *RoundRobinWorkers) AddWorker(id string, stream *structs.StreamAccess)
 	return nil
 }
 
-func (rrw *RoundRobinWorkers) SendNext(tr *structs.TaskRequest, aw *structs.Await) (failedWorkerID string, err error) {
-	rrw.lock.Lock()
-	defer rrw.lock.Unlock()
+func (rrw *RoundRobinWorkers) SendNext(tr structs.TaskRequest, aw *structs.Await) (failedWorkerID string, err error) {
+	rrw.lock.RLock()
+	defer rrw.lock.RUnlock()
 
 	select {
 	case ch := <-rrw.next:

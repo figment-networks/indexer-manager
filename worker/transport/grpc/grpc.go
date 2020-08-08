@@ -129,7 +129,6 @@ func (is *IndexerServer) TaskRPC(taskStream indexer.IndexerService_TaskRPCServer
 		}
 
 		uid, err := uuid.Parse(in.Id)
-		log.Println("ERR:", err, uid.String())
 		stream.Req(cStructs.TaskRequest{
 			Id:      uid,
 			Type:    in.Type,
@@ -153,7 +152,7 @@ CONTROLRPC:
 		case <-receiverClosed:
 			break CONTROLRPC
 		case resp := <-accessCh.ResponseListener:
-			accessCh.RLock()
+			//accessCh.RLock()
 			if err := taskStream.Send(&indexer.TaskResponse{
 				Version: resp.Version,
 				Id:      resp.Id.String(),
@@ -164,7 +163,7 @@ CONTROLRPC:
 			}); err != nil {
 				log.Printf("Error sending TaskResponse: %s", err.Error())
 			}
-			accessCh.RUnlock()
+			//accessCh.RUnlock()
 		}
 	}
 }

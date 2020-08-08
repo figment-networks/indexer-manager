@@ -16,7 +16,7 @@ import (
 type WorkersPool interface {
 	//AddWorker(id string, trCh chan structs.TaskRequest) error
 	AddWorker(id string, stream *structs.StreamAccess) error
-	SendNext(tr *structs.TaskRequest, aw *structs.Await) (failedWorkerID string, err error)
+	SendNext(tr structs.TaskRequest, aw *structs.Await) (failedWorkerID string, err error)
 }
 
 type State string
@@ -28,7 +28,6 @@ const (
 )
 
 type ConnTransport interface {
-	//Run(ctx context.Context, id string, wc WorkerConnection, input <-chan structs.TaskRequest, removeWorkerCh chan<- string)
 	Run(ctx context.Context, id string, wc WorkerConnection, stream *structs.StreamAccess, removeWorkerCh chan<- string)
 	Type() string
 }
@@ -70,8 +69,8 @@ type Manager struct {
 
 	removeWorkerCh chan string
 
-	awaits     map[uuid.UUID]*structs.Await
-	awaitsLock sync.RWMutex
+	//	awaits     map[uuid.UUID]*structs.Await
+	//	awaitsLock sync.RWMutex
 }
 
 func NewManager() *Manager {
@@ -80,7 +79,7 @@ func NewManager() *Manager {
 		transports:  make(map[string]ConnTransport),
 		nextWorkers: make(map[structs.WorkerCompositeKey]WorkersPool),
 
-		awaits:         make(map[uuid.UUID]*structs.Await),
+		//	awaits:         make(map[uuid.UUID]*structs.Await),
 		removeWorkerCh: make(chan string, 20),
 	}
 }
@@ -125,14 +124,12 @@ func (m *Manager) Register(id, kind string, connInfo WorkerConnection) error {
 	}
 
 	log.Printf("Registering %s %+v", connInfo.Type, connInfo)
-	log.Printf("Reg1")
 	m.transportsLock.RLock()
 	c, ok := m.transports[connInfo.Type]
 	m.transportsLock.RUnlock()
 	if !ok {
 		return fmt.Errorf("Transport %s cannot be found", connInfo.Type)
 	}
-	log.Printf("Reg2")
 	m.nextWorkersLock.RLock()
 	g, ok := m.nextWorkers[structs.WorkerCompositeKey{kind, connInfo.Version}]
 	m.nextWorkersLock.RUnlock()
@@ -144,18 +141,16 @@ func (m *Manager) Register(id, kind string, connInfo WorkerConnection) error {
 		m.nextWorkersLock.Unlock()
 	}
 
-	log.Printf("Reg3")
 	ctx, cancel := context.WithCancel(context.Background())
 
 	m.networkLock.Lock()
 	w.State = StateInitialized
 	w.Cancelation = cancel
 	m.networkLock.Unlock()
-	log.Printf("Reg4")
+
 	sa := structs.NewStreamAccess()
 	go c.Run(ctx, id, connInfo, sa, m.removeWorkerCh)
 	err := g.AddWorker(id, sa)
-	log.Printf("Reg5")
 	return err
 }
 
@@ -287,8 +282,8 @@ func (m *Manager) Send(trs []structs.TaskRequest) (*structs.Await, error) {
 	}
 
 	uuids := makeUUIDs(len(trs))
-	resp := m.registerRequest(uuids)
-
+	//resp := m.registerRequest(uuids)
+	resp := structs.NewAwait(uuids)
 	for requestNumber, t := range trs {
 		var err error
 		var failedID string
@@ -297,7 +292,7 @@ func (m *Manager) Send(trs []structs.TaskRequest) (*structs.Await, error) {
 		for i := 0; i < 3; i++ {
 			var ok bool
 			t.ID = uuids[requestNumber]
-			failedID, err = w.SendNext(&t, resp)
+			failedID, err = w.SendNext(t, resp)
 			if failedID == "" && err == nil {
 				break RETRY_LOOP
 			}
@@ -318,12 +313,13 @@ func (m *Manager) Send(trs []structs.TaskRequest) (*structs.Await, error) {
 	return resp, nil
 }
 
+/*
 func (m *Manager) registerRequest(sendIDs []uuid.UUID) *structs.Await {
-	m.awaitsLock.Lock()
-	defer m.awaitsLock.Unlock()
-	aw := structs.NewAwait(sendIDs)
-	for _, id := range sendIDs {
-		m.awaits[id] = aw
-	}
+	//	m.awaitsLock.Lock()
+	//	defer m.awaitsLock.Unlock()
+	aw :=
+	//	for _, id := range sendIDs {
+	//		m.awaits[id] = aw
+	//	}
 	return aw
-}
+}*/

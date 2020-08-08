@@ -84,7 +84,6 @@ CONTROLRPC:
 			break CONTROLRPC
 		case req := <-stream.RequestListener:
 			log.Printf("SENDING MESSAGE %+v", req)
-
 			if err := taskStream.Send(&indexer.TaskRequest{
 				Id:      req.ID.String(),
 				Type:    req.Type,
@@ -135,10 +134,9 @@ func Recv(stream indexer.IndexerService_TaskRPCClient, internalStream *structs.S
 				Type: structs.TaskErrorType(in.Error.Type),
 			}
 		}
-		err = internalStream.Recv(resp)
 
-		if err != nil {
-			log.Printf("Error in Recv ", err.Error())
+		if err = internalStream.Recv(resp); err != nil {
+			log.Printf("Error in Recv %+v", err.Error())
 		}
 	}
 

@@ -104,8 +104,8 @@ func (hc *HubbleClient) GetTransactions(ctx context.Context, nv NetworkVersion, 
 	}
 
 	respAwait, err := hc.sender.Send(req)
-
 	if err != nil {
+		log.Println("Error Sending data")
 		return nil, err
 	}
 
@@ -122,10 +122,10 @@ WAIT_FOR_ALL_TRANSACTIONS:
 		select {
 		case <-ctx.Done():
 			return nil, errors.New("Request timed out")
-		case response, ok := <-respAwait.Resp:
-			if !ok {
-				return nil, errors.New("Response closed.")
-			}
+		case response := <-respAwait.Resp:
+			//	if !ok {
+			//		return nil, errors.New("Response closed.")
+			//	}
 			log.Printf("Got Response !!! %s ", string(response.Payload))
 			if response.Error.Msg != "" {
 				return nil, fmt.Errorf("Error getting response: %s", response.Error.Msg)
@@ -143,7 +143,7 @@ WAIT_FOR_ALL_TRANSACTIONS:
 				receivedTransactions++
 			}
 
-			if receivedTransactions == times || response.Error.Msg != "" {
+			if receivedTransactions == times {
 				break WAIT_FOR_ALL_TRANSACTIONS
 			}
 		}
