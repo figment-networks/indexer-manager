@@ -58,8 +58,8 @@ func (ic *IndexerClient) Run(ctx context.Context, stream *cStructs.StreamAccess)
 			switch taskRequest.Type {
 			case "GetTransactions":
 				ic.GetTransactions(ctx, taskRequest, stream)
-			case "GetBlocks":
-				ic.GetBlocks(ctx, taskRequest, stream)
+			case "GetBlock":
+				ic.GetBlock(ctx, taskRequest, stream)
 			default:
 				stream.Send(cStructs.TaskResponse{
 					Id:    taskRequest.Id,
@@ -190,6 +190,22 @@ SEND_LOOP:
 	}
 }
 
-func (ic *IndexerClient) GetBlocks(ctx context.Context, tr cStructs.TaskRequest, stream *cStructs.StreamAccess) {
+func (ic *IndexerClient) GetBlock(ctx context.Context, tr cStructs.TaskRequest, stream *cStructs.StreamAccess) {
+
+	log.Printf("Received: %+v ", tr)
+	hr := &structs.HeightHash{}
+	err := json.Unmarshal(tr.Payload, hr)
+	if err != nil {
+		stream.Send(cStructs.TaskResponse{
+			Id:    tr.Id,
+			Error: cStructs.TaskError{Msg: "Cannot unmarshal payment"},
+			Final: true,
+		})
+	}
+
+
+	sCtx, cancel := context.WithCancel(ctx)
+	count, err := ic.client.GetBlock(sCtx, tr.Id, uniqueRID, hr, 1, page, fin)
+}
 
 }

@@ -62,7 +62,7 @@ func NewAwait(sendIDs []uuid.UUID) (aw *Await) {
 		Created: time.Now(),
 		State:   StreamOnline,
 		Uids:    sendIDs,
-		Resp:    make(chan *TaskResponse, 30),
+		Resp:    make(chan *TaskResponse, 400),
 	}
 }
 
@@ -77,12 +77,13 @@ func (aw *Await) Send(tr *TaskResponse) (bool, error) {
 		aw.ReceivedFinals++
 	}
 
-	select {
-	case aw.Resp <- tr:
-		log.Printf("Successfully sent")
-	default:
-		log.Printf("STREAM ERROR")
-	}
+	aw.Resp <- tr
+	//	select {
+	//	case aw.Resp <- tr:
+	//log.Printf("Successfully sent")
+	//	default:
+	//		log.Printf("STREAM ERROR")
+	//	}
 
 	if len(aw.Uids) == aw.ReceivedFinals {
 		log.Printf("Received All %s ", time.Now().Sub(aw.Created).String())
@@ -94,7 +95,7 @@ func (aw *Await) Send(tr *TaskResponse) (bool, error) {
 
 func (aw *Await) Close() {
 
-	log.Println("CLOSING AWAIT")
+	//	log.Println("CLOSING AWAIT")
 	aw.Lock()
 	defer aw.Unlock()
 	aw.State = StreamOffline
@@ -110,7 +111,7 @@ DRAIN:
 	close(aw.Resp)
 	aw.Resp = nil
 
-	log.Println("CLOSED AWAIT")
+	//log.Println("CLOSED AWAIT")
 }
 
 type IndexerClienter interface {

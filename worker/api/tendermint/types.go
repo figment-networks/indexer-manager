@@ -1,6 +1,12 @@
 package tendermint
 
-import "github.com/google/uuid"
+import (
+	"bytes"
+	"encoding/json"
+
+	"github.com/google/uuid"
+	log "github.com/sirupsen/logrus"
+)
 
 // TxResponse is result of querying for a tx
 type TxResponse struct {
@@ -36,7 +42,12 @@ type TxTags struct {
 
 // ResultBlock is result of fetching block
 type ResultBlock struct {
-	Block Block `json:"block"`
+	Block     Block     `json:"block"`
+	BlockMeta BlockMeta `json:"block_meta"`
+}
+
+// BlockMeta is block metadata
+type BlockMeta struct {
 }
 
 // Block is cosmos block data
@@ -45,14 +56,10 @@ type Block struct {
 }
 
 type BlockHeader struct {
-	Height string `json:"height"`
-}
-
-type GetTxSearchResponse struct {
-	ID     string         `json:"id"`
-	RPC    string         `json:"jsonrpc"`
-	Result ResultTxSearch `json:"result"`
-	Error  Error          `json:"error"`
+	Height  string `json:"height"`
+	ChainID string `json:"chain_id"`
+	Time    string `json:"time"`
+	NumTxs  string `json:"num_txs"`
 }
 
 type Error struct {
@@ -67,9 +74,81 @@ type ResultTxSearch struct {
 	TotalCount string       `json:"total_count"`
 }
 
+type GetTxSearchResponse struct {
+	ID     string         `json:"id"`
+	RPC    string         `json:"jsonrpc"`
+	Result ResultTxSearch `json:"result"`
+	Error  Error          `json:"error"`
+}
 type GetBlockResponse struct {
 	ID     string      `json:"id"`
 	RPC    string      `json:"jsonrpc"`
 	Result ResultBlock `json:"result"`
 	Error  Error       `json:"error"`
+}
+
+type LogFormat struct {
+	MsgIndex float64     `json:"msg_index"`
+	Success  bool        `json:"success"`
+	Log      string      `json:"log"`
+	Events   []LogEvents `json:"events"`
+}
+
+type LogEvents struct {
+	Type string `json:"type"`
+	//Attributes []string `json:"attributes"`
+	Attributes []*LogEventsAttributes `json:"attributes"`
+}
+
+type LogEventsAttributes struct {
+	Module    string
+	Action    string
+	Amount    string
+	Sender    []string
+	Validator []string
+	Recipient []string
+	Others    map[string][]string
+}
+
+type kvHolder struct {
+	Key   string `json:"key"`
+	Value string `json:value`
+}
+
+func (lea *LogEventsAttributes) UnmarshalJSON(b []byte) error {
+	//	lea = &LogEventsAttributes{}
+	lea.Others = make(map[string][]string)
+
+	dec := json.NewDecoder(bytes.NewReader(b))
+	kc := &kvHolder{}
+	for dec.More() {
+		err := dec.Decode(kc)
+		if err != nil {
+			log.Println("ERROR!")
+			return err
+		}
+		switch kc.Key {
+		case "validator":
+			lea.Validator = append(lea.Validator, kc.Value)
+		case "sender":
+			lea.Sender = append(lea.Sender, kc.Value)
+		case "recipient":
+			lea.Recipient = append(lea.Recipient, kc.Value)
+		case "module":
+			lea.Module = kc.Value
+		case "action":
+			lea.Action = kc.Value
+		case "amount":
+			lea.Amount = kc.Value
+		default:
+			log.Println("Unknown, ", kc.Key, kc.Value)
+			k, ok := lea.Others[kc.Key]
+			if !ok {
+				k = []string{}
+			}
+			k = append(k, kc.Value)
+			lea.Others[kc.Key] = k
+		}
+	}
+	return nil
 }

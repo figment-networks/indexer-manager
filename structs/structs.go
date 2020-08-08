@@ -8,6 +8,11 @@ type HeightRange struct {
 	EndHeight   int64
 }
 
+type HeightHash struct {
+	Height int64
+	Hash   string
+}
+
 // Transaction contains the blockchain transaction details
 type Transaction struct {
 	ID        int64     `json:"id,omitempty"`

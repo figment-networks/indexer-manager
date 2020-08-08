@@ -103,6 +103,7 @@ func (hc *HubbleConnector) GetTransactions(w http.ResponseWriter, req *http.Requ
 	}
 
 	log.Printf("Returning %d transactions", len(transactions))
+	w.Header().Add("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	enc := json.NewEncoder(w)
 	enc.Encode(transactions)
