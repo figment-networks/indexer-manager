@@ -2,6 +2,7 @@ package tendermint
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -21,16 +22,14 @@ import (
 	"github.com/cosmos/cosmos-sdk/x/slashing"
 	"github.com/cosmos/cosmos-sdk/x/staking"
 	"github.com/figment-networks/cosmos-indexer/structs"
+	"github.com/google/uuid"
+
 	shared "github.com/figment-networks/cosmos-indexer/structs"
+
+	cStruct "github.com/figment-networks/cosmos-indexer/worker/connectivity/structs"
 
 	log "github.com/sirupsen/logrus"
 )
-
-type OutTx struct {
-	Tx    shared.Transaction
-	Error error
-	All   int64
-}
 
 // Client is a Tendermint RPC client for cosmos using figmentnetworks datahub
 type Client struct {
@@ -39,6 +38,8 @@ type Client struct {
 	httpClient *http.Client
 	cdc        *codec.Codec
 
+	inTx chan TxResponse
+	out  chan cStruct.OutResp
 	//conn *client.WSClient
 }
 
@@ -46,7 +47,7 @@ type Client struct {
 func NewClient(url, key string, c *http.Client) *Client {
 	if c == nil {
 		c = &http.Client{
-			Timeout: time.Second * 10,
+			Timeout: time.Second * 40,
 		}
 	}
 
@@ -55,22 +56,33 @@ func NewClient(url, key string, c *http.Client) *Client {
 	err = conn.Start()
 	*/
 
-	return &Client{
-		//tendermint rpc url
-		baseURL:    url, //todo strip trailing '/'
+	cli := &Client{
+		baseURL:    url, //tendermint rpc url
 		key:        key,
 		httpClient: c,
 		cdc:        makeCodec(),
+		inTx:       make(chan TxResponse, 20),
+		out:        make(chan cStruct.OutResp, 20),
 	}
+
+	go rawToTransaction(cli.inTx, cli.out, cli.cdc)
+	go rawToTransaction(cli.inTx, cli.out, cli.cdc)
+	go rawToTransaction(cli.inTx, cli.out, cli.cdc)
+	go rawToTransaction(cli.inTx, cli.out, cli.cdc)
+
+	return cli
+}
+
+func (c *Client) Out() chan cStruct.OutResp {
+	return c.out
 }
 
 // SearchTx is making search api call
-func (c *Client) SearchTx(r structs.HeightRange, page, perPage int, out chan OutTx) (count int64, err error) {
-	log.Println("[SearchTx] StartHeight ", r.StartHeight)
+func (c *Client) SearchTx(ctx context.Context, taskID uuid.UUID, r structs.HeightRange, page, perPage int, fin chan string) (count int64, err error) {
 
 	req, err := http.NewRequest(http.MethodGet, c.baseURL+"/tx_search", nil)
 	if err != nil {
-		// TODO(lukanus): return error
+		fin <- err.Error()
 	}
 
 	req.Header.Add("Content-Type", "application/json")
@@ -78,7 +90,7 @@ func (c *Client) SearchTx(r structs.HeightRange, page, perPage int, out chan Out
 		req.Header.Add("Authorization", c.key)
 	}
 
-	log.Printf("GOT %+v", r)
+	//log.Printf("GOT %+v", r)
 	q := req.URL.Query()
 
 	s := strings.Builder{}
@@ -94,192 +106,54 @@ func (c *Client) SearchTx(r structs.HeightRange, page, perPage int, out chan Out
 	}
 	s.WriteString(`"`)
 
-	//fmt.Sprintf(`"tx.height>=%d AND tx.height<=%d"`, r.StartHeight, r.EndHeight))
-
 	q.Add("query", s.String())
 	q.Add("page", strconv.Itoa(page))
 	q.Add("per_page", strconv.Itoa(perPage))
 	req.URL.RawQuery = q.Encode()
 
+	now := time.Now()
 	resp, err := c.httpClient.Do(req)
+	log.Printf("Request Time: %s", time.Now().Sub(now).String())
 	if err != nil {
+		fin <- err.Error()
 		return 0, err
-		// TODO(lukanus): return error
 	}
 
 	decoder := json.NewDecoder(resp.Body)
 
 	result := &GetTxSearchResponse{}
 	if err = decoder.Decode(result); err != nil {
-		log.WithError(err).Error("unable to decode result body")
-		return
+		err := fmt.Sprintf("unable to decode result body: %s", err.Error())
+		fin <- err
+		return 0, errors.New(err)
 	}
 
 	if result.Error.Message != "" {
 		log.Println("err:", result.Error.Message)
-
-		return 0, fmt.Errorf("Error getting search: %s", result.Error.Message)
-		// TODO(lukanus): return error
-		//0, fmt.Errorf("error fetching transactions: %d %s", result.Error.Code, result.Error.Message)
+		err := fmt.Sprintf("Error getting search: %s", result.Error.Message)
+		fin <- err
+		return 0, errors.New(err)
 	}
 
 	totalCount, err := strconv.ParseInt(result.Result.TotalCount, 10, 64)
 	if err != nil {
+		fin <- err.Error()
 		return 0, err
-		// TODO(lukanus): return error
 	}
-
-	in := make(chan TxResponse, 20)
-	defer close(in)
-
-	go rawToTransaction(in, out, totalCount, c.cdc)
-	go rawToTransaction(in, out, totalCount, c.cdc)
 
 	for _, tx := range result.Result.Txs {
-		in <- tx
-	}
-	return totalCount, nil
-}
-
-type LogFormat struct {
-	MsgIndex float64     `json:"msg_index"`
-	Success  bool        `json:"success"`
-	Log      string      `json:"log"`
-	Events   []LogEvents `json:"events"`
-}
-
-type LogEvents struct {
-	Type string `json:"type"`
-	//Attributes []string `json:"attributes"`
-	Attributes []*LogEventsAttributes `json:"attributes"`
-
-	//ParsedAttributes map[string]string `json:"parsedAttributes"`
-}
-
-type LogEventsAttributes struct {
-	Module string
-	Action []string
-	Sender []string
-	Others map[string][]string
-}
-
-type kvHolder struct {
-	Key   string `json:"key"`
-	Value string `json:value`
-}
-
-func (lea *LogEventsAttributes) UnmarshalJSON(b []byte) error {
-	lea = &LogEventsAttributes{}
-	lea.Others = make(map[string][]string)
-
-	dec := json.NewDecoder(bytes.NewReader(b))
-	/*	_, err := dec.Token()
-		if err != nil {
-			return err
-		}
-	*/
-	kc := &kvHolder{}
-	for dec.More() {
-		err := dec.Decode(kc)
-		if err != nil {
-			return err
-		}
-
-		switch kc.Key {
-		case "module":
-			lea.Module = kc.Value
-		case "sender":
-			lea.Sender = append(lea.Sender, kc.Value)
-		case "action":
-			lea.Action = append(lea.Action, kc.Value)
+		select {
+		case <-ctx.Done():
+			return totalCount, nil
 		default:
-			k, ok := lea.Others[kc.Key]
-			if !ok {
-				k = []string{}
-			}
-			k = append(k, kc.Value)
-			lea.Others[kc.Key] = k
 		}
+
+		tx.All = totalCount
+		tx.TaskID = taskID
+		c.inTx <- tx
 	}
-	/*
-		_, err = dec.Token()
-		if err != nil {
-			return err
-		}
-	*/
-	return nil
-}
-
-func rawToTransaction(in chan TxResponse, out chan OutTx, totalCount int64, cdc *codec.Codec) {
-
-	readr := strings.NewReader("")
-	dec := json.NewDecoder(readr)
-	for txRaw := range in {
-		log.Printf("Inc  %+v", txRaw)
-		tx := &auth.StdTx{}
-		readr.Reset(txRaw.TxResult.Log)
-		lf := &[]LogFormat{}
-		err := dec.Decode(lf)
-		if err != nil {
-			log.Printf("Err  %w", err)
-		}
-
-		log.Printf("lf %+v", lf)
-
-		base64Dec := base64.NewDecoder(base64.StdEncoding, strings.NewReader(txRaw.TxData))
-		_, err = cdc.UnmarshalBinaryLengthPrefixedReader(base64Dec, tx, 0)
-		//_, err := cdc.UnmarshalBinaryLengthPrefixedReader(base64Dec, tx, 0)
-
-		outTX := OutTx{
-			All: totalCount,
-			Tx: shared.Transaction{
-				Hash: txRaw.Hash,
-				Memo: tx.GetMemo(),
-			},
-		}
-
-		outTX.Tx.Height, err = strconv.ParseUint(txRaw.Height, 10, 64)
-		if err != nil {
-			outTX.Error = err
-		}
-		outTX.Tx.GasWanted, err = strconv.ParseUint(txRaw.TxResult.GasWanted, 10, 64)
-		if err != nil {
-			outTX.Error = err
-		}
-		outTX.Tx.GasUsed, err = strconv.ParseUint(txRaw.TxResult.GasUsed, 10, 64)
-		if err != nil {
-			outTX.Error = err
-		}
-
-		msgs := tx.GetMsgs()
-		for _, m := range msgs {
-			outTX.Tx.Type += "  --  " + m.Type()
-
-		}
-
-		for _, s := range tx.GetSigners() {
-			outTX.Tx.Sender += "  --  " + s.String()
-		}
-
-		log.Printf("Tx  %+v", tx)
-		log.Printf("Transaction %+v", outTX)
-		out <- outTX
-	}
-}
-
-func makeCodec() *codec.Codec {
-	var cdc = codec.New()
-	bank.RegisterCodec(cdc)
-	staking.RegisterCodec(cdc)
-	distr.RegisterCodec(cdc)
-	slashing.RegisterCodec(cdc)
-	gov.RegisterCodec(cdc)
-	crisis.RegisterCodec(cdc)
-	auth.RegisterCodec(cdc)
-	sdk.RegisterCodec(cdc)
-	codec.RegisterCrypto(cdc)
-	codec.RegisterEvidences(cdc)
-	return cdc
+	fin <- ""
+	return totalCount, nil
 }
 
 // GetBlock fetches most recent block from chain
@@ -314,4 +188,172 @@ func (c Client) GetBlock() (*Block, error) {
 	}
 
 	return &result.Result.Block, nil
+}
+
+type LogFormat struct {
+	MsgIndex float64     `json:"msg_index"`
+	Success  bool        `json:"success"`
+	Log      string      `json:"log"`
+	Events   []LogEvents `json:"events"`
+}
+
+type LogEvents struct {
+	Type string `json:"type"`
+	//Attributes []string `json:"attributes"`
+	Attributes []*LogEventsAttributes `json:"attributes"`
+
+	//ParsedAttributes map[string]string `json:"parsedAttributes"`
+}
+
+type LogEventsAttributes struct {
+	Module    string
+	Action    string
+	Amount    string
+	Sender    []string
+	Validator []string
+	Recipient []string
+	Others    map[string][]string
+}
+
+type kvHolder struct {
+	Key   string `json:"key"`
+	Value string `json:value`
+}
+
+func (lea *LogEventsAttributes) UnmarshalJSON(b []byte) error {
+	//	lea = &LogEventsAttributes{}
+	lea.Others = make(map[string][]string)
+
+	dec := json.NewDecoder(bytes.NewReader(b))
+	/*	_, err := dec.Token()
+		if err != nil {
+			return err
+		}
+	*/
+	kc := &kvHolder{}
+	for dec.More() {
+		err := dec.Decode(kc)
+		if err != nil {
+			log.Println("ERROR!")
+			return err
+		}
+		switch kc.Key {
+		case "validator":
+			lea.Validator = append(lea.Validator, kc.Value)
+		case "sender":
+			lea.Sender = append(lea.Sender, kc.Value)
+		case "recipient":
+			lea.Recipient = append(lea.Recipient, kc.Value)
+		case "module":
+			lea.Module = kc.Value
+		case "action":
+			lea.Action = kc.Value
+		case "amount":
+			lea.Amount = kc.Value
+		default:
+			log.Println("Unknown, ", kc.Key, kc.Value)
+			k, ok := lea.Others[kc.Key]
+			if !ok {
+				k = []string{}
+			}
+			k = append(k, kc.Value)
+			lea.Others[kc.Key] = k
+		}
+	}
+	return nil
+}
+
+func rawToTransaction(in chan TxResponse, out chan cStruct.OutResp, cdc *codec.Codec) {
+
+	readr := strings.NewReader("")
+	dec := json.NewDecoder(readr)
+	for txRaw := range in {
+		tx := &auth.StdTx{}
+		readr.Reset(txRaw.TxResult.Log)
+		lf := []LogFormat{}
+		err := dec.Decode(&lf)
+		if err != nil {
+		}
+
+		base64Dec := base64.NewDecoder(base64.StdEncoding, strings.NewReader(txRaw.TxData))
+		_, err = cdc.UnmarshalBinaryLengthPrefixedReader(base64Dec, tx, 0)
+
+		outTX := cStruct.OutResp{
+			ID:  txRaw.TaskID,
+			All: uint64(txRaw.All),
+		}
+
+		trans := shared.Transaction{
+			Hash: txRaw.Hash,
+			Memo: tx.GetMemo(),
+		}
+
+		trans.Height, err = strconv.ParseUint(txRaw.Height, 10, 64)
+		if err != nil {
+			outTX.Error = err
+		}
+		trans.GasWanted, err = strconv.ParseUint(txRaw.TxResult.GasWanted, 10, 64)
+		if err != nil {
+			outTX.Error = err
+		}
+		trans.GasUsed, err = strconv.ParseUint(txRaw.TxResult.GasUsed, 10, 64)
+		if err != nil {
+			outTX.Error = err
+		}
+
+		for _, logf := range lf {
+			for _, ev := range logf.Events {
+				tev := shared.TransactionEvent{
+					Type: ev.Type,
+				}
+
+				for _, attr := range ev.Attributes {
+
+					sub := shared.SubsetEvent{
+						Module: attr.Module,
+						Action: attr.Action,
+					}
+
+					if len(attr.Sender) > 0 {
+						sub.Sender = attr.Sender
+					}
+
+					if len(attr.Recipient) > 0 {
+						sub.Recipient = attr.Recipient
+					}
+
+					if len(attr.Validator) > 0 {
+						sub.Validator = attr.Validator
+					}
+
+					if attr.Amount != "" {
+						sub.Amount = &shared.TransactionAmount{Text: attr.Amount}
+					}
+
+					tev.Sub = append(tev.Sub, sub)
+				}
+
+				trans.Events = append(trans.Events, tev)
+			}
+		}
+
+		outTX.Payload = trans
+		out <- outTX
+
+	}
+}
+
+func makeCodec() *codec.Codec {
+	var cdc = codec.New()
+	bank.RegisterCodec(cdc)
+	staking.RegisterCodec(cdc)
+	distr.RegisterCodec(cdc)
+	slashing.RegisterCodec(cdc)
+	gov.RegisterCodec(cdc)
+	crisis.RegisterCodec(cdc)
+	auth.RegisterCodec(cdc)
+	sdk.RegisterCodec(cdc)
+	codec.RegisterCrypto(cdc)
+	codec.RegisterEvidences(cdc)
+	return cdc
 }

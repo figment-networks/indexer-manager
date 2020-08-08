@@ -2,6 +2,7 @@ package connectivity
 
 import (
 	"errors"
+	"fmt"
 	"sync"
 
 	"github.com/figment-networks/cosmos-indexer/manager/connectivity/structs"
@@ -9,7 +10,8 @@ import (
 
 type TaskWorkerRecord struct {
 	workerID string
-	chTr     chan structs.TaskRequest
+	//	chTr     chan structs.TaskRequest
+	stream *structs.StreamAccess
 }
 
 type RoundRobinWorkers struct {
@@ -23,12 +25,12 @@ func NewRoundRobinWorkers() *RoundRobinWorkers {
 	}
 }
 
-func (rrw *RoundRobinWorkers) AddWorker(id string, trCh chan structs.TaskRequest) error {
+func (rrw *RoundRobinWorkers) AddWorker(id string, stream *structs.StreamAccess) error {
 	rrw.lock.Lock()
 	defer rrw.lock.Unlock()
 
 	select {
-	case rrw.next <- &TaskWorkerRecord{id, trCh}:
+	case rrw.next <- &TaskWorkerRecord{id, stream}:
 	default:
 		return errors.New("No workers available")
 	}
@@ -36,19 +38,17 @@ func (rrw *RoundRobinWorkers) AddWorker(id string, trCh chan structs.TaskRequest
 	return nil
 }
 
-func (rrw *RoundRobinWorkers) SendNext(tr structs.TaskRequest) (failedWorkerID string, err error) {
+func (rrw *RoundRobinWorkers) SendNext(tr *structs.TaskRequest, aw *structs.Await) (failedWorkerID string, err error) {
 	rrw.lock.Lock()
 	defer rrw.lock.Unlock()
 
 	select {
 	case ch := <-rrw.next:
-		select {
-		case ch.chTr <- tr:
-			rrw.next <- ch
-		default:
-			// remove broken from the pool
-			return ch.workerID, errors.New("Cannot send to worker channel")
+		err := ch.stream.Req(tr, aw)
+		if err != nil {
+			return ch.workerID, fmt.Errorf("Cannot send to worker channel: %w", err)
 		}
+		rrw.next <- ch
 	default:
 		return "", errors.New("No workers available")
 	}

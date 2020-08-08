@@ -18,7 +18,11 @@ type WorkerConnections struct {
 }
 
 func NewWorkerConnections(id, address string) *WorkerConnections {
-	return &WorkerConnections{workerid: id, workerAccessibleAddress: address, managerAddresses: make(map[string]bool)}
+	return &WorkerConnections{
+		workerid:                id,
+		workerAccessibleAddress: address,
+		managerAddresses:        make(map[string]bool),
+	}
 }
 
 func (wc *WorkerConnections) AddManager(managerAddress string) {

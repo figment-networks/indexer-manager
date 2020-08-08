@@ -77,12 +77,12 @@ func main() {
 
 	connManager := connectivity.NewManager()
 
-	hubbleClient := client.NewHubbleClient()
-	grpcCli := grpcTransport.NewClient(hubbleClient)
+	grpcCli := grpcTransport.NewClient()
 	connManager.AddTransport(grpcCli)
+	go connManager.Run(ctx)
 
-	go connManager.Run(ctx, hubbleClient.Out())
-
+	hubbleClient := client.NewHubbleClient()
+	hubbleClient.LinkSender(connManager)
 	hubbleHTTPTransport := httpTransport.NewHubbleConnector(hubbleClient)
 
 	mux := http.NewServeMux()
@@ -120,25 +120,6 @@ func initConfig(path string) (config.Config, error) {
 
 	return *cfg, nil
 }
-
-/*
-func idxConfig(flags flags, cfg config.Config) *indexer.Config {
-	batchSize := flags.batchSize
-	if batchSize == 0 {
-		batchSize = cfg.DefaultBatchSize
-	}
-
-	heightRange := flags.heightRangeInterval
-	if heightRange == 0 {
-		heightRange = cfg.DefaultHeightRangeInterval
-	}
-
-	return &indexer.Config{
-		BatchSize:           batchSize,
-		HeightRangeInterval: heightRange,
-		StartHeight:         0,
-	}
-}*/
 
 func RunMigrations(dbURL string) error {
 	log.Println("getting current directory")
@@ -180,7 +161,6 @@ func attachConnectionManager(mgr *connectivity.Manager, mux *http.ServeMux) {
 	dec := json.NewDecoder(b)
 
 	mux.HandleFunc("/client_ping", func(w http.ResponseWriter, r *http.Request) {
-		log.Println("Received Request")
 		pi := &PingInfo{}
 		block.Lock()
 		b.Reset()
@@ -201,6 +181,7 @@ func attachConnectionManager(mgr *connectivity.Manager, mux *http.ServeMux) {
 		}
 		block.Unlock()
 
+		log.Printf("Received Ping from %s:%s (%s) ", pi.Kind, pi.Connectivity.Version, pi.Connectivity.Type)
 		ipTo := net.ParseIP(r.RemoteAddr)
 		fwd := r.Header.Get("X-FORWARDED-FOR")
 		if fwd != "" {

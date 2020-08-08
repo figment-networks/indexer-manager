@@ -1,5 +1,7 @@
 package tendermint
 
+import "github.com/google/uuid"
+
 // TxResponse is result of querying for a tx
 type TxResponse struct {
 	Hash   string  `json:"hash"`
@@ -9,6 +11,9 @@ type TxResponse struct {
 	TxResult ResponseDeliverTx `json:"tx_result"`
 	// TxData is base64 encoded transaction data
 	TxData string `json:"tx"`
+
+	All    int64
+	TaskID uuid.UUID
 }
 
 type ResponseDeliverTx struct {

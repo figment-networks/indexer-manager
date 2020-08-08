@@ -14,7 +14,8 @@ const (
 
 // Config holds the configuration data
 type Config struct {
-	AppEnv string `json:"app_env" envconfig:"APP_ENV" default:"development"`
+	AppEnv  string `json:"app_env" envconfig:"APP_ENV" default:"development"`
+	Address string `json:"address" envconfig:"ADDRESS" default:"localhost:3000"`
 	//	DefaultBatchSize           int64  `json:"default_batch_size" envconfig:"DEFAULT_BATCH_SIZE" default:"0"`
 	//	DefaultHeightRangeInterval int64  `json:"default_height_range_interval" envconfig:"DEFAULT_HEIGHT_RANGE_INTERVAL" default:"0"`
 	TendermintRPCAddr string `json:"tendermint_rpc_addr" envconfig:"TENDERMINT_RPC_ADDR" required:"true"`

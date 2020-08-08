@@ -6,157 +6,187 @@ import (
 	"encoding/json"
 	"log"
 	"math"
+	"sync"
+	"time"
 
 	"github.com/figment-networks/cosmos-indexer/structs"
+	"github.com/google/uuid"
+
 	"github.com/figment-networks/cosmos-indexer/worker/api/tendermint"
+	cStructs "github.com/figment-networks/cosmos-indexer/worker/connectivity/structs"
 )
 
 const page = 30
 
-type TaskRequest struct {
-	Id      string
-	Type    string
-	Payload json.RawMessage
-
-	ResponseCh chan TaskResponse
-}
-
-type TaskError struct {
-	Msg string
-}
-
-type TaskResponse struct {
-	Version string
-	Id      string
-	Type    string
-	Order   int64
-	Final   bool
-	Error   TaskError
-	Payload json.RawMessage
-}
-
-type IndexerClienter interface {
-	In() chan<- TaskRequest
-}
-
 type IndexerClient struct {
-	taskInput chan TaskRequest
-	client    *tendermint.Client
+	client *tendermint.Client
+
+	streams map[uuid.UUID]*cStructs.StreamAccess
+	sLock   sync.Mutex
 }
 
 func NewIndexerClient(ctx context.Context, client *tendermint.Client) *IndexerClient {
-	ic := &IndexerClient{taskInput: make(chan TaskRequest, 100), client: client}
-
-	// (lukanus): IndexerClient *MUST* run at least one listener
-	for i := 0; i < 10; i++ {
-		go ic.Run(ctx)
-	}
-	return ic
+	return &IndexerClient{client: client, streams: make(map[uuid.UUID]*cStructs.StreamAccess)}
 }
 
-func (ic *IndexerClient) Run(ctx context.Context) {
+func (ic *IndexerClient) RegisterStream(ctx context.Context, stream *cStructs.StreamAccess) error {
+	log.Println("REGISTER STREAM")
+	ic.sLock.Lock()
+	ic.streams[stream.StreamID] = stream
+
+	go sendResp(ctx, ic.client.Out(), stream)
+	for i := 0; i < 20; i++ {
+		go ic.Run(ctx, stream)
+	}
+
+	ic.sLock.Unlock()
+	return nil
+}
+
+func (ic *IndexerClient) Run(ctx context.Context, stream *cStructs.StreamAccess) {
+
 	for {
 		select {
 		case <-ctx.Done():
+			ic.sLock.Lock()
+			delete(ic.streams, stream.StreamID)
+			ic.sLock.Unlock()
 			return
-		case taskRequest := <-ic.taskInput:
+		case <-stream.Finish:
+			return
+		case taskRequest := <-stream.RequestListener:
 			switch taskRequest.Type {
 			case "GetTransactions":
-				ic.GetTransactions(ctx, taskRequest)
+				ic.GetTransactions(ctx, taskRequest, stream)
+			case "GetBlocks":
+				ic.GetBlocks(ctx, taskRequest, stream)
 			default:
-				taskRequest.ResponseCh <- TaskResponse{
+				stream.Send(cStructs.TaskResponse{
 					Id:    taskRequest.Id,
-					Error: TaskError{"There is no such handler " + taskRequest.Type},
-				}
+					Error: cStructs.TaskError{"There is no such handler " + taskRequest.Type},
+					Final: true,
+				})
 			}
 		}
 	}
 }
 
-func (ic *IndexerClient) In() chan<- TaskRequest {
-	return ic.taskInput
-}
-
-func (ic *IndexerClient) GetTransactions(ctx context.Context, tr TaskRequest) {
+func (ic *IndexerClient) GetTransactions(ctx context.Context, tr cStructs.TaskRequest, stream *cStructs.StreamAccess) {
 	log.Printf("Received: %+v ", tr)
-
+	now := time.Now()
 	hr := &structs.HeightRange{}
 	err := json.Unmarshal(tr.Payload, hr)
 	if err != nil {
-		tr.ResponseCh <- TaskResponse{
-			Error: TaskError{"Error unmarshaling message"},
+		stream.Send(cStructs.TaskResponse{
+			Id:    tr.Id,
+			Error: cStructs.TaskError{Msg: "Cannot unmarshal payment"},
+			Final: true,
+		})
+	}
+
+	fin := make(chan string, 2)
+	defer close(fin)
+
+	sCtx, cancel := context.WithCancel(ctx)
+	count, err := ic.client.SearchTx(sCtx, tr.Id, structs.HeightRange{
+		StartHeight: hr.StartHeight,
+		EndHeight:   hr.EndHeight,
+	}, 1, page, fin)
+
+	if err != nil {
+		stream.Send(cStructs.TaskResponse{
+			Id:    tr.Id,
+			Error: cStructs.TaskError{Msg: "Error Getting Transactions"},
+			Final: true,
+		})
+		return
+	}
+
+	toBeDone := int(math.Ceil(float64(count-page) / page))
+	if count > page {
+		for i := 2; i < toBeDone+2; i++ {
+			go ic.client.SearchTx(sCtx, tr.Id, structs.HeightRange{
+				StartHeight: hr.StartHeight,
+				EndHeight:   hr.EndHeight,
+			}, i, page, fin)
 		}
 	}
 
-	txs := make(chan tendermint.OutTx, 10)
-
-	go sendTransactions(ctx, tr.Id, txs, tr.ResponseCh)
-
-	count, err := ic.client.SearchTx(structs.HeightRange{
-		StartHeight: hr.StartHeight,
-		EndHeight:   hr.EndHeight,
-	}, 1, page, txs)
-
-	if err == nil {
-		if count > page {
-			toBeDone := int(math.Ceil(float64(count-page) / page))
-			for i := 2; i < toBeDone+2; i++ {
-				go ic.client.SearchTx(structs.HeightRange{
-					StartHeight: hr.StartHeight,
-					EndHeight:   hr.EndHeight,
-				}, i, page, txs)
+	var received int
+	for {
+		select {
+		case e := <-fin:
+			if e != "" {
+				cancel()
+			}
+			received++
+			if received == toBeDone+1 {
+				log.Printf("Taken: %s", time.Now().Sub(now))
+				return
 			}
 		}
 	}
+
 }
 
-func sendTransactions(ctx context.Context, id string, txs chan tendermint.OutTx, resp chan<- TaskResponse) {
-	order := int64(0)
+type TData struct {
+	Order uint64
+	All   uint64
+}
+
+func sendResp(ctx context.Context, resp chan cStructs.OutResp, stream *cStructs.StreamAccess) {
+
+	opened := make(map[uuid.UUID]*TData)
+
 	b := &bytes.Buffer{}
 	enc := json.NewEncoder(b)
 
-	all := int64(0)
 SEND_LOOP:
 	for {
 		select {
 		case <-ctx.Done():
-			break
-		case t, ok := <-txs:
-			log.Printf("Task: %d,  %+v", order, t)
+			break SEND_LOOP
+		case t := <-resp:
+			// log.Printf("Task: %d,  %+v", order, t)
 
+			n, ok := opened[t.ID]
 			if !ok {
-				resp <- TaskResponse{
-					Id:      id,
-					Order:   order,
-					Payload: nil,
-					Final:   true,
-				}
-				break SEND_LOOP
+				n = &TData{0, t.All}
+				opened[t.ID] = n
 			}
-			all = t.All
-
 			b.Reset()
 
-			err := enc.Encode(t.Tx)
+			if n.All == 0 {
+				n.All = t.All
+			}
+
+			err := enc.Encode(t.Payload)
 			if err != nil {
 				log.Printf("%s", err.Error())
 			}
+			var final = (n.Order == n.All-1)
 
-			tr := TaskResponse{
-				Id:      id,
-				Order:   order,
-				Final:   (order == all-1),
+			tr := cStructs.TaskResponse{
+				Id:      t.ID,
+				Order:   n.Order,
+				Final:   final,
 				Payload: make([]byte, b.Len()),
 			}
 			b.Read(tr.Payload)
 
-			log.Printf("Task out: %d,  %+v %s", order, tr, string(tr.Payload))
-			resp <- tr
-
-			if order == all {
-				defer close(txs)
+			//	log.Printf("Task out: %d,  %+v %s", n.Order, tr, string(tr.Payload))
+			stream.Send(tr)
+			if err != nil {
+				log.Printf("%s", err.Error())
 			}
-			order++
+			if final {
+				delete(opened, t.ID)
+			}
+			n.Order++
 		}
 	}
+}
+
+func (ic *IndexerClient) GetBlocks(ctx context.Context, tr cStructs.TaskRequest, stream *cStructs.StreamAccess) {
+
 }

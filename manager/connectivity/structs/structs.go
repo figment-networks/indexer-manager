@@ -1,6 +1,15 @@
 package structs
 
-import "encoding/json"
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"log"
+	"sync"
+	"time"
+
+	"github.com/google/uuid"
+)
 
 type WorkerCompositeKey struct {
 	Network string
@@ -14,13 +23,12 @@ type WorkerInfo struct {
 }
 
 type TaskRequest struct {
+	ID      uuid.UUID
 	Network string
 	Version string
 
 	Type    string
 	Payload json.RawMessage
-
-	ResponseCh chan TaskResponse
 }
 
 type TaskErrorType string
@@ -31,10 +39,186 @@ type TaskError struct {
 }
 
 type TaskResponse struct {
+	ID      uuid.UUID
 	Version string
 	Type    string
 	Order   int64
 	Final   bool
 	Error   TaskError
 	Payload json.RawMessage
+}
+
+type Await struct {
+	sync.RWMutex
+	Created        time.Time
+	State          StreamState
+	Resp           chan *TaskResponse
+	ReceivedFinals int
+	Uids           []uuid.UUID
+}
+
+func NewAwait(sendIDs []uuid.UUID) (aw *Await) {
+	return &Await{
+		Created: time.Now(),
+		State:   StreamOnline,
+		Uids:    sendIDs,
+		Resp:    make(chan *TaskResponse, 30),
+	}
+}
+
+func (aw *Await) Send(tr *TaskResponse) (bool, error) {
+	aw.RLock()
+	defer aw.RUnlock()
+
+	if aw.State != StreamOnline {
+		return false, errors.New("Cannot send recipient unavailable")
+	}
+	if tr.Final {
+		aw.ReceivedFinals++
+	}
+
+	aw.Resp <- tr
+
+	if len(aw.Uids) == aw.ReceivedFinals {
+		log.Printf("Received All %s ", time.Now().Sub(aw.Created).String())
+		return true, nil
+	}
+
+	return false, nil
+}
+
+func (aw *Await) Close() {
+	aw.Lock()
+	defer aw.Unlock()
+	aw.State = StreamOffline
+	close(aw.Resp)
+	for range aw.Resp {
+	}
+}
+
+type IndexerClienter interface {
+	RegisterStream(ctx context.Context, stream *StreamAccess) error
+}
+
+// ---------------------
+
+var TaskResponseChanPool = NewtaskResponsePool(40)
+
+type taskResponsePool struct {
+	pool chan chan TaskResponse
+}
+
+func NewtaskResponsePool(size int) *taskResponsePool {
+	return &taskResponsePool{make(chan chan TaskResponse, size)}
+}
+
+func (tr *taskResponsePool) Get() chan TaskResponse {
+	select {
+	case t := <-tr.pool:
+		return t
+	default:
+	}
+
+	return make(chan TaskResponse, 40)
+}
+
+func (tr *taskResponsePool) Put(t chan TaskResponse) {
+	select {
+	case tr.pool <- t:
+	default:
+		close(t)
+	}
+}
+
+type StreamState int
+
+const (
+	StreamUnknown StreamState = iota
+	StreamOnline
+	StreamOffline
+)
+
+type StreamAccess struct {
+	Finish          chan bool
+	State           StreamState
+	StreamID        uuid.UUID
+	ResponseMap     map[uuid.UUID]*Await
+	RequestListener chan *TaskRequest
+
+	respLock sync.RWMutex
+	reqLock  sync.RWMutex
+}
+
+func NewStreamAccess() *StreamAccess {
+
+	sID, _ := uuid.NewRandom()
+
+	return &StreamAccess{
+		StreamID: sID,
+		State:    StreamOnline,
+
+		ResponseMap:     make(map[uuid.UUID]*Await),
+		RequestListener: make(chan *TaskRequest, 30),
+	}
+}
+
+func (sa *StreamAccess) Recv(tr *TaskResponse) error {
+
+	sa.respLock.RLock()
+	if sa.State != StreamOnline {
+		sa.respLock.RUnlock()
+		return errors.New("Stream is not Online")
+	}
+
+	resAwait, ok := sa.ResponseMap[tr.ID]
+	if !ok {
+		sa.respLock.RUnlock()
+		return errors.New("No such requests registred")
+	}
+
+	all, err := resAwait.Send(tr)
+	sa.respLock.RUnlock()
+	if err != nil {
+		return err
+	}
+
+	if all {
+		sa.respLock.Lock()
+		for _, u := range resAwait.Uids {
+			delete(sa.ResponseMap, u)
+
+		}
+		sa.respLock.Unlock()
+	}
+
+	return nil
+
+}
+
+func (sa *StreamAccess) Req(tr *TaskRequest, aw *Await) error {
+
+	sa.reqLock.RLock()
+	defer sa.reqLock.RUnlock()
+	if sa.State != StreamOnline {
+		return errors.New("Stream is not Online")
+	}
+
+	sa.ResponseMap[tr.ID] = aw
+
+	sa.RequestListener <- tr
+	return nil
+}
+
+func (sa *StreamAccess) Close() error {
+	sa.reqLock.Lock()
+	sa.respLock.Lock()
+	defer sa.respLock.Unlock()
+	defer sa.reqLock.Unlock()
+	if sa.State == StreamOffline {
+		return nil
+	}
+
+	sa.State = StreamOffline
+	close(sa.RequestListener)
+	return nil
 }

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math"
 
 	"github.com/figment-networks/cosmos-indexer/manager/connectivity/structs"
 
@@ -32,20 +33,20 @@ type HubbleContractor interface {
 	GetAccount(ctx context.Context, nv NetworkVersion)
 }
 
-type IndexerClienter interface {
-	Out() <-chan structs.TaskRequest
+type TaskSender interface {
+	Send([]structs.TaskRequest) (*structs.Await, error)
 }
 
 type HubbleClient struct {
-	taskOutput chan structs.TaskRequest
+	sender TaskSender
 }
 
 func NewHubbleClient() *HubbleClient {
-	return &HubbleClient{make(chan structs.TaskRequest, 200)}
+	return &HubbleClient{}
 }
 
-func (hc *HubbleClient) Out() <-chan structs.TaskRequest {
-	return hc.taskOutput
+func (hc *HubbleClient) LinkSender(sender TaskSender) {
+	hc.sender = sender
 }
 
 func (hc *HubbleClient) GetCurrentHeight(ctx context.Context, nv NetworkVersion) {
@@ -77,30 +78,54 @@ func (hc *HubbleClient) GetTransaction(ctx context.Context, nv NetworkVersion, i
 }
 
 func (hc *HubbleClient) GetTransactions(ctx context.Context, nv NetworkVersion, heightRange shared.HeightRange) ([]shared.Transaction, error) {
-	respCh := make(chan structs.TaskResponse, 3)
-	defer close(respCh)
 
-	b, _ := json.Marshal(heightRange)
-	hc.taskOutput <- structs.TaskRequest{
-		Network:    nv.Network,
-		Version:    nv.Version,
-		Type:       "GetTransactions",
-		Payload:    b,
-		ResponseCh: respCh,
+	log.Println("waiting for transactions")
+
+	req := []structs.TaskRequest{}
+
+	times := 1
+	diff := float64(heightRange.EndHeight - heightRange.StartHeight)
+	if diff > 0 {
+		times = int(math.Ceil(diff / 1000))
 	}
 
+	for i := 0; i < times; i++ {
+		b, _ := json.Marshal(shared.HeightRange{
+			StartHeight: heightRange.StartHeight + int64(i*100),
+			EndHeight:   heightRange.StartHeight + int64((i+1)*100),
+		})
+
+		req = append(req, structs.TaskRequest{
+			Network: nv.Network,
+			Version: nv.Version,
+			Type:    "GetTransactions",
+			Payload: b,
+		})
+	}
+
+	respAwait, err := hc.sender.Send(req)
+
+	if err != nil {
+		return nil, err
+	}
+
+	defer respAwait.Close()
+
 	trs := []shared.Transaction{}
-	log.Println("waiting for transactions")
 
 	buff := &bytes.Buffer{}
 	dec := json.NewDecoder(buff)
 
+	var receivedTransactions int
 WAIT_FOR_ALL_TRANSACTIONS:
 	for {
 		select {
 		case <-ctx.Done():
 			return nil, errors.New("Request timed out")
-		case response := <-respCh:
+		case response, ok := <-respAwait.Resp:
+			if !ok {
+				return nil, errors.New("Response closed.")
+			}
 			log.Printf("Got Response !!! %s ", string(response.Payload))
 			if response.Error.Msg != "" {
 				return nil, fmt.Errorf("Error getting response: %s", response.Error.Msg)
@@ -108,9 +133,17 @@ WAIT_FOR_ALL_TRANSACTIONS:
 			buff.Reset()
 			buff.ReadFrom(bytes.NewReader(response.Payload))
 			m := &shared.Transaction{}
-			dec.Decode(m)
+			err := dec.Decode(m)
+			if err != nil {
+				return nil, fmt.Errorf("Error getting response: %w", err)
+			}
 			trs = append(trs, *m)
+
 			if response.Final {
+				receivedTransactions++
+			}
+
+			if receivedTransactions == times || response.Error.Msg != "" {
 				break WAIT_FOR_ALL_TRANSACTIONS
 			}
 		}

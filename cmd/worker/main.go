@@ -74,22 +74,24 @@ func main() {
 		log.Fatalf("error generating UUID: %v", err)
 	}
 
-	c := connectivity.NewWorkerConnections(workerRunID.String(), "localhost:3000")
+	c := connectivity.NewWorkerConnections(workerRunID.String(), cfg.Address)
 	c.AddManager("localhost:8085/client_ping")
 
 	go c.Run(context.Background(), time.Second*10)
 
 	tendermintClient := tendermint.NewClient(cfg.TendermintRPCAddr, cfg.DatahubKey, nil)
+
 	workerClient := client.NewIndexerClient(context.Background(), tendermintClient)
+
 	worker := grpcIndexer.NewIndexerServer(workerClient)
 	grpcProtoIndexer.RegisterIndexerServiceServer(grpcServer, worker)
 
-	address := fmt.Sprintf("localhost:%d", 3000)
-	lis, err := net.Listen("tcp", address)
+	//address := fmt.Sprintf("localhost:%d", 3000)
+	lis, err := net.Listen("tcp", cfg.Address)
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
-	log.Printf("Listening on %s", address)
+	log.Printf("Listening on %s", cfg.Address)
 	// (lukanus): blocking call on grpc server
 	grpcServer.Serve(lis)
 }
