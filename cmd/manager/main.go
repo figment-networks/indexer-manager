@@ -66,7 +66,7 @@ func main() {
 	}
 	defer db.Close()
 
-	pgsqlDriver := postgres.New(db)
+	pgsqlDriver := postgres.New(ctx, db)
 	managerStore := store.New(pgsqlDriver)
 	go managerStore.Run(ctx, time.Second*5)
 

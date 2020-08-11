@@ -29,7 +29,8 @@ FROM alpine:3.10 AS release
 WORKDIR /app/migration
 
 COPY --from=build /go/src/github.com/figment-networks/cosmos-indexer/migration /app/migration/migration
-COPY --from=build /go/src/github.com/figment-networks/cosmos-indexer/cmd/manager-migration/migrations /app/migration/migrations
+COPY --from=build /go/src/github.com/figment-networks/cosmos-indexer/cmd/manager-migration/migrations/ /app/migration/migrations/
+
 
 RUN chmod a+x ./migration
 

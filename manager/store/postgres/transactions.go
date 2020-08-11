@@ -2,7 +2,11 @@ package postgres
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"math"
+	"strconv"
+	"strings"
 
 	"github.com/figment-networks/cosmos-indexer/structs"
 	"github.com/lib/pq"
@@ -12,7 +16,7 @@ func (d *Driver) StoreTransaction(tx structs.TransactionExtra) error {
 	select {
 	case d.txBuff <- tx:
 	default:
-		if err := flushTx(d); err != nil {
+		if err := flushTx(context.Background(), d); err != nil {
 			return err
 		}
 		d.txBuff <- tx
@@ -29,21 +33,16 @@ func (d *Driver) StoreTransactions(txs []structs.TransactionExtra) error {
 	return nil
 }
 
-func flushTx(d *Driver) error {
-	txn, err := d.db.Begin()
-	if err != nil {
-		return err
-	}
-
-	stmt, err := txn.Prepare(pq.CopyIn("transaction_events",
-		"network", "chain_id", "height", "hash", "block_hash", "time", "type", "senders", "recipients", "amount", "fee", "gas_wanted", "gas_used", "memo", "data"))
-	if err != nil {
-		return err
-	}
+func flushTx(ctx context.Context, d *Driver) error {
 
 	buff := &bytes.Buffer{}
 	enc := json.NewEncoder(buff)
 
+	qBuilder := strings.Builder{}
+	qBuilder.WriteString(`INSERT INTO public.transaction_events("network", "chain_id", "event_id", "height", "hash", "block_hash", "time", "type", "senders", "recipients", "amount", "fee", "gas_wanted", "gas_used", "memo", "data") VALUES `)
+
+	var i = 0
+	valueArgs := []interface{}{}
 READ_ALL:
 	for {
 		select {
@@ -52,54 +51,99 @@ READ_ALL:
 			for _, ev := range t.Events {
 				recipients := []string{}
 				senders := []string{}
+				types := []string{}
 				amount := .0
+
 				for _, sub := range ev.Sub {
 					if len(sub.Recipient) > 0 {
-						uniqueEntries(sub.Recipient, recipients)
+						recipients = uniqueEntries(sub.Recipient, recipients)
 					}
 					if len(sub.Sender) > 0 {
-						uniqueEntries(sub.Sender, senders)
+						senders = uniqueEntries(sub.Sender, senders)
 					}
-					//	amount += sub.Amount.Numeric
+					types = uniqueEntry(sub.Type, types)
 				}
-				enc.Encode(ev)
-				_, err = stmt.Exec(transaction.Network, transaction.ChainID, t.Height, t.Hash, t.BlockHash, t.Time, ev.Type, pq.Array(senders), pq.Array(recipients), amount, 0, t.GasWanted, t.GasUsed, t.Memo, buff.String())
+
+				enc.Encode(ev.Sub)
+				if i > 0 {
+					qBuilder.WriteString(`,`)
+				}
+
+				qBuilder.WriteString(`(`)
+				for j := 1; j < 17; j++ {
+					qBuilder.WriteString(`$`)
+					current := i*16 + j
+					qBuilder.WriteString(strconv.Itoa(current))
+					if current == 1 || math.Mod(float64(current), 16) != 0 {
+						qBuilder.WriteString(`,`)
+					}
+				}
+
+				qBuilder.WriteString(`)`)
+				valueArgs = append(valueArgs, transaction.Network)
+				valueArgs = append(valueArgs, transaction.ChainID)
+				valueArgs = append(valueArgs, ev.ID)
+				valueArgs = append(valueArgs, t.Height)
+				valueArgs = append(valueArgs, t.Hash)
+				valueArgs = append(valueArgs, t.BlockHash)
+				valueArgs = append(valueArgs, t.Time)
+				valueArgs = append(valueArgs, pq.Array(types))
+				valueArgs = append(valueArgs, pq.Array(senders))
+				valueArgs = append(valueArgs, pq.Array(recipients))
+				valueArgs = append(valueArgs, amount)
+				valueArgs = append(valueArgs, 0)
+				valueArgs = append(valueArgs, t.GasWanted)
+				valueArgs = append(valueArgs, t.GasUsed)
+				valueArgs = append(valueArgs, t.Memo)
+				valueArgs = append(valueArgs, buff.String())
 				buff.Reset()
-				if err != nil {
-					return err
-				}
+				i++
 			}
 		default:
 			break READ_ALL
 		}
 	}
 
-	_, err = stmt.Exec()
+	qBuilder.WriteString(` ON CONFLICT (network, chain_id, hash, event_id) DO NOTHING`)
+
+	tx, err := d.db.Begin()
 	if err != nil {
 		return err
 	}
-
-	err = stmt.Close()
+	a := qBuilder.String()
+	_, err = tx.Exec(a, valueArgs...)
 	if err != nil {
+		tx.Rollback()
 		return err
 	}
-
-	return txn.Commit()
+	return tx.Commit()
 }
 
-func uniqueEntries(in, out []string) {
+func uniqueEntries(in, out []string) []string {
+
 	for _, r := range in { // (lukanus): faster than a map :)
 		var exists bool
+	INNER:
 		for _, re := range out {
 			if r == re {
 				exists = true
-				break
+				break INNER
 			}
 		}
 		if !exists {
 			out = append(out, r)
 		}
 	}
+	return out
+}
+
+func uniqueEntry(in string, out []string) []string {
+	for _, re := range out {
+		if in == re {
+			return out
+		}
+	}
+	return append(out, in)
 }
 
 /*

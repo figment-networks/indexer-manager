@@ -166,6 +166,7 @@ SEND_LOOP:
 			if err != nil {
 				log.Printf("%s", err.Error())
 			}
+
 			var final = (n.Order == n.All-1)
 
 			tr := cStructs.TaskResponse{
@@ -185,11 +186,10 @@ SEND_LOOP:
 				log.Printf("%s", err.Error())
 			}
 
-			if final {
-				delete(opened, [2]uuid.UUID{t.ID, t.RunID})
-			}
-
 			if !t.Additional {
+				if final {
+					delete(opened, [2]uuid.UUID{t.ID, t.RunID})
+				}
 				n.Order++
 			}
 		}

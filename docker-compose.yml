@@ -29,6 +29,6 @@ services:
     networks:
       - internal
     environment:
-      DATABASE_URL: postgres://cosmos:cosmos@database/cosmos?sslmode=disable
+      DATABASE_URL: postgres://cosmos:cosmos@postgresdatabase/cosmos?sslmode=disable
     depends_on:
       - postgresdatabase

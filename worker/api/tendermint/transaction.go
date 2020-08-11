@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -22,6 +23,8 @@ import (
 
 	log "github.com/sirupsen/logrus"
 )
+
+var curencyRegex = regexp.MustCompile("([0-9\\.\\,\\-\\s]+)([^0-9\\s]+)$")
 
 // SearchTx is making search api call
 func (c *Client) SearchTx(ctx context.Context, taskID, runUUID uuid.UUID, r structs.HeightRange, page, perPage int, fin chan string) (count int64, err error) {
@@ -109,6 +112,8 @@ func rawToTransaction(ctx context.Context, c *Client, in chan TxResponse, out ch
 	dec := json.NewDecoder(readr)
 	for txRaw := range in {
 		tx := &auth.StdTx{}
+
+		log.Printf("%+v", txRaw.TxResult.Log)
 		readr.Reset(txRaw.TxResult.Log)
 		lf := []LogFormat{}
 		err := dec.Decode(&lf)
@@ -119,8 +124,10 @@ func rawToTransaction(ctx context.Context, c *Client, in chan TxResponse, out ch
 		_, err = cdc.UnmarshalBinaryLengthPrefixedReader(base64Dec, tx, 0)
 
 		hInt, _ := strconv.ParseInt(txRaw.Height, 10, 64)
-
-		block, _ := c.GetBlock(ctx, shared.HeightHash{Height: hInt})
+		block, err := c.GetBlock(ctx, shared.HeightHash{Height: hInt})
+		if err != nil {
+			log.Println(err)
+		}
 
 		outTX := cStruct.OutResp{
 			ID:    txRaw.TaskID.TaskID,
@@ -150,17 +157,17 @@ func rawToTransaction(ctx context.Context, c *Client, in chan TxResponse, out ch
 		}
 
 		for _, logf := range lf {
+			tev := shared.TransactionEvent{
+				ID: strconv.FormatFloat(logf.MsgIndex, 'f', -1, 64),
+			}
 			for _, ev := range logf.Events {
-				tev := shared.TransactionEvent{
+				sub := shared.SubsetEvent{
 					Type: ev.Type,
 				}
-
 				for _, attr := range ev.Attributes {
 
-					sub := shared.SubsetEvent{
-						Module: attr.Module,
-						Action: attr.Action,
-					}
+					sub.Module = attr.Module
+					sub.Action = attr.Action
 
 					if len(attr.Sender) > 0 {
 						sub.Sender = attr.Sender
@@ -175,17 +182,24 @@ func rawToTransaction(ctx context.Context, c *Client, in chan TxResponse, out ch
 					}
 
 					if attr.Amount != "" {
+
+						sliced := getCurrency(attr.Amount)
+
 						sub.Amount = &shared.TransactionAmount{
 							Text: attr.Amount,
 						}
-						sub.Amount.Numeric, _ = strconv.ParseFloat(attr.Amount, 64)
+
+						if len(sliced) == 2 {
+							sub.Amount.Currency = sliced[1]
+							sub.Amount.Numeric, _ = strconv.ParseFloat(sliced[0], 64)
+						} else {
+							sub.Amount.Numeric, _ = strconv.ParseFloat(attr.Amount, 64)
+						}
 					}
-
-					tev.Sub = append(tev.Sub, sub)
 				}
-
-				trans.Events = append(trans.Events, tev)
+				tev.Sub = append(tev.Sub, sub)
 			}
+			trans.Events = append(trans.Events, tev)
 		}
 
 		outTX.Payload = trans
@@ -197,6 +211,10 @@ func rawToTransaction(ctx context.Context, c *Client, in chan TxResponse, out ch
 			Type:       "Block",
 			Payload:    block,
 		}
-
 	}
+}
+
+func getCurrency(in string) []string {
+	return curencyRegex.FindAllString(in, 2)
+
 }

@@ -1,8 +1,8 @@
 package postgres
 
 import (
+	"context"
 	"database/sql"
-	"log"
 
 	"github.com/figment-networks/cosmos-indexer/structs"
 	"github.com/golang-migrate/migrate/v4"
@@ -17,29 +17,29 @@ type Driver struct {
 	blBuff chan structs.Block
 }
 
-func New(db *sql.DB) *Driver {
+func New(ctx context.Context, db *sql.DB) *Driver {
+
 	return &Driver{
 		db:     db,
 		txBuff: make(chan structs.TransactionExtra, 10),
 		blBuff: make(chan structs.Block, 10),
 	}
 }
-
 func RunMigrations(srcPath string, dbURL string) error {
-	log.Println("using migrations from", srcPath)
 	m, err := migrate.New(srcPath, dbURL)
+	defer m.Close()
+
 	if err != nil {
 		return err
 	}
 
-	log.Println("running migrations")
 	return m.Up()
 }
 
 func (d *Driver) Flush() error {
 
 	if len(d.txBuff) > 0 {
-		if err := flushTx(d); err != nil {
+		if err := flushTx(context.Background(), d); err != nil {
 			return err
 		}
 	}

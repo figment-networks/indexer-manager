@@ -31,8 +31,9 @@ type Transaction struct {
 	Height uint64    `json:"height,omitempty"`
 	Time   time.Time `json:"time,omitempty"`
 
-	GasWanted uint64 `json:"gas_wanted,omitempty"`
-	GasUsed   uint64 `json:"gas_used,omitempty"`
+	Fee       TransactionFee `json:"transaction_fee,omitempty"`
+	GasWanted uint64         `json:"gas_wanted,omitempty"`
+	GasUsed   uint64         `json:"gas_used,omitempty"`
 
 	Memo  string `json:"memo,omitempty"`
 	Nonce int    `json:"nonce,omitempty"`
@@ -41,13 +42,20 @@ type Transaction struct {
 }
 
 type TransactionEvent struct {
-	Type string        `json:"type,omitempty"`
-	Sub  []SubsetEvent `json:"sub,omitempty"`
+	ID  string        `json:"id,omitempty"`
+	Sub []SubsetEvent `json:"sub,omitempty"`
+}
+
+type TransactionFee struct {
+	Text     string  `json:"text,omitempty"`
+	Numeric  float64 `json:"numeric,omitempty"`
+	Currency string  `json:"currency,omitempty"`
 }
 
 type TransactionAmount struct {
-	Text    string  `json:"text,omitempty"`
-	Numeric float64 `json:"numeric,omitempty"`
+	Text     string  `json:"text,omitempty"`
+	Numeric  float64 `json:"numeric,omitempty"`
+	Currency string  `json:"currency,omitempty"`
 }
 
 type SubsetEvent struct {
@@ -60,7 +68,6 @@ type SubsetEvent struct {
 	Module string `json:"module,omitempty"`
 
 	Amount *TransactionAmount `json:"amount,omitempty"`
-	Fee    uint64             `json:"fee,omitempty"`
 }
 
 // Block

@@ -1,11 +1,9 @@
 package tendermint
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
-	"io/ioutil"
 	"net/http"
 	"strconv"
 	"time"
@@ -35,6 +33,7 @@ func (c Client) GetBlock(ctx context.Context, params structs.HeightHash) (b stru
 	if params.Height > 0 {
 		q.Add("height", strconv.FormatInt(params.Height, 10))
 	}
+	req.URL.RawQuery = q.Encode()
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -43,12 +42,9 @@ func (c Client) GetBlock(ctx context.Context, params structs.HeightHash) (b stru
 
 	defer resp.Body.Close()
 
-	by, _ := ioutil.ReadAll(resp.Body)
-	decoder := json.NewDecoder(bytes.NewReader(by))
+	decoder := json.NewDecoder(resp.Body)
 
-	log.Printf("Payload %+v", string(by))
 	var result *GetBlockResponse
-
 	if err = decoder.Decode(&result); err != nil {
 		log.WithError(err).Error("unable to decode result body")
 		return b, err
@@ -57,12 +53,7 @@ func (c Client) GetBlock(ctx context.Context, params structs.HeightHash) (b stru
 	if result.Error.Message != "" {
 		return b, errors.New("error fetching block") //todo make more descriptive
 	}
-	//2020-08-10T11:21:40.090546295Z
-	//2017-12-30T05:53:09.287+01:00
-	//	bTime, err := time.Parse("2006-01-02T15:04:05.999+07:00", result.Result.Block.Header.Time)
-	log.Printf("result.Result.Block %+v %+v", params, result.Result.Block)
 	bTime, err := time.Parse(time.RFC3339Nano, result.Result.Block.Header.Time)
-
 	uHeight, err := strconv.ParseUint(result.Result.Block.Header.Height, 10, 64)
 
 	return structs.Block{

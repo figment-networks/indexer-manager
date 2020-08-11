@@ -44,7 +44,12 @@ func main() {
 	}
 	srcDir := filepath.Join(dir, "migrations")
 	srcPath := fmt.Sprintf("file://%s", srcDir)
-	postgres.RunMigrations(srcPath, cfg.DatabaseURL)
+
+	log.Println("using migrations from", srcPath)
+	err = postgres.RunMigrations(srcPath, cfg.DatabaseURL)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 }
 
