@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
+	"github.com/figment-networks/cosmos-indexer/manager/store/params"
 	"github.com/figment-networks/cosmos-indexer/structs"
-	//	_ "github.com/jinzhu/gorm/dialects/postgres"
 )
 
 type DBDriver interface {
@@ -26,6 +26,8 @@ type FlushBuffered interface {
 type TransactionStore interface {
 	StoreTransaction(structs.TransactionExtra) error
 	StoreTransactions([]structs.TransactionExtra) error
+
+	GetTransactions(ctx context.Context, tsearch params.TransactionSearch) ([]structs.Transaction, error)
 }
 
 type BlockStore interface {
@@ -64,4 +66,8 @@ func (s *Store) StoreTransactions(txs []structs.TransactionExtra) error {
 
 func (s *Store) StoreBlock(bl structs.Block) error {
 	return s.driver.StoreBlock(bl)
+}
+
+func (s *Store) GetTransactions(ctx context.Context, tsearch params.TransactionSearch) ([]structs.Transaction, error) {
+	return s.driver.GetTransactions(ctx, tsearch)
 }

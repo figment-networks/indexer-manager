@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/figment-networks/cosmos-indexer/manager/client"
@@ -107,7 +108,80 @@ func (hc *HubbleConnector) GetTransactions(w http.ResponseWriter, req *http.Requ
 	w.WriteHeader(http.StatusOK)
 	enc := json.NewEncoder(w)
 	enc.Encode(transactions)
+}
 
+func (hc *HubbleConnector) SearchTransactions(w http.ResponseWriter, req *http.Request) {
+
+	ct := req.Header.Get("Content-Type")
+
+	ts := &shared.TransactionSearch{}
+	if strings.Contains(ct, "json") {
+		dec := json.NewDecoder(req.Body)
+		err := dec.Decode(ts)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte(err.Error()))
+			return
+		}
+
+	} else if strings.Contains(ct, "form") {
+		err := req.ParseForm()
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte(err.Error()))
+			return
+		}
+		/*	Height    uint64   `json:"height"`
+			Type      []string `json:"type"`
+			StartTime string   `json:"start_time"`
+			EndTime   string   `json:"end_time"`
+			Limit     uint     `json:"limit"`*/
+
+		ts.Height, _ = strconv.ParseUint(req.Form.Get("height"), 10, 64)
+		ts.Limit, _ = strconv.ParseUint(req.Form.Get("limit"), 10, 64)
+		ts.Account = req.Form.Get("account")
+		ts.Sender = req.Form.Get("sender")
+		ts.Receiver = req.Form.Get("receiver")
+		ts.BlockHash = req.Form.Get("block_hash")
+		ts.Memo = req.Form.Get("memo")
+		ts.Account = req.Form.Get("account")
+		ts.Account = req.Form.Get("account")
+
+	}
+
+	nv := client.NetworkVersion{"cosmos", "0.0.1"}
+
+	ctx, cancel := context.WithTimeout(req.Context(), 1*time.Minute)
+	defer cancel()
+
+	transactions, err := hc.cli.SearchTransactions(ctx, nv, *ts)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	}
+
+	log.Printf("Returning %d transactions", len(transactions))
+	w.Header().Add("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	enc := json.NewEncoder(w)
+	enc.Encode(transactions)
+}
+
+type TransactionSearch struct {
+	Network string `json:"network"`
+	//	AfterID   uint     `form:"after_id"`
+	//	BeforeID  uint     `form:"before_id"`
+	Height    uint64   `json:"height"`
+	Type      []string `json:"type"`
+	BlockHash string   `json:"block_hash"`
+	Account   string   `json:"account"`
+	Sender    string   `json:"sender"`
+	Receiver  string   `json:"receiver"`
+	Memo      string   `json:"memo"`
+	StartTime string   `json:"start_time"`
+	EndTime   string   `json:"end_time"`
+	Limit     uint     `json:"limit"`
 }
 
 func (hc *HubbleConnector) GetAccounts(w http.ResponseWriter, req *http.Request) {
@@ -131,6 +205,7 @@ func (hc *HubbleConnector) AttachToHandler(mux *http.ServeMux) {
 	mux.HandleFunc("/block_times_interval", hc.GetBlockTimesInterval)
 	mux.HandleFunc("/transactions", hc.GetTransactions)
 	mux.HandleFunc("/transactions/:id", hc.GetTransaction)
+	mux.HandleFunc("/transactions_search", hc.SearchTransactions)
 	mux.HandleFunc("/accounts", hc.GetAccounts)
 	mux.HandleFunc("/accounts/:id", hc.GetAccount)
 }

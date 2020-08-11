@@ -1,6 +1,12 @@
 package structs
 
-import "time"
+import (
+	"encoding/json"
+	"errors"
+	"time"
+
+	"github.com/google/uuid"
+)
 
 type HeightRange struct {
 	Epoch       string
@@ -21,7 +27,7 @@ type TransactionExtra struct {
 
 // Transaction contains the blockchain transaction details
 type Transaction struct {
-	ID        int64      `json:"id,omitempty"`
+	ID        uuid.UUID  `json:"id,omitempty"`
 	CreatedAt *time.Time `json:"created_at,omitempty"`
 	UpdatedAt *time.Time `json:"updated_at,omitempty"`
 
@@ -38,12 +44,24 @@ type Transaction struct {
 	Memo  string `json:"memo,omitempty"`
 	Nonce int    `json:"nonce,omitempty"`
 
-	Events []TransactionEvent `json:"events,omitempty"`
+	Events TransactionEvents `json:"events,omitempty"`
 }
 
 type TransactionEvent struct {
 	ID  string        `json:"id,omitempty"`
 	Sub []SubsetEvent `json:"sub,omitempty"`
+}
+
+type TransactionEvents []TransactionEvent
+
+func (te *TransactionEvents) Scan(value interface{}) error {
+
+	b, ok := value.([]byte)
+	if !ok {
+		return errors.New("type assertion to []byte failed")
+	}
+
+	return json.Unmarshal(b, &te)
 }
 
 type TransactionFee struct {
@@ -79,4 +97,19 @@ type Block struct {
 	Hash   string    `json:"hash,omitempty"`
 	Height uint64    `json:"height,omitempty"`
 	Time   time.Time `json:"time,omitempty"`
+}
+
+type TransactionSearch struct {
+	//	AfterID   uint     `form:"after_id"`
+	//	BeforeID  uint     `form:"before_id"`
+	Height    uint64    `json:"height"`
+	Type      []string  `json:"type"`
+	BlockHash string    `json:"block_hash"`
+	Account   string    `json:"account"`
+	Sender    string    `json:"sender"`
+	Receiver  string    `json:"receiver"`
+	Memo      string    `json:"memo"`
+	StartTime time.Time `json:"start_time"`
+	EndTime   time.Time `json:"end_time"`
+	Limit     uint64    `json:"limit"`
 }

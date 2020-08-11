@@ -11,6 +11,7 @@ import (
 
 	"github.com/figment-networks/cosmos-indexer/manager/connectivity/structs"
 	"github.com/figment-networks/cosmos-indexer/manager/store"
+	"github.com/figment-networks/cosmos-indexer/manager/store/params"
 
 	shared "github.com/figment-networks/cosmos-indexer/structs"
 )
@@ -170,6 +171,23 @@ WAIT_FOR_ALL_TRANSACTIONS:
 
 	log.Println("finished waiting for transactions")
 	return trs, nil
+}
+
+func (hc *HubbleClient) SearchTransactions(ctx context.Context, nv NetworkVersion, ts shared.TransactionSearch) ([]shared.Transaction, error) {
+
+	return hc.storeEng.GetTransactions(ctx, params.TransactionSearch{
+		Network:   nv.Network,
+		Height:    ts.Height,
+		Type:      ts.Type,
+		BlockHash: ts.BlockHash,
+		Account:   ts.Account,
+		Sender:    ts.Sender,
+		Receiver:  ts.Receiver,
+		Memo:      ts.Memo,
+		StartTime: ts.StartTime,
+		EndTime:   ts.EndTime,
+		Limit:     ts.Limit,
+	})
 }
 
 func (hc *HubbleClient) GetAccounts(ctx context.Context, nv NetworkVersion) {

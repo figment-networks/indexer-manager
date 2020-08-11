@@ -3,11 +3,14 @@ package postgres
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
+	"fmt"
 	"math"
 	"strconv"
 	"strings"
 
+	"github.com/figment-networks/cosmos-indexer/manager/store/params"
 	"github.com/figment-networks/cosmos-indexer/structs"
 	"github.com/lib/pq"
 )
@@ -39,7 +42,7 @@ func flushTx(ctx context.Context, d *Driver) error {
 	enc := json.NewEncoder(buff)
 
 	qBuilder := strings.Builder{}
-	qBuilder.WriteString(`INSERT INTO public.transaction_events("network", "chain_id", "event_id", "height", "hash", "block_hash", "time", "type", "senders", "recipients", "amount", "fee", "gas_wanted", "gas_used", "memo", "data") VALUES `)
+	qBuilder.WriteString(`INSERT INTO public.transaction_events("network", "chain_id",  "height", "hash", "block_hash", "time", "type", "senders", "recipients", "amount", "fee", "gas_wanted", "gas_used", "memo", "data") VALUES `)
 
 	var i = 0
 	valueArgs := []interface{}{}
@@ -48,12 +51,11 @@ READ_ALL:
 		select {
 		case transaction := <-d.txBuff:
 			t := transaction.Transaction
+			recipients := []string{}
+			senders := []string{}
+			types := []string{}
+			amount := .0
 			for _, ev := range t.Events {
-				recipients := []string{}
-				senders := []string{}
-				types := []string{}
-				amount := .0
-
 				for _, sub := range ev.Sub {
 					if len(sub.Recipient) > 0 {
 						recipients = uniqueEntries(sub.Recipient, recipients)
@@ -63,48 +65,48 @@ READ_ALL:
 					}
 					types = uniqueEntry(sub.Type, types)
 				}
+			}
 
-				enc.Encode(ev.Sub)
-				if i > 0 {
+			enc.Encode(t.Events)
+
+			if i > 0 {
+				qBuilder.WriteString(`,`)
+			}
+			qBuilder.WriteString(`(`)
+			for j := 1; j < 16; j++ {
+				qBuilder.WriteString(`$`)
+				current := i*15 + j
+				qBuilder.WriteString(strconv.Itoa(current))
+				if current == 1 || math.Mod(float64(current), 15) != 0 {
 					qBuilder.WriteString(`,`)
 				}
-
-				qBuilder.WriteString(`(`)
-				for j := 1; j < 17; j++ {
-					qBuilder.WriteString(`$`)
-					current := i*16 + j
-					qBuilder.WriteString(strconv.Itoa(current))
-					if current == 1 || math.Mod(float64(current), 16) != 0 {
-						qBuilder.WriteString(`,`)
-					}
-				}
-
-				qBuilder.WriteString(`)`)
-				valueArgs = append(valueArgs, transaction.Network)
-				valueArgs = append(valueArgs, transaction.ChainID)
-				valueArgs = append(valueArgs, ev.ID)
-				valueArgs = append(valueArgs, t.Height)
-				valueArgs = append(valueArgs, t.Hash)
-				valueArgs = append(valueArgs, t.BlockHash)
-				valueArgs = append(valueArgs, t.Time)
-				valueArgs = append(valueArgs, pq.Array(types))
-				valueArgs = append(valueArgs, pq.Array(senders))
-				valueArgs = append(valueArgs, pq.Array(recipients))
-				valueArgs = append(valueArgs, amount)
-				valueArgs = append(valueArgs, 0)
-				valueArgs = append(valueArgs, t.GasWanted)
-				valueArgs = append(valueArgs, t.GasUsed)
-				valueArgs = append(valueArgs, t.Memo)
-				valueArgs = append(valueArgs, buff.String())
-				buff.Reset()
-				i++
 			}
+
+			qBuilder.WriteString(`)`)
+			valueArgs = append(valueArgs, transaction.Network)
+			valueArgs = append(valueArgs, transaction.ChainID)
+			//	valueArgs = append(valueArgs, ev.ID)
+			valueArgs = append(valueArgs, t.Height)
+			valueArgs = append(valueArgs, t.Hash)
+			valueArgs = append(valueArgs, t.BlockHash)
+			valueArgs = append(valueArgs, t.Time)
+			valueArgs = append(valueArgs, pq.Array(types))
+			valueArgs = append(valueArgs, pq.Array(senders))
+			valueArgs = append(valueArgs, pq.Array(recipients))
+			valueArgs = append(valueArgs, pq.Array([]float64{amount}))
+			valueArgs = append(valueArgs, 0)
+			valueArgs = append(valueArgs, t.GasWanted)
+			valueArgs = append(valueArgs, t.GasUsed)
+			valueArgs = append(valueArgs, t.Memo)
+			valueArgs = append(valueArgs, buff.String())
+			buff.Reset()
+			i++
 		default:
 			break READ_ALL
 		}
 	}
 
-	qBuilder.WriteString(` ON CONFLICT (network, chain_id, hash, event_id) DO NOTHING`)
+	qBuilder.WriteString(` ON CONFLICT (network, chain_id, hash ) DO NOTHING`)
 
 	tx, err := d.db.Begin()
 	if err != nil {
@@ -146,10 +148,118 @@ func uniqueEntry(in string, out []string) []string {
 	return append(out, in)
 }
 
+func (d *Driver) GetTransactions(ctx context.Context, tsearch params.TransactionSearch) (txs []structs.Transaction, err error) {
+
+	/*
+		if tsearch.BeforeID > 0 {
+			scope = scope.Where("id < ?", tsearch.BeforeID)
+		}
+		if tsearch.AfterID > 0 {
+			tscope = scope.Where("id > ?", search.AfterID)
+		}*/
+
+	var i = 1
+
+	parts := []string{}
+	data := []interface{}{}
+
+	if tsearch.Network != "" {
+		parts = append(parts, "network = $"+strconv.Itoa(i))
+		data = append(data, tsearch.Network)
+		i++
+	}
+
+	if tsearch.BlockHash != "" {
+		parts = append(parts, "block_hash = $"+strconv.Itoa(i))
+		data = append(data, tsearch.BlockHash)
+		i++
+	}
+
+	if tsearch.Height > 0 {
+		parts = append(parts, "height = $"+strconv.Itoa(i))
+		data = append(data, tsearch.Height)
+		i++
+	}
+
+	if len(tsearch.Type) > 0 {
+		parts = append(parts, "type @> $"+strconv.Itoa(i))
+		data = append(data, pq.Array(tsearch.Type))
+		i++
+	}
+
+	if tsearch.Account != "" {
+		parts = append(parts, "($"+strconv.Itoa(i)+"=ANY(senders) OR $"+strconv.Itoa(i+1)+")=ANY(recipients)")
+		data = append(data, tsearch.Account)
+		data = append(data, tsearch.Account)
+		i += 2
+	} else {
+		if tsearch.Sender != "" {
+			parts = append(parts, "$"+strconv.Itoa(i)+"=ANY(senders)")
+			data = append(data, tsearch.Sender)
+			i++
+		}
+		if tsearch.Receiver != "" {
+			parts = append(parts, "$"+strconv.Itoa(i)+"=ANY(recipients)")
+			data = append(data, tsearch.Receiver)
+			i++
+		}
+	}
+	if len(tsearch.Memo) > 2 {
+		parts = append(parts, "memo ILIKE $"+strconv.Itoa(i))
+		data = append(data, fmt.Sprintf("%%%s%%", tsearch.Memo))
+		i++
+	}
+
+	if !tsearch.StartTime.IsZero() {
+		parts = append(parts, "time >= $"+strconv.Itoa(i))
+		data = append(data, tsearch.StartTime)
+		i++
+	}
+
+	if !tsearch.EndTime.IsZero() {
+		parts = append(parts, "time <= $"+strconv.Itoa(i))
+		data = append(data, tsearch.EndTime)
+	}
+
+	qBuilder := strings.Builder{}
+	qBuilder.WriteString("SELECT id, height, hash, block_hash, time, gas_wanted, gas_used, memo, data FROM public.transaction_events WHERE ")
+	for i, par := range parts {
+		if i != 0 {
+			qBuilder.WriteString(" AND ")
+		}
+		qBuilder.WriteString(par)
+	}
+
+	qBuilder.WriteString(" ORDER BY time DESC")
+
+	if tsearch.Limit > 0 {
+		qBuilder.WriteString(" LIMIT " + strconv.FormatUint(uint64(tsearch.Limit), 64))
+	}
+
+	rows, err := d.db.QueryContext(ctx, qBuilder.String(), data...)
+	switch {
+	case err == sql.ErrNoRows:
+		return nil, params.ErrNotFound
+	case err != nil:
+		return nil, fmt.Errorf("query error: %w", err)
+	default:
+	}
+
+	defer rows.Close()
+	for rows.Next() {
+		tx := structs.Transaction{}
+		if err := rows.Scan(&tx.ID, &tx.Height, &tx.Hash, &tx.BlockHash, &tx.Time, &tx.GasWanted, &tx.GasUsed, &tx.Memo, &tx.Events); err != nil {
+			// Check for a scan error.
+			// Query rows will be closed with defer.
+			return nil, err
+		}
+		txs = append(txs, tx)
+	}
+
+	return txs, nil
+}
+
 /*
-var (
-	ErrNotFound = errors.New("record not found")
-)
 
 // CreateIfNotExists creates the transaction if it does not exist
 func (s *Store) CreateIfNotExists(t *shared.Transaction) error {
