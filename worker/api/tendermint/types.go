@@ -48,6 +48,11 @@ type ResultBlock struct {
 
 // BlockMeta is block metadata
 type BlockMeta struct {
+	BlockID BlockID `json:"block_id"`
+}
+
+type BlockID struct {
+	Hash string `json:"hash"`
 }
 
 // Block is cosmos block data

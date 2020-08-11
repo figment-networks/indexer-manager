@@ -1,9 +1,12 @@
 all: build
 
+.PHONY: build-manager-migration
+build-manager-migration:
+	go build -o migration ./cmd/manager-migration
 
-.PHONY: build
+.PHONY: build-worker
 build:
-	go build ./cmd/worker
+	go build -o worker_bin ./cmd/worker
 
 .PHONY: build-proto
 build-proto:

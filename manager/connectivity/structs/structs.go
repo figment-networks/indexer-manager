@@ -73,6 +73,7 @@ func (aw *Await) Send(tr *TaskResponse) (bool, error) {
 	if aw.State != StreamOnline {
 		return false, errors.New("Cannot send recipient unavailable")
 	}
+
 	if tr.Final {
 		aw.ReceivedFinals++
 	}
@@ -127,7 +128,6 @@ const (
 )
 
 type StreamAccess struct {
-	Finish          chan bool
 	State           StreamState
 	StreamID        uuid.UUID
 	ResponseMap     map[uuid.UUID]*Await
@@ -135,10 +135,11 @@ type StreamAccess struct {
 
 	respLock sync.RWMutex
 	reqLock  sync.RWMutex
+
+	mapLock sync.RWMutex
 }
 
 func NewStreamAccess() *StreamAccess {
-
 	sID, _ := uuid.NewRandom()
 
 	return &StreamAccess{
@@ -146,57 +147,63 @@ func NewStreamAccess() *StreamAccess {
 		State:    StreamOnline,
 
 		ResponseMap:     make(map[uuid.UUID]*Await),
-		RequestListener: make(chan TaskRequest, 30),
+		RequestListener: make(chan TaskRequest, 100),
 	}
 }
 
 func (sa *StreamAccess) Recv(tr *TaskResponse) error {
 
 	sa.respLock.RLock()
+	defer sa.respLock.RUnlock()
 	if sa.State != StreamOnline {
-		sa.respLock.RUnlock()
 		return errors.New("Stream is not Online")
 	}
 
+	sa.mapLock.Lock()
 	resAwait, ok := sa.ResponseMap[tr.ID]
+	sa.mapLock.Unlock()
+
 	if !ok {
-		sa.respLock.RUnlock()
 		return errors.New("No such requests registred")
 	}
 
 	all, err := resAwait.Send(tr)
-	sa.respLock.RUnlock()
 	if err != nil {
 		return err
 	}
 
 	if all {
-		sa.respLock.Lock()
-		sa.reqLock.Lock()
+		sa.mapLock.Lock()
 		for _, u := range resAwait.Uids {
 			delete(sa.ResponseMap, u)
 		}
-		sa.reqLock.Unlock()
-		sa.respLock.Unlock()
+		sa.mapLock.Unlock()
 	}
-
 	return nil
 }
 
 func (sa *StreamAccess) Req(tr TaskRequest, aw *Await) error {
 
 	sa.reqLock.RLock()
+	defer sa.reqLock.RUnlock()
 	if sa.State != StreamOnline {
 		return errors.New("Stream is not Online")
 	}
-	sa.reqLock.RUnlock()
 
-	sa.reqLock.Lock()
+	sa.mapLock.Lock()
 	sa.ResponseMap[tr.ID] = aw
-	sa.reqLock.Unlock()
+	sa.mapLock.Unlock()
 
 	sa.RequestListener <- tr
+
 	return nil
+}
+
+func (sa *StreamAccess) RebufferRequest(tr TaskRequest) {
+	sa.reqLock.RLock()
+	defer sa.reqLock.RUnlock()
+
+	sa.RequestListener <- tr
 }
 
 func (sa *StreamAccess) Close() error {
@@ -208,7 +215,9 @@ func (sa *StreamAccess) Close() error {
 		return nil
 	}
 
+	sa.ResponseMap = nil
 	sa.State = StreamOffline
 	close(sa.RequestListener)
+
 	return nil
 }

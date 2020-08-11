@@ -35,6 +35,7 @@ func (ic *IndexerClient) RegisterStream(ctx context.Context, stream *cStructs.St
 	ic.streams[stream.StreamID] = stream
 
 	go sendResp(ctx, ic.client.Out(), stream)
+	// Limit workers not to create new goroutines over and over again
 	for i := 0; i < 20; i++ {
 		go ic.Run(ctx, stream)
 	}
@@ -59,7 +60,7 @@ func (ic *IndexerClient) Run(ctx context.Context, stream *cStructs.StreamAccess)
 			case "GetTransactions":
 				ic.GetTransactions(ctx, taskRequest, stream)
 			case "GetBlock":
-				ic.GetBlock(ctx, taskRequest, stream)
+				ic.GetBlock(ctx, taskRequest, stream, ic.client.Out())
 			default:
 				stream.Send(cStructs.TaskResponse{
 					Id:    taskRequest.Id,
@@ -89,10 +90,7 @@ func (ic *IndexerClient) GetTransactions(ctx context.Context, tr cStructs.TaskRe
 
 	uniqueRID, _ := uuid.NewRandom()
 	sCtx, cancel := context.WithCancel(ctx)
-	count, err := ic.client.SearchTx(sCtx, tr.Id, uniqueRID, structs.HeightRange{
-		StartHeight: hr.StartHeight,
-		EndHeight:   hr.EndHeight,
-	}, 1, page, fin)
+	count, err := ic.client.SearchTx(sCtx, tr.Id, uniqueRID, *hr, 1, page, fin)
 
 	if err != nil {
 		stream.Send(cStructs.TaskResponse{
@@ -152,13 +150,15 @@ SEND_LOOP:
 			n, ok := opened[[2]uuid.UUID{t.ID, t.RunID}]
 			if !ok {
 				n = &TData{0, t.All}
-				opened[[2]uuid.UUID{t.ID, t.RunID}] = n
+				if !t.Additional {
+					opened[[2]uuid.UUID{t.ID, t.RunID}] = n
+				}
 			}
 			b.Reset()
 
 			log.Printf("Task to send: %s, %d - %d , new(%d)", t.ID.String(), n.Order, t.All, ok)
 
-			if n.All == 0 {
+			if !t.Additional && n.All == 0 {
 				n.All = t.All
 			}
 
@@ -170,9 +170,12 @@ SEND_LOOP:
 
 			tr := cStructs.TaskResponse{
 				Id:      t.ID,
-				Order:   n.Order,
-				Final:   final,
+				Type:    t.Type,
 				Payload: make([]byte, b.Len()),
+			}
+			if !t.Additional {
+				tr.Order = n.Order
+				tr.Final = final
 			}
 			b.Read(tr.Payload)
 
@@ -185,14 +188,17 @@ SEND_LOOP:
 			if final {
 				delete(opened, [2]uuid.UUID{t.ID, t.RunID})
 			}
-			n.Order++
+
+			if !t.Additional {
+				n.Order++
+			}
 		}
 	}
 }
 
-func (ic *IndexerClient) GetBlock(ctx context.Context, tr cStructs.TaskRequest, stream *cStructs.StreamAccess) {
+func (ic *IndexerClient) GetBlock(ctx context.Context, tr cStructs.TaskRequest, stream *cStructs.StreamAccess, resp chan cStructs.OutResp) {
 
-	log.Printf("Received: %+v ", tr)
+	log.Printf("Received Block Req: %+v ", tr)
 	hr := &structs.HeightHash{}
 	err := json.Unmarshal(tr.Payload, hr)
 	if err != nil {
@@ -201,11 +207,26 @@ func (ic *IndexerClient) GetBlock(ctx context.Context, tr cStructs.TaskRequest, 
 			Error: cStructs.TaskError{Msg: "Cannot unmarshal payment"},
 			Final: true,
 		})
+		return
 	}
 
-
-	sCtx, cancel := context.WithCancel(ctx)
-	count, err := ic.client.GetBlock(sCtx, tr.Id, uniqueRID, hr, 1, page, fin)
-}
-
+	uniqueRID, _ := uuid.NewRandom()
+	sCtx, cancel := context.WithTimeout(ctx, time.Second*2)
+	defer cancel()
+	block, err := ic.client.GetBlock(sCtx, *hr)
+	if err != nil {
+		stream.Send(cStructs.TaskResponse{
+			Id:    tr.Id,
+			Error: cStructs.TaskError{Msg: "Error getting block data " + err.Error()},
+			Final: true,
+		})
+		return
+	}
+	resp <- cStructs.OutResp{
+		ID:      tr.Id,
+		RunID:   uniqueRID,
+		Type:    "Block",
+		Payload: block,
+		All:     1,
+	}
 }

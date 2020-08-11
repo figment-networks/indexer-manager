@@ -161,6 +161,10 @@ CONTROLRPC:
 				Order:   int64(resp.Order),
 				Final:   resp.Final,
 			}); err != nil {
+				if err == io.EOF {
+					log.Printf("Stream io.EOF")
+					break CONTROLRPC
+				}
 				log.Printf("Error sending TaskResponse: %s", err.Error())
 			}
 			//accessCh.RUnlock()

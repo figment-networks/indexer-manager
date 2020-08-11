@@ -1,6 +1,7 @@
 package tendermint
 
 import (
+	"context"
 	"net/http"
 	"time"
 
@@ -50,11 +51,11 @@ func NewClient(url, key string, c *http.Client) *Client {
 		inTx:       make(chan TxResponse, 20),
 		out:        make(chan cStruct.OutResp, 20),
 	}
+	ctx := context.Background()
 
-	go rawToTransaction(cli.inTx, cli.out, cli.cdc)
-	go rawToTransaction(cli.inTx, cli.out, cli.cdc)
-	go rawToTransaction(cli.inTx, cli.out, cli.cdc)
-	go rawToTransaction(cli.inTx, cli.out, cli.cdc)
+	for i := 0; i < 5; i++ {
+		go rawToTransaction(ctx, cli, cli.inTx, cli.out, cli.cdc)
+	}
 
 	return cli
 }

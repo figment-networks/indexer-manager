@@ -10,6 +10,7 @@ import (
 	"math"
 
 	"github.com/figment-networks/cosmos-indexer/manager/connectivity/structs"
+	"github.com/figment-networks/cosmos-indexer/manager/store"
 
 	shared "github.com/figment-networks/cosmos-indexer/structs"
 )
@@ -38,11 +39,12 @@ type TaskSender interface {
 }
 
 type HubbleClient struct {
-	sender TaskSender
+	sender   TaskSender
+	storeEng store.DataStore
 }
 
-func NewHubbleClient() *HubbleClient {
-	return &HubbleClient{}
+func NewHubbleClient(storeEng store.DataStore) *HubbleClient {
+	return &HubbleClient{storeEng: storeEng}
 }
 
 func (hc *HubbleClient) LinkSender(sender TaskSender) {
@@ -123,13 +125,19 @@ WAIT_FOR_ALL_TRANSACTIONS:
 		case <-ctx.Done():
 			return nil, errors.New("Request timed out")
 		case response := <-respAwait.Resp:
-			//	if !ok {
-			//		return nil, errors.New("Response closed.")
-			//	}
-			log.Printf("Got Response !!! %s ", string(response.Payload))
+
 			if response.Error.Msg != "" {
 				return nil, fmt.Errorf("Error getting response: %s", response.Error.Msg)
 			}
+
+			if response.Type != "Transaction" {
+				continue
+			}
+
+			//	if !ok {
+			//		return nil, errors.New("Response closed.")
+			//	}
+			//log.Printf("Got Response !!! %s ", string(response.Payload))
 			buff.Reset()
 			buff.ReadFrom(bytes.NewReader(response.Payload))
 			m := &shared.Transaction{}
@@ -137,8 +145,19 @@ WAIT_FOR_ALL_TRANSACTIONS:
 			if err != nil {
 				return nil, fmt.Errorf("Error getting response: %w", err)
 			}
-			trs = append(trs, *m)
 
+			err = hc.storeEng.StoreTransaction(
+				shared.TransactionExtra{
+					Network:     nv.Network,
+					ChainID:     nv.Version,
+					Transaction: *m,
+				})
+
+			if err != nil {
+				log.Printf("Error storing transaction : %+v", err)
+			}
+
+			trs = append(trs, *m)
 			if response.Final {
 				receivedTransactions++
 			}

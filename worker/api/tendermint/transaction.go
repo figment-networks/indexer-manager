@@ -103,7 +103,7 @@ func (c *Client) SearchTx(ctx context.Context, taskID, runUUID uuid.UUID, r stru
 	return totalCount, nil
 }
 
-func rawToTransaction(in chan TxResponse, out chan cStruct.OutResp, cdc *codec.Codec) {
+func rawToTransaction(ctx context.Context, c *Client, in chan TxResponse, out chan cStruct.OutResp, cdc *codec.Codec) {
 
 	readr := strings.NewReader("")
 	dec := json.NewDecoder(readr)
@@ -118,14 +118,22 @@ func rawToTransaction(in chan TxResponse, out chan cStruct.OutResp, cdc *codec.C
 		base64Dec := base64.NewDecoder(base64.StdEncoding, strings.NewReader(txRaw.TxData))
 		_, err = cdc.UnmarshalBinaryLengthPrefixedReader(base64Dec, tx, 0)
 
+		hInt, _ := strconv.ParseInt(txRaw.Height, 10, 64)
+
+		block, _ := c.GetBlock(ctx, shared.HeightHash{Height: hInt})
+
 		outTX := cStruct.OutResp{
-			ID:  txRaw.TaskID.TaskID,
-			All: uint64(txRaw.All),
+			ID:    txRaw.TaskID.TaskID,
+			RunID: txRaw.TaskID.RunID,
+			All:   uint64(txRaw.All),
+			Type:  "Transaction",
 		}
 
 		trans := shared.Transaction{
-			Hash: txRaw.Hash,
-			Memo: tx.GetMemo(),
+			Hash:      txRaw.Hash,
+			Memo:      tx.GetMemo(),
+			Time:      block.Time,
+			BlockHash: block.Hash,
 		}
 
 		trans.Height, err = strconv.ParseUint(txRaw.Height, 10, 64)
@@ -167,7 +175,10 @@ func rawToTransaction(in chan TxResponse, out chan cStruct.OutResp, cdc *codec.C
 					}
 
 					if attr.Amount != "" {
-						sub.Amount = &shared.TransactionAmount{Text: attr.Amount}
+						sub.Amount = &shared.TransactionAmount{
+							Text: attr.Amount,
+						}
+						sub.Amount.Numeric, _ = strconv.ParseFloat(attr.Amount, 64)
 					}
 
 					tev.Sub = append(tev.Sub, sub)
@@ -179,6 +190,13 @@ func rawToTransaction(in chan TxResponse, out chan cStruct.OutResp, cdc *codec.C
 
 		outTX.Payload = trans
 		out <- outTX
+		out <- cStruct.OutResp{
+			ID:         txRaw.TaskID.TaskID,
+			RunID:      txRaw.TaskID.RunID,
+			Additional: true,
+			Type:       "Block",
+			Payload:    block,
+		}
 
 	}
 }

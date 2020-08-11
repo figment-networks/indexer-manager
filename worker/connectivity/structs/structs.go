@@ -109,11 +109,13 @@ func (sa *StreamAccess) Close() error {
 }
 
 type OutResp struct {
-	ID      uuid.UUID
-	RunID   uuid.UUID
-	Payload interface{} // to be encoded
-	Error   error
-	All     uint64
+	ID         uuid.UUID
+	RunID      uuid.UUID
+	Additional bool
+	Type       string
+	Payload    interface{} // to be encoded
+	Error      error
+	All        uint64
 }
 
 type TaskRequest struct {

@@ -13,11 +13,17 @@ type HeightHash struct {
 	Hash   string
 }
 
+type TransactionExtra struct {
+	Network     string      `json:"network,omitempty"`
+	ChainID     string      `json:"chain_id,omitempty"`
+	Transaction Transaction `json:"transaction,omitempty"`
+}
+
 // Transaction contains the blockchain transaction details
 type Transaction struct {
-	ID        int64     `json:"id,omitempty"`
-	CreatedAt time.Time `json:"created_at,omitempty"`
-	UpdatedAt time.Time `json:"updated_at,omitempty"`
+	ID        int64      `json:"id,omitempty"`
+	CreatedAt *time.Time `json:"created_at,omitempty"`
+	UpdatedAt *time.Time `json:"updated_at,omitempty"`
 
 	Hash      string `json:"hash,omitempty"`
 	BlockHash string `json:"block_hash,omitempty"`
@@ -27,8 +33,9 @@ type Transaction struct {
 
 	GasWanted uint64 `json:"gas_wanted,omitempty"`
 	GasUsed   uint64 `json:"gas_used,omitempty"`
-	Memo      string `json:"memo,omitempty"`
-	Nonce     int    `json:"nonce,omitempty"`
+
+	Memo  string `json:"memo,omitempty"`
+	Nonce int    `json:"nonce,omitempty"`
 
 	Events []TransactionEvent `json:"events,omitempty"`
 }
@@ -39,7 +46,8 @@ type TransactionEvent struct {
 }
 
 type TransactionAmount struct {
-	Text string `json:"text,omitempty"`
+	Text    string  `json:"text,omitempty"`
+	Numeric float64 `json:"numeric,omitempty"`
 }
 
 type SubsetEvent struct {
@@ -53,5 +61,15 @@ type SubsetEvent struct {
 
 	Amount *TransactionAmount `json:"amount,omitempty"`
 	Fee    uint64             `json:"fee,omitempty"`
-	Memo   string             `json:"memo,omitempty"`
+}
+
+// Block
+type Block struct {
+	ID        int64      `json:"id,omitempty"`
+	CreatedAt *time.Time `json:"created_at,omitempty"`
+	UpdatedAt *time.Time `json:"updated_at,omitempty"`
+
+	Hash   string    `json:"hash,omitempty"`
+	Height uint64    `json:"height,omitempty"`
+	Time   time.Time `json:"time,omitempty"`
 }

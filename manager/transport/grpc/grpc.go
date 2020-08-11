@@ -83,12 +83,16 @@ CONTROLRPC:
 		case <-receiverClosed:
 			break CONTROLRPC
 		case req := <-stream.RequestListener:
-			log.Printf("SENDING MESSAGE %+v", req)
+			log.Printf("SENDING REQUEST %+v", req)
 			if err := taskStream.Send(&indexer.TaskRequest{
 				Id:      req.ID.String(),
 				Type:    req.Type,
 				Payload: req.Payload,
 			}); err != nil {
+				if err == io.EOF {
+					log.Printf("Stream io.EOF")
+					break CONTROLRPC
+				}
 				log.Printf("Error sending TaskResponse: %w", err)
 			}
 		}

@@ -1,38 +1,67 @@
 package store
 
 import (
-	"github.com/jinzhu/gorm"
-	_ "github.com/jinzhu/gorm/dialects/postgres"
+	"context"
+	"time"
+
+	"github.com/figment-networks/cosmos-indexer/structs"
+	//	_ "github.com/jinzhu/gorm/dialects/postgres"
 )
 
+type DBDriver interface {
+	TransactionStore
+	BlockStore
+	FlushBuffered
+}
+
+type DataStore interface {
+	TransactionStore
+	BlockStore
+}
+
+type FlushBuffered interface {
+	Flush() error
+}
+
+type TransactionStore interface {
+	StoreTransaction(structs.TransactionExtra) error
+	StoreTransactions([]structs.TransactionExtra) error
+}
+
+type BlockStore interface {
+	StoreBlock(structs.Block) error
+}
+
 type Store struct {
-	db *gorm.DB
-
-	// Heights      HeightsStore
-	// Blocks       BlocksStore
-	// Accounts     AccountsStore
-	// Validators   ValidatorsStore
-	// Transactions TransactionsStore
-	// Jobs         JobsStore
-	// Snarkers     SnarkersStore
-	// FeeTransfers FeeTransfersStore
-	// Stats        StatsStore
+	driver DBDriver
 }
 
-// New creates new store
-func New(connStr string) (*Store, error) {
+//func New(conn *sql.Conn, driver DBDriver) *Store {
+func New(driver DBDriver) *Store {
+	return &Store{driver: driver}
+}
 
-	conn, err := gorm.Open("postgres", connStr)
-	if err != nil {
-		return nil, err
+func (s *Store) Run(ctx context.Context, dur time.Duration) {
+	tckr := time.NewTicker(dur)
+	defer tckr.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-tckr.C:
+			s.driver.Flush()
+		}
 	}
-
-	return &Store{
-		db: conn,
-	}, nil
 }
 
-// Close closes the database connection
-func (s *Store) Close() error {
-	return s.db.Close()
+func (s *Store) StoreTransaction(tx structs.TransactionExtra) error {
+	return s.driver.StoreTransaction(tx)
+}
+
+func (s *Store) StoreTransactions(txs []structs.TransactionExtra) error {
+	return s.driver.StoreTransactions(txs)
+}
+
+func (s *Store) StoreBlock(bl structs.Block) error {
+	return s.driver.StoreBlock(bl)
 }

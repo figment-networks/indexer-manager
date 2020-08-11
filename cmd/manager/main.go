@@ -4,27 +4,29 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"database/sql"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
 	"net"
 	"net/http"
-	"os"
-	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/figment-networks/cosmos-indexer/cmd/manager/config"
 	"github.com/figment-networks/cosmos-indexer/manager/client"
 	"github.com/figment-networks/cosmos-indexer/manager/connectivity"
 	"github.com/figment-networks/cosmos-indexer/manager/store"
+	"github.com/figment-networks/cosmos-indexer/manager/store/postgres"
 	grpcTransport "github.com/figment-networks/cosmos-indexer/manager/transport/grpc"
 	httpTransport "github.com/figment-networks/cosmos-indexer/manager/transport/http"
-
-	"github.com/golang-migrate/migrate/v4"
-	_ "github.com/golang-migrate/migrate/v4/database/postgres"
-	_ "github.com/golang-migrate/migrate/v4/source/file"
-)
+	/*
+		"github.com/golang-migrate/migrate/v4"
+		"github.com/golang-migrate/migrate/v4/database/postgres"
+		_ "github.com/golang-migrate/migrate/v4/database/postgres"
+		_ "github.com/golang-migrate/migrate/v4/source/file"
+	*/)
 
 type flags struct {
 	configPath          string
@@ -40,8 +42,8 @@ func init() {
 	flag.BoolVar(&configFlags.showVersion, "v", false, "Show application version")
 	flag.StringVar(&configFlags.configPath, "config", "", "Path to config")
 	flag.BoolVar(&configFlags.runMigration, "migrate", false, "Command to run")
-	flag.Int64Var(&configFlags.batchSize, "batch_size", 0, "pipeline batch size")
-	flag.Int64Var(&configFlags.heightRangeInterval, "range_int", 0, "pipeline batch size")
+	//	flag.Int64Var(&configFlags.batchSize, "batch_size", 0, "pipeline batch size")
+	//	flag.Int64Var(&configFlags.heightRangeInterval, "range_int", 0, "pipeline batch size")
 	flag.Parse()
 }
 
@@ -53,20 +55,22 @@ func main() {
 		log.Fatal(fmt.Errorf("error initializing config [ERR: %+v]", err))
 	}
 
-	if configFlags.runMigration {
-		err := RunMigrations(cfg.DatabaseURL)
-		if err != nil {
-			log.Fatal(fmt.Errorf("error running migrations [ERR: %+v]", err))
-		}
-		return // todo should we continue running worker after migration?
+	log.Println("Connecting to ", cfg.DatabaseURL)
+	db, err := sql.Open("postgres", cfg.DatabaseURL)
+	if err != nil {
+		log.Fatal(err)
 	}
+	err = db.PingContext(ctx)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer db.Close()
+
+	pgsqlDriver := postgres.New(db)
+	managerStore := store.New(pgsqlDriver)
+	go managerStore.Run(ctx, time.Second*5)
 
 	/*
-		db, err := store.New(cfg.DatabaseURL)
-		if err != nil {
-			log.Fatal(fmt.Errorf("error initializing store [ERR: %+v]", err))
-		}
-	*/ /*
 		pipeline := indexer.NewPipeline(c, db)
 
 		err = pipeline.Start(idxConfig(configFlags, cfg))
@@ -81,14 +85,14 @@ func main() {
 	connManager.AddTransport(grpcCli)
 	go connManager.Run(ctx)
 
-	hubbleClient := client.NewHubbleClient()
+	hubbleClient := client.NewHubbleClient(managerStore)
 	hubbleClient.LinkSender(connManager)
 	hubbleHTTPTransport := httpTransport.NewHubbleConnector(hubbleClient)
 
 	mux := http.NewServeMux()
 	hubbleHTTPTransport.AttachToHandler(mux)
 
-	//	attachChecks(db, mux)
+	attachChecks(managerStore, mux)
 
 	attachConnectionManager(connManager, mux)
 
@@ -119,24 +123,6 @@ func initConfig(path string) (config.Config, error) {
 	}
 
 	return *cfg, nil
-}
-
-func RunMigrations(dbURL string) error {
-	log.Println("getting current directory")
-	dir, err := os.Getwd()
-	if err != nil {
-		return err
-	}
-	srcDir := filepath.Join(dir, "migrations")
-	srcPath := fmt.Sprintf("file://%s", srcDir) //todo pass file location in config? or move this package or migrations folder
-	log.Println("using migrations from", srcPath)
-	m, err := migrate.New(srcPath, dbURL)
-	if err != nil {
-		return err
-	}
-
-	log.Println("running migrations")
-	return m.Up()
 }
 
 func attachChecks(db *store.Store, mux *http.ServeMux) {
