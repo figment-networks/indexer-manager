@@ -1,4 +1,4 @@
-package client
+package cosmos
 
 import (
 	"bytes"
@@ -12,20 +12,20 @@ import (
 	"github.com/figment-networks/cosmos-indexer/structs"
 	"github.com/google/uuid"
 
-	"github.com/figment-networks/cosmos-indexer/worker/api/tendermint"
+	api "github.com/figment-networks/cosmos-indexer/worker/api/cosmos"
 	cStructs "github.com/figment-networks/cosmos-indexer/worker/connectivity/structs"
 )
 
 const page = 30
 
 type IndexerClient struct {
-	client *tendermint.Client
+	client *api.Client
 
 	streams map[uuid.UUID]*cStructs.StreamAccess
 	sLock   sync.Mutex
 }
 
-func NewIndexerClient(ctx context.Context, client *tendermint.Client) *IndexerClient {
+func NewIndexerClient(ctx context.Context, client *api.Client) *IndexerClient {
 	return &IndexerClient{client: client, streams: make(map[uuid.UUID]*cStructs.StreamAccess)}
 }
 

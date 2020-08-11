@@ -12,9 +12,9 @@ import (
 	grpc "google.golang.org/grpc"
 	"google.golang.org/grpc/keepalive"
 
-	"github.com/figment-networks/cosmos-indexer/cmd/worker/config"
-	"github.com/figment-networks/cosmos-indexer/worker/api/cosmos"
-	cli "github.com/figment-networks/cosmos-indexer/worker/client/cosmos"
+	"github.com/figment-networks/cosmos-indexer/cmd/worker_terra/config"
+	"github.com/figment-networks/cosmos-indexer/worker/api/terra"
+	cli "github.com/figment-networks/cosmos-indexer/worker/client/terra"
 	"github.com/figment-networks/cosmos-indexer/worker/connectivity"
 	grpcIndexer "github.com/figment-networks/cosmos-indexer/worker/transport/grpc"
 	grpcProtoIndexer "github.com/figment-networks/cosmos-indexer/worker/transport/grpc/indexer"
@@ -63,8 +63,8 @@ func main() {
 
 	go c.Run(context.Background(), time.Second*10)
 
-	cosmosClient := cosmos.NewClient(cfg.TendermintRPCAddr, cfg.DatahubKey, nil)
-	workerClient := cli.NewIndexerClient(context.Background(), cosmosClient)
+	terraClient := terra.NewClient(cfg.TerraRPCAddr, cfg.DatahubKey, nil)
+	workerClient := cli.NewIndexerClient(context.Background(), terraClient)
 
 	worker := grpcIndexer.NewIndexerServer(workerClient)
 	grpcProtoIndexer.RegisterIndexerServiceServer(grpcServer, worker)
@@ -93,23 +93,3 @@ func initConfig(path string) (*config.Config, error) {
 
 	return cfg, nil
 }
-
-/*
-func idxConfig(flags flags, cfg *config.Config) *indexer.Config {
-	batchSize := flags.batchSize
-	if batchSize == 0 {
-		batchSize = cfg.DefaultBatchSize
-	}
-
-	heightRange := flags.heightRangeInterval
-	if heightRange == 0 {
-		heightRange = cfg.DefaultHeightRangeInterval
-	}
-
-	return &indexer.Config{
-		BatchSize:           batchSize,
-		HeightRangeInterval: heightRange,
-		StartHeight:         0,
-	}
-}
-*/
