@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"math"
 
@@ -33,6 +34,8 @@ type HubbleContractor interface {
 	GetTransactions(ctx context.Context, nv NetworkVersion, startHeight int) error
 	GetAccounts(ctx context.Context, nv NetworkVersion)
 	GetAccount(ctx context.Context, nv NetworkVersion)
+
+	InsertTransactions(ctx context.Context, nv NetworkVersion, read io.ReadCloser) error
 }
 
 type TaskSender interface {
@@ -195,5 +198,43 @@ func (hc *HubbleClient) GetAccounts(ctx context.Context, nv NetworkVersion) {
 }
 
 func (hc *HubbleClient) GetAccount(ctx context.Context, nv NetworkVersion) {
+
+}
+
+func (hc *HubbleClient) InsertTransactions(ctx context.Context, nv NetworkVersion, readr io.ReadCloser) error {
+	defer readr.Close()
+	dec := json.NewDecoder(readr)
+
+	_, err := dec.Token()
+	if err != nil {
+		return err
+	}
+
+	for dec.More() {
+		req := shared.Transaction{}
+
+		if err := dec.Decode(&req); err != nil {
+			return err
+		}
+
+		err = hc.storeEng.StoreTransaction(
+			shared.TransactionExtra{
+				Network:     nv.Network,
+				ChainID:     nv.Version,
+				Transaction: req,
+			})
+
+		if err != nil {
+			return err
+		}
+
+	}
+
+	_, err = dec.Token()
+	if err != nil {
+		return err
+	}
+
+	return nil
 
 }

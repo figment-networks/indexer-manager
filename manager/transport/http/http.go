@@ -78,6 +78,28 @@ func (hc *HubbleConnector) GetTransaction(w http.ResponseWriter, req *http.Reque
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+func (hc *HubbleConnector) InsertTransactions(w http.ResponseWriter, req *http.Request) {
+
+	s := strings.Split(req.URL.Path, "/")
+	nv := client.NetworkVersion{"cosmos", "0.0.1"}
+
+	if len(s) > 0 {
+		nv.Network = s[2]
+	} else {
+		nv.Network = req.URL.Path
+	}
+
+	log.Println("nv", nv)
+	err := hc.cli.InsertTransactions(req.Context(), nv, req.Body)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
 func (hc *HubbleConnector) GetTransactions(w http.ResponseWriter, req *http.Request) {
 
 	strHeight := req.URL.Query().Get("height")
@@ -145,7 +167,6 @@ func (hc *HubbleConnector) SearchTransactions(w http.ResponseWriter, req *http.R
 			StartTime string   `json:"start_time"`
 			EndTime   string   `json:"end_time"`
 		*/
-
 		ts.Height, _ = strconv.ParseUint(req.Form.Get("height"), 10, 64)
 		ts.Limit, _ = strconv.ParseUint(req.Form.Get("limit"), 10, 64)
 		ts.Account = req.Form.Get("account")
@@ -217,8 +238,10 @@ func (hc *HubbleConnector) AttachToHandler(mux *http.ServeMux) {
 	mux.HandleFunc("/block_times", hc.GetBlockTimes)
 	mux.HandleFunc("/block_times_interval", hc.GetBlockTimesInterval)
 	mux.HandleFunc("/transactions", hc.GetTransactions)
-	mux.HandleFunc("/transactions/:id", hc.GetTransaction)
+	mux.HandleFunc("/transactions/", hc.GetTransaction)
 	mux.HandleFunc("/transactions_search", hc.SearchTransactions)
 	mux.HandleFunc("/accounts", hc.GetAccounts)
-	mux.HandleFunc("/accounts/:id", hc.GetAccount)
+	mux.HandleFunc("/accounts/", hc.GetAccount)
+
+	mux.HandleFunc("/transactions_insert/", hc.InsertTransactions)
 }

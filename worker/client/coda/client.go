@@ -75,10 +75,6 @@ func (ic *IndexerClient) Run(ctx context.Context, stream *cStructs.StreamAccess)
 					})
 
 				}
-			//case "GetBlock":
-			//ic.GetBlock(ctx, taskRequest)
-
-			//ic.client.Out()
 			default:
 				stream.Send(cStructs.TaskResponse{
 					Id:    taskRequest.Id,
@@ -89,63 +85,6 @@ func (ic *IndexerClient) Run(ctx context.Context, stream *cStructs.StreamAccess)
 		}
 	}
 }
-
-//func (ic *IndexerClient) GetTransactions(ctx context.Context, tr cStructs.TaskRequest, stream *cStructs.StreamAccess) {
-/*
-	log.Printf("Received: %+v ", tr)
-	now := time.Now()
-	hr := &structs.HeightRange{}
-	err := json.Unmarshal(tr.Payload, hr)
-	if err != nil {
-		stream.Send(cStructs.TaskResponse{
-			Id:    tr.Id,
-			Error: cStructs.TaskError{Msg: "Cannot unmarshal payment"},
-			Final: true,
-		})
-	}
-
-	fin := make(chan string, 2)
-	defer close(fin)
-
-	uniqueRID, _ := uuid.NewRandom()
-	sCtx, cancel := context.WithCancel(ctx)
-	count, err := ic.client.SearchTx(sCtx, tr.Id, uniqueRID, *hr, 1, page, fin)
-
-	if err != nil {
-		stream.Send(cStructs.TaskResponse{
-			Id:    tr.Id,
-			Error: cStructs.TaskError{Msg: "Error Getting Transactions"},
-			Final: true,
-		})
-		return
-	}
-
-	toBeDone := int(math.Ceil(float64(count-page) / page))
-	if count > page {
-		for i := 2; i < toBeDone+2; i++ {
-			go ic.client.SearchTx(sCtx, tr.Id, uniqueRID, structs.HeightRange{
-				StartHeight: hr.StartHeight,
-				EndHeight:   hr.EndHeight,
-			}, i, page, fin)
-		}
-	}
-
-	var received int
-	for {
-		select {
-		case e := <-fin:
-			if e != "" {
-				cancel()
-			}
-			received++
-			if received == toBeDone+1 {
-				log.Printf("Taken: %s", time.Now().Sub(now))
-				return
-			}
-		}
-	}
-*/
-//}
 
 type TData struct {
 	Order uint64
