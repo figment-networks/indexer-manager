@@ -16,7 +16,7 @@ import (
 	cStructs "github.com/figment-networks/cosmos-indexer/worker/connectivity/structs"
 )
 
-const page = 30
+const page = 100
 
 type IndexerClient struct {
 	client *api.Client
@@ -59,8 +59,6 @@ func (ic *IndexerClient) Run(ctx context.Context, stream *cStructs.StreamAccess)
 			switch taskRequest.Type {
 			case "GetTransactions":
 				ic.GetTransactions(ctx, taskRequest, stream)
-			case "GetBlock":
-				ic.GetBlock(ctx, taskRequest, stream, ic.client.Out())
 			default:
 				stream.Send(cStructs.TaskResponse{
 					Id:    taskRequest.Id,
@@ -196,6 +194,7 @@ SEND_LOOP:
 	}
 }
 
+/*
 func (ic *IndexerClient) GetBlock(ctx context.Context, tr cStructs.TaskRequest, stream *cStructs.StreamAccess, resp chan cStructs.OutResp) {
 
 	log.Printf("Received Block Req: %+v ", tr)
@@ -229,4 +228,4 @@ func (ic *IndexerClient) GetBlock(ctx context.Context, tr cStructs.TaskRequest, 
 		Payload: block,
 		All:     1,
 	}
-}
+}*/

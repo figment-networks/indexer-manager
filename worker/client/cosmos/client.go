@@ -16,7 +16,7 @@ import (
 	cStructs "github.com/figment-networks/cosmos-indexer/worker/connectivity/structs"
 )
 
-const page = 30
+const page = 100
 
 type IndexerClient struct {
 	client *api.Client

@@ -10,17 +10,46 @@ import (
 
 // TxResponse is result of querying for a tx
 type TxResponse struct {
-	Hash   string  `json:"hash"`
-	Height string  `json:"height"`
-	Index  float64 `json:"index"`
+	Hash   string `json:"txhash"`
+	Height string `json:"height"`
+
+	Logs []LogFormat `json:"logs"`
 
 	TxResult ResponseDeliverTx `json:"tx_result"`
 	// TxData is base64 encoded transaction data
-	TxData string `json:"tx"`
+	TxData    TxData `json:"tx"`
+	GasWanted string `json:"gas_wanted"`
+	GasUsed   string `json:"gas_used"`
+	Timestamp string `json:"timestamp"`
 
-	All int64
-
+	All    int64
 	TaskID TxID
+}
+
+type TxData struct {
+	Type  string      `json:"type"`
+	Value TxDataValue `json:"value"`
+}
+
+type TxDataValue struct {
+	Msg  []TxDataMessage `json:"msg"`
+	Memo string          `json:"memo"`
+	Fee  TxDataValueFee  `json:"fee"`
+}
+
+type TxDataValueFee struct {
+	Amount []TxDataValueFeeAmount `json:amount`
+	Gas    string                 `json:"gas"`
+}
+
+type TxDataValueFeeAmount struct {
+	Amount string `json:amount`
+	Denom  string `json:denom`
+}
+
+type TxDataMessage struct {
+	Type  string                 `json:"type"`
+	Value map[string]interface{} `json:"value"`
 }
 
 type TxID struct {
@@ -29,35 +58,13 @@ type TxID struct {
 }
 
 type ResponseDeliverTx struct {
-	Log       string   `json:"log"`
-	GasWanted string   `json:"gasWanted"`
-	GasUsed   string   `json:"gasUsed"`
-	Tags      []TxTags `json:"tags"`
+	Log  string   `json:"log"`
+	Tags []TxTags `json:"tags"`
 }
 
 type TxTags struct {
 	Key   string `json:"key"`
 	Value string `json:"value"`
-}
-
-// ResultBlock is result of fetching block
-type ResultBlock struct {
-	Block     Block     `json:"block"`
-	BlockMeta BlockMeta `json:"block_meta"`
-}
-
-// BlockMeta is block metadata
-type BlockMeta struct {
-	BlockID BlockID `json:"block_id"`
-}
-
-type BlockID struct {
-	Hash string `json:"hash"`
-}
-
-// Block is cosmos block data
-type Block struct {
-	Header BlockHeader `json:"header"`
 }
 
 type BlockHeader struct {
@@ -75,34 +82,21 @@ type Error struct {
 
 // Result of searching for txs
 type ResultTxSearch struct {
-	Txs        []TxResponse `json:"txs"`
-	TotalCount string       `json:"total_count"`
-}
-
-type GetTxSearchResponse struct {
-	ID     string         `json:"id"`
-	RPC    string         `json:"jsonrpc"`
-	Result ResultTxSearch `json:"result"`
-	Error  Error          `json:"error"`
-}
-type GetBlockResponse struct {
-	ID     string      `json:"id"`
-	RPC    string      `json:"jsonrpc"`
-	Result ResultBlock `json:"result"`
-	Error  Error       `json:"error"`
+	Txs        []TxResponse `json:"txs,omitempty"`
+	TotalCount string       `json:"total_count,omitempty"`
 }
 
 type LogFormat struct {
-	MsgIndex float64     `json:"msg_index"`
-	Success  bool        `json:"success"`
-	Log      string      `json:"log"`
-	Events   []LogEvents `json:"events"`
+	MsgIndex float64     `json:"msg_index,omitempty"`
+	Success  bool        `json:"success,omitempty"`
+	Log      string      `json:"log,omitempty"`
+	Events   []LogEvents `json:"events,omitempty"`
 }
 
 type LogEvents struct {
-	Type string `json:"type"`
+	Type string `json:"type,omitempty"`
 	//Attributes []string `json:"attributes"`
-	Attributes []*LogEventsAttributes `json:"attributes"`
+	Attributes []*LogEventsAttributes `json:"attributes,omitempty"`
 }
 
 type LogEventsAttributes struct {
@@ -112,7 +106,13 @@ type LogEventsAttributes struct {
 	Sender    []string
 	Validator []string
 	Recipient []string
-	Others    map[string][]string
+
+	Voter  []string
+	Feeder []string
+
+	Denom []string
+
+	Others map[string][]string
 }
 
 type kvHolder struct {
@@ -121,7 +121,6 @@ type kvHolder struct {
 }
 
 func (lea *LogEventsAttributes) UnmarshalJSON(b []byte) error {
-	//	lea = &LogEventsAttributes{}
 	lea.Others = make(map[string][]string)
 
 	dec := json.NewDecoder(bytes.NewReader(b))
@@ -134,11 +133,14 @@ func (lea *LogEventsAttributes) UnmarshalJSON(b []byte) error {
 		}
 		switch kc.Key {
 		case "validator":
+		case "voter":
 			lea.Validator = append(lea.Validator, kc.Value)
 		case "sender":
 			lea.Sender = append(lea.Sender, kc.Value)
 		case "recipient":
 			lea.Recipient = append(lea.Recipient, kc.Value)
+		case "feeder":
+			lea.Feeder = append(lea.Feeder, kc.Value)
 		case "module":
 			lea.Module = kc.Value
 		case "action":

@@ -37,19 +37,21 @@ type Transaction struct {
 	Height uint64    `json:"height,omitempty"`
 	Time   time.Time `json:"time,omitempty"`
 
-	Fee       TransactionFee `json:"transaction_fee,omitempty"`
-	GasWanted uint64         `json:"gas_wanted,omitempty"`
-	GasUsed   uint64         `json:"gas_used,omitempty"`
+	Fee       []TransactionFee `json:"transaction_fee,omitempty"`
+	GasWanted uint64           `json:"gas_wanted,omitempty"`
+	GasUsed   uint64           `json:"gas_used,omitempty"`
 
 	Memo  string `json:"memo,omitempty"`
 	Nonce int    `json:"nonce,omitempty"`
 
-	Events TransactionEvents `json:"events,omitempty"`
+	Version string            `json:"version"`
+	Events  TransactionEvents `json:"events,omitempty"`
 }
 
 type TransactionEvent struct {
-	ID  string        `json:"id,omitempty"`
-	Sub []SubsetEvent `json:"sub,omitempty"`
+	ID   string        `json:"id,omitempty"`
+	Kind string        `json:"kind,omitempty"`
+	Sub  []SubsetEvent `json:"sub,omitempty"`
 }
 
 type TransactionEvents []TransactionEvent
@@ -77,13 +79,14 @@ type TransactionAmount struct {
 }
 
 type SubsetEvent struct {
-	Type      string   `json:"type,omitempty"`
+	Type   string `json:"type,omitempty"`
+	Action string `json:"action,omitempty"`
+	Module string `json:"module,omitempty"`
+
 	Sender    []string `json:"sender,omitempty"`
 	Recipient []string `json:"recipient,omitempty"`
 	Validator []string `json:"validator,omitempty"`
-
-	Action string `json:"action,omitempty"`
-	Module string `json:"module,omitempty"`
+	Feeder    []string `json:"feeder,omitempty"`
 
 	Amount *TransactionAmount `json:"amount,omitempty"`
 }
@@ -112,4 +115,6 @@ type TransactionSearch struct {
 	StartTime time.Time `json:"start_time"`
 	EndTime   time.Time `json:"end_time"`
 	Limit     uint64    `json:"limit"`
+
+	Network string `json:"network"`
 }

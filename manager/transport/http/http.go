@@ -86,7 +86,12 @@ func (hc *HubbleConnector) GetTransactions(w http.ResponseWriter, req *http.Requ
 	endHeight := req.URL.Query().Get("end_height")
 	intEndHeight, _ := strconv.Atoi(endHeight)
 
-	nv := client.NetworkVersion{"cosmos", "0.0.1"}
+	network := req.URL.Query().Get("network")
+	if network == "" {
+		network = "cosmos"
+	}
+
+	nv := client.NetworkVersion{network, "0.0.1"}
 
 	ctx, cancel := context.WithTimeout(req.Context(), 1*time.Minute)
 	defer cancel()
@@ -114,6 +119,7 @@ func (hc *HubbleConnector) SearchTransactions(w http.ResponseWriter, req *http.R
 
 	ct := req.Header.Get("Content-Type")
 
+	network := ""
 	ts := &shared.TransactionSearch{}
 	if strings.Contains(ct, "json") {
 		dec := json.NewDecoder(req.Body)
@@ -123,6 +129,9 @@ func (hc *HubbleConnector) SearchTransactions(w http.ResponseWriter, req *http.R
 			w.Write([]byte(err.Error()))
 			return
 		}
+		if ts.Network != "" {
+			network = ts.Network
+		}
 
 	} else if strings.Contains(ct, "form") {
 		err := req.ParseForm()
@@ -131,11 +140,11 @@ func (hc *HubbleConnector) SearchTransactions(w http.ResponseWriter, req *http.R
 			w.Write([]byte(err.Error()))
 			return
 		}
-		/*	Height    uint64   `json:"height"`
+		/*
 			Type      []string `json:"type"`
 			StartTime string   `json:"start_time"`
 			EndTime   string   `json:"end_time"`
-			Limit     uint     `json:"limit"`*/
+		*/
 
 		ts.Height, _ = strconv.ParseUint(req.Form.Get("height"), 10, 64)
 		ts.Limit, _ = strconv.ParseUint(req.Form.Get("limit"), 10, 64)
@@ -144,17 +153,21 @@ func (hc *HubbleConnector) SearchTransactions(w http.ResponseWriter, req *http.R
 		ts.Receiver = req.Form.Get("receiver")
 		ts.BlockHash = req.Form.Get("block_hash")
 		ts.Memo = req.Form.Get("memo")
-		ts.Account = req.Form.Get("account")
-		ts.Account = req.Form.Get("account")
+		ts.Sender = req.Form.Get("sender")
+		ts.Receiver = req.Form.Get("receiver")
+
+		network = req.Form.Get("network")
 
 	}
 
-	nv := client.NetworkVersion{"cosmos", "0.0.1"}
+	if network == "" {
+		network = "cosmos"
+	}
 
 	ctx, cancel := context.WithTimeout(req.Context(), 1*time.Minute)
 	defer cancel()
 
-	transactions, err := hc.cli.SearchTransactions(ctx, nv, *ts)
+	transactions, err := hc.cli.SearchTransactions(ctx, client.NetworkVersion{network, "0.0.1"}, *ts)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(err.Error()))

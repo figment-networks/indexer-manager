@@ -58,12 +58,12 @@ func main() {
 		log.Fatalf("error generating UUID: %v", err)
 	}
 
-	c := connectivity.NewWorkerConnections(workerRunID.String(), cfg.Address)
+	c := connectivity.NewWorkerConnections(workerRunID.String(), cfg.Address, "terra", "0.0.1")
 	c.AddManager("localhost:8085/client_ping")
 
 	go c.Run(context.Background(), time.Second*10)
 
-	terraClient := terra.NewClient(cfg.TerraRPCAddr, cfg.DatahubKey, nil)
+	terraClient := terra.NewClient(cfg.TerraRPCAddr, "", nil)
 	workerClient := cli.NewIndexerClient(context.Background(), terraClient)
 
 	worker := grpcIndexer.NewIndexerServer(workerClient)

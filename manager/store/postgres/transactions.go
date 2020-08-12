@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log"
 	"math"
 	"strconv"
 	"strings"
@@ -42,7 +43,8 @@ func flushTx(ctx context.Context, d *Driver) error {
 	enc := json.NewEncoder(buff)
 
 	qBuilder := strings.Builder{}
-	qBuilder.WriteString(`INSERT INTO public.transaction_events("network", "chain_id",  "height", "hash", "block_hash", "time", "type", "senders", "recipients", "amount", "fee", "gas_wanted", "gas_used", "memo", "data") VALUES `)
+	//	qBuilder.WriteString(`INSERT INTO public.transaction_events("network", "chain_id",  "height", "hash", "block_hash", "time", "type", "senders", "recipients", "amount", "fee", "gas_wanted", "gas_used", "memo", "data") VALUES `)
+	qBuilder.WriteString(`INSERT INTO public.transaction_events("network", "chain_id", "version", "height", "hash", "block_hash", "time", "type", "parties", "amount", "fee", "gas_wanted", "gas_used", "memo", "data") VALUES `)
 
 	var i = 0
 	valueArgs := []interface{}{}
@@ -51,18 +53,30 @@ READ_ALL:
 		select {
 		case transaction := <-d.txBuff:
 			t := transaction.Transaction
-			recipients := []string{}
-			senders := []string{}
+			//recipients := []string{}
+			//senders := []string{}
+			parties := []string{}
 			types := []string{}
 			amount := .0
 			for _, ev := range t.Events {
 				for _, sub := range ev.Sub {
 					if len(sub.Recipient) > 0 {
-						recipients = uniqueEntries(sub.Recipient, recipients)
+						parties = uniqueEntries(sub.Recipient, parties)
+						//recipients = uniqueEntries(sub.Recipient, recipients)
 					}
 					if len(sub.Sender) > 0 {
-						senders = uniqueEntries(sub.Sender, senders)
+						parties = uniqueEntries(sub.Sender, parties)
+						//senders = uniqueEntries(sub.Sender, senders)
 					}
+
+					if len(sub.Validator) > 0 {
+						parties = uniqueEntries(sub.Validator, parties)
+					}
+
+					if len(sub.Feeder) > 0 {
+						parties = uniqueEntries(sub.Feeder, parties)
+					}
+
 					types = uniqueEntry(sub.Type, types)
 				}
 			}
@@ -85,14 +99,15 @@ READ_ALL:
 			qBuilder.WriteString(`)`)
 			valueArgs = append(valueArgs, transaction.Network)
 			valueArgs = append(valueArgs, transaction.ChainID)
-			//	valueArgs = append(valueArgs, ev.ID)
+			valueArgs = append(valueArgs, "0.0.1")
 			valueArgs = append(valueArgs, t.Height)
 			valueArgs = append(valueArgs, t.Hash)
 			valueArgs = append(valueArgs, t.BlockHash)
 			valueArgs = append(valueArgs, t.Time)
 			valueArgs = append(valueArgs, pq.Array(types))
-			valueArgs = append(valueArgs, pq.Array(senders))
-			valueArgs = append(valueArgs, pq.Array(recipients))
+			//		valueArgs = append(valueArgs, pq.Array(senders))
+			//		valueArgs = append(valueArgs, pq.Array(recipients))
+			valueArgs = append(valueArgs, pq.Array(parties))
 			valueArgs = append(valueArgs, pq.Array([]float64{amount}))
 			valueArgs = append(valueArgs, 0)
 			valueArgs = append(valueArgs, t.GasWanted)
@@ -150,14 +165,6 @@ func uniqueEntry(in string, out []string) []string {
 
 func (d *Driver) GetTransactions(ctx context.Context, tsearch params.TransactionSearch) (txs []structs.Transaction, err error) {
 
-	/*
-		if tsearch.BeforeID > 0 {
-			scope = scope.Where("id < ?", tsearch.BeforeID)
-		}
-		if tsearch.AfterID > 0 {
-			tscope = scope.Where("id > ?", search.AfterID)
-		}*/
-
 	var i = 1
 
 	parts := []string{}
@@ -187,23 +194,31 @@ func (d *Driver) GetTransactions(ctx context.Context, tsearch params.Transaction
 		i++
 	}
 
-	if tsearch.Account != "" {
-		parts = append(parts, "($"+strconv.Itoa(i)+"=ANY(senders) OR $"+strconv.Itoa(i+1)+")=ANY(recipients)")
-		data = append(data, tsearch.Account)
-		data = append(data, tsearch.Account)
-		i += 2
-	} else {
-		if tsearch.Sender != "" {
-			parts = append(parts, "$"+strconv.Itoa(i)+"=ANY(senders)")
-			data = append(data, tsearch.Sender)
-			i++
-		}
-		if tsearch.Receiver != "" {
-			parts = append(parts, "$"+strconv.Itoa(i)+"=ANY(recipients)")
-			data = append(data, tsearch.Receiver)
-			i++
-		}
+	if tsearch.Account != "" || tsearch.Sender != "" || tsearch.Receiver != "" {
+		parts = append(parts, "$"+strconv.Itoa(i)+"=ANY(parties)")
+		data = append(data, tsearch.Account+tsearch.Sender+tsearch.Receiver) // (lukanus): one would be filled
+		i++
 	}
+
+	/*
+		if tsearch.Account != "" {
+			parts = append(parts, "($"+strconv.Itoa(i)+"=ANY(senders) OR $"+strconv.Itoa(i+1)+")=ANY(recipients)")
+			data = append(data, tsearch.Account)
+			data = append(data, tsearch.Account)
+			i += 2
+		} else {
+			if tsearch.Sender != "" {
+				parts = append(parts, "$"+strconv.Itoa(i)+"=ANY(senders)")
+				data = append(data, tsearch.Sender)
+				i++
+			}
+			if tsearch.Receiver != "" {
+				parts = append(parts, "$"+strconv.Itoa(i)+"=ANY(recipients)")
+				data = append(data, tsearch.Receiver)
+				i++
+			}
+		}
+	*/
 	if len(tsearch.Memo) > 2 {
 		parts = append(parts, "memo ILIKE $"+strconv.Itoa(i))
 		data = append(data, fmt.Sprintf("%%%s%%", tsearch.Memo))
@@ -222,7 +237,7 @@ func (d *Driver) GetTransactions(ctx context.Context, tsearch params.Transaction
 	}
 
 	qBuilder := strings.Builder{}
-	qBuilder.WriteString("SELECT id, height, hash, block_hash, time, gas_wanted, gas_used, memo, data FROM public.transaction_events WHERE ")
+	qBuilder.WriteString("SELECT id, version, height, hash, block_hash, time, gas_wanted, gas_used, memo, data FROM public.transaction_events WHERE ")
 	for i, par := range parts {
 		if i != 0 {
 			qBuilder.WriteString(" AND ")
@@ -235,8 +250,9 @@ func (d *Driver) GetTransactions(ctx context.Context, tsearch params.Transaction
 	if tsearch.Limit > 0 {
 		qBuilder.WriteString(" LIMIT " + strconv.FormatUint(uint64(tsearch.Limit), 64))
 	}
-
-	rows, err := d.db.QueryContext(ctx, qBuilder.String(), data...)
+	a := qBuilder.String()
+	log.Printf("DEBUG QUERY: %s %+v ", a, data)
+	rows, err := d.db.QueryContext(ctx, a, data...)
 	switch {
 	case err == sql.ErrNoRows:
 		return nil, params.ErrNotFound
@@ -248,9 +264,7 @@ func (d *Driver) GetTransactions(ctx context.Context, tsearch params.Transaction
 	defer rows.Close()
 	for rows.Next() {
 		tx := structs.Transaction{}
-		if err := rows.Scan(&tx.ID, &tx.Height, &tx.Hash, &tx.BlockHash, &tx.Time, &tx.GasWanted, &tx.GasUsed, &tx.Memo, &tx.Events); err != nil {
-			// Check for a scan error.
-			// Query rows will be closed with defer.
+		if err := rows.Scan(&tx.ID, &tx.Version, &tx.Height, &tx.Hash, &tx.BlockHash, &tx.Time, &tx.GasWanted, &tx.GasUsed, &tx.Memo, &tx.Events); err != nil {
 			return nil, err
 		}
 		txs = append(txs, tx)

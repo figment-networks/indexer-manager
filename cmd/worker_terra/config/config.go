@@ -19,7 +19,6 @@ type Config struct {
 	//	DefaultBatchSize           int64  `json:"default_batch_size" envconfig:"DEFAULT_BATCH_SIZE" default:"0"`
 	//	DefaultHeightRangeInterval int64  `json:"default_height_range_interval" envconfig:"DEFAULT_HEIGHT_RANGE_INTERVAL" default:"0"`
 	TerraRPCAddr     string `json:"terra_rpc_addr" envconfig:"TERRA_RPC_ADDR" required:"true"`
-	DatahubKey       string `json:"datahub_key" envconfig:"DATAHUB_KEY" required:"true"`
 	FirstBlockHeight int64  `json:"first_block_height" envconfig:"FIRST_BLOCK_HEIGHT" default:"1"`
 }
 

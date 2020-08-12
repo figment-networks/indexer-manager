@@ -11,14 +11,18 @@ import (
 )
 
 type WorkerConnections struct {
+	network                 string
+	version                 string
 	workerid                string
 	workerAccessibleAddress string
 	managerAddresses        map[string]bool
 	managerAddressesLock    sync.RWMutex
 }
 
-func NewWorkerConnections(id, address string) *WorkerConnections {
+func NewWorkerConnections(id, address, network, version string) *WorkerConnections {
 	return &WorkerConnections{
+		network:                 network,
+		version:                 version,
 		workerid:                id,
 		workerAccessibleAddress: address,
 		managerAddresses:        make(map[string]bool),
@@ -42,7 +46,7 @@ func (wc *WorkerConnections) Run(ctx context.Context, dur time.Duration) {
 
 	client := &http.Client{}
 
-	readr := strings.NewReader(fmt.Sprintf(`{"id":"%s","kind":"cosmos", "connectivity": {"version": "0.0.1", "type":"grpc", "address": "%s" }}`, wc.workerid, wc.workerAccessibleAddress))
+	readr := strings.NewReader(fmt.Sprintf(`{"id":"%s","kind":"%s", "connectivity": {"version": "%s", "type":"grpc", "address": "%s" }}`, wc.workerid, wc.network, wc.version, wc.workerAccessibleAddress))
 
 	for {
 		select {

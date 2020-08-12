@@ -2,7 +2,6 @@ package terra
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,12 +12,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-
-	"github.com/cosmos/cosmos-sdk/codec"
-	"github.com/cosmos/cosmos-sdk/x/auth"
-
-	//"github.com/terra-project/core/x/auth"
-	//"github.com/terra-project/core/x/oracle"
 
 	"github.com/figment-networks/cosmos-indexer/structs"
 	shared "github.com/figment-networks/cosmos-indexer/structs"
@@ -48,12 +41,12 @@ func (c *Client) SearchTx(ctx context.Context, taskID, runUUID uuid.UUID, r stru
 	s := strings.Builder{}
 
 	if r.EndHeight > 0 && r.EndHeight != r.StartHeight {
-		s.WriteString("GTE"+strconv.Itoa(int(r.StartHeight))",")
-		s.WriteString("LTE"+strconv.Itoa(int(r.EndHeight)))
+		s.WriteString("GTE" + strconv.Itoa(int(r.StartHeight)) + ",")
+		s.WriteString("LTE" + strconv.Itoa(int(r.EndHeight)))
 	} else {
 		s.WriteString(strconv.Itoa(int(r.StartHeight)))
 	}
-	if r.StartHeight  > 0 {
+	if r.StartHeight > 0 {
 		q.Add("tx.height", s.String())
 	}
 
@@ -64,6 +57,7 @@ func (c *Client) SearchTx(ctx context.Context, taskID, runUUID uuid.UUID, r stru
 	now := time.Now()
 	resp, err := c.httpClient.Do(req)
 	log.Printf("Request Time: %s", time.Now().Sub(now).String())
+	log.Printf("asd %+v", err)
 	if err != nil {
 		fin <- err.Error()
 		return 0, err
@@ -71,27 +65,31 @@ func (c *Client) SearchTx(ctx context.Context, taskID, runUUID uuid.UUID, r stru
 
 	decoder := json.NewDecoder(resp.Body)
 
-	result := &GetTxSearchResponse{}
+	result := &ResultTxSearch{}
 	if err = decoder.Decode(result); err != nil {
 		err := fmt.Sprintf("unable to decode result body: %s", err.Error())
+		log.Printf("asd1 %+v", err)
 		fin <- err
 		return 0, errors.New(err)
 	}
+	/*
+		if result.Error.Message != "" {
+			log.Println("err:", result.Error.Message)
+			err := fmt.Sprintf("Error getting search: %s", result.Error.Message)
+			fin <- err
+			return 0, errors.New(err)
+		}*/
 
-	if result.Error.Message != "" {
-		log.Println("err:", result.Error.Message)
-		err := fmt.Sprintf("Error getting search: %s", result.Error.Message)
-		fin <- err
-		return 0, errors.New(err)
-	}
-
-	totalCount, err := strconv.ParseInt(result.Result.TotalCount, 10, 64)
+	log.Printf("all %+v", result)
+	totalCount, err := strconv.ParseInt(result.TotalCount, 10, 64)
 	if err != nil {
+		log.Printf("totalCount %+v %+v", totalCount, err)
 		fin <- err.Error()
 		return 0, err
 	}
 
-	for _, tx := range result.Result.Txs {
+	log.Printf("result.Result.Txs %+v", result.Txs)
+	for _, tx := range result.Txs {
 		select {
 		case <-ctx.Done():
 			return totalCount, nil
@@ -107,28 +105,9 @@ func (c *Client) SearchTx(ctx context.Context, taskID, runUUID uuid.UUID, r stru
 	return totalCount, nil
 }
 
-func rawToTransaction(ctx context.Context, c *Client, in chan TxResponse, out chan cStruct.OutResp, cdc *codec.Codec) {
+func rawToTransaction(ctx context.Context, c *Client, in chan TxResponse, out chan cStruct.OutResp) {
 
-	readr := strings.NewReader("")
-	dec := json.NewDecoder(readr)
 	for txRaw := range in {
-		tx := &auth.StdTx{}
-
-		log.Printf("%+v", txRaw.TxResult.Log)
-		readr.Reset(txRaw.TxResult.Log)
-		lf := []LogFormat{}
-		err := dec.Decode(&lf)
-		if err != nil {
-		}
-
-		base64Dec := base64.NewDecoder(base64.StdEncoding, strings.NewReader(txRaw.TxData))
-		_, err = cdc.UnmarshalBinaryLengthPrefixedReader(base64Dec, tx, 0)
-
-		hInt, _ := strconv.ParseInt(txRaw.Height, 10, 64)
-		block, err := c.GetBlock(ctx, shared.HeightHash{Height: hInt})
-		if err != nil {
-			log.Println(err)
-		}
 
 		outTX := cStruct.OutResp{
 			ID:    txRaw.TaskID.TaskID,
@@ -137,41 +116,53 @@ func rawToTransaction(ctx context.Context, c *Client, in chan TxResponse, out ch
 			Type:  "Transaction",
 		}
 
+		var err error
+
+		//"2020-05-03T06:52:40Z",
+		tTime, err := time.Parse(time.RFC3339, txRaw.Timestamp)
 		trans := shared.Transaction{
-			Hash:      txRaw.Hash,
-			Memo:      tx.GetMemo(),
-			Time:      block.Time,
-			BlockHash: block.Hash,
+			Hash: txRaw.Hash,
+			Memo: txRaw.TxData.Value.Memo,
+			Time: tTime,
 		}
 
 		trans.Height, err = strconv.ParseUint(txRaw.Height, 10, 64)
 		if err != nil {
 			outTX.Error = err
 		}
-		trans.GasWanted, err = strconv.ParseUint(txRaw.TxResult.GasWanted, 10, 64)
+		trans.GasWanted, err = strconv.ParseUint(txRaw.GasWanted, 10, 64)
 		if err != nil {
 			outTX.Error = err
 		}
-		trans.GasUsed, err = strconv.ParseUint(txRaw.TxResult.GasUsed, 10, 64)
+		trans.GasUsed, err = strconv.ParseUint(txRaw.GasUsed, 10, 64)
 		if err != nil {
 			outTX.Error = err
 		}
 
-		for _, logf := range lf {
+		for _, logf := range txRaw.Logs {
+
+			txMsg := txRaw.TxData.Value.Msg[int(logf.MsgIndex)]
+
 			tev := shared.TransactionEvent{
-				ID: strconv.FormatFloat(logf.MsgIndex, 'f', -1, 64),
+				ID:   strconv.FormatFloat(logf.MsgIndex, 'f', -1, 64),
+				Kind: txMsg.Type,
 			}
+
 			for _, ev := range logf.Events {
 				sub := shared.SubsetEvent{
 					Type: ev.Type,
 				}
-				for _, attr := range ev.Attributes {
 
+				for _, attr := range ev.Attributes {
 					sub.Module = attr.Module
 					sub.Action = attr.Action
 
 					if len(attr.Sender) > 0 {
 						sub.Sender = attr.Sender
+					}
+
+					if len(attr.Feeder) > 0 {
+						sub.Feeder = attr.Feeder
 					}
 
 					if len(attr.Recipient) > 0 {
@@ -202,16 +193,8 @@ func rawToTransaction(ctx context.Context, c *Client, in chan TxResponse, out ch
 			}
 			trans.Events = append(trans.Events, tev)
 		}
-
 		outTX.Payload = trans
 		out <- outTX
-		out <- cStruct.OutResp{
-			ID:         txRaw.TaskID.TaskID,
-			RunID:      txRaw.TaskID.RunID,
-			Additional: true,
-			Type:       "Block",
-			Payload:    block,
-		}
 	}
 }
 

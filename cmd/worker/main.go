@@ -58,7 +58,7 @@ func main() {
 		log.Fatalf("error generating UUID: %v", err)
 	}
 
-	c := connectivity.NewWorkerConnections(workerRunID.String(), cfg.Address)
+	c := connectivity.NewWorkerConnections(workerRunID.String(), cfg.Address, "cosmos", "0.0.1")
 	c.AddManager("localhost:8085/client_ping")
 
 	go c.Run(context.Background(), time.Second*10)
