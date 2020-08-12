@@ -10,6 +10,7 @@ import (
 
 type HeightRange struct {
 	Epoch       string
+	Hash        string
 	StartHeight int64
 	EndHeight   int64
 }
@@ -41,8 +42,7 @@ type Transaction struct {
 	GasWanted uint64           `json:"gas_wanted,omitempty"`
 	GasUsed   uint64           `json:"gas_used,omitempty"`
 
-	Memo  string `json:"memo,omitempty"`
-	Nonce int    `json:"nonce,omitempty"`
+	Memo string `json:"memo,omitempty"`
 
 	Version string            `json:"version"`
 	Events  TransactionEvents `json:"events,omitempty"`
@@ -87,6 +87,8 @@ type SubsetEvent struct {
 	Recipient []string `json:"recipient,omitempty"`
 	Validator []string `json:"validator,omitempty"`
 	Feeder    []string `json:"feeder,omitempty"`
+
+	Nonce int `json:"nonce,omitempty"`
 
 	Amount *TransactionAmount `json:"amount,omitempty"`
 }

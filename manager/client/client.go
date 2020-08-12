@@ -77,7 +77,7 @@ func (hc *HubbleClient) GetBlockTimesInterval(ctx context.Context, nv NetworkVer
 }
 
 func (hc *HubbleClient) GetTransaction(ctx context.Context, nv NetworkVersion, id string) ([]shared.Transaction, error) {
-	return hc.GetTransactions(ctx, nv, shared.HeightRange{"", 0, 0})
+	return hc.GetTransactions(ctx, nv, shared.HeightRange{"", "", 0, 0})
 }
 
 func (hc *HubbleClient) GetTransactions(ctx context.Context, nv NetworkVersion, heightRange shared.HeightRange) ([]shared.Transaction, error) {

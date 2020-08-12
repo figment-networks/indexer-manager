@@ -4,9 +4,18 @@ all: build
 build-manager-migration:
 	go build -o migration ./cmd/manager-migration
 
-.PHONY: build-worker
-build:
-	go build -o worker_bin ./cmd/worker
+.PHONY: build-cosmos
+build-cosmos:
+	go build -o worker_cosmos_bin ./cmd/worker_cosmos
+
+
+.PHONY: build-terra
+build-terra:
+	go build -o worker_terra_bin ./cmd/worker_terra
+
+.PHONY: build-coda
+build-coda:
+	go build -o worker_coda_bin ./cmd/worker_coda
 
 .PHONY: build-proto
 build-proto:
