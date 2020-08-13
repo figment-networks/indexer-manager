@@ -158,7 +158,7 @@ func MapFeeTransaction(block *Block, transfer *FeeTransfer, snark bool) structs.
 }
 
 // Transactions returns a list of transactions from the coda input
-func MapTransactions(runID uuid.UUID, block *Block, resp chan cStruct.OutResp) error {
+func MapTransactions(taskID uuid.UUID, block *Block, resp chan cStruct.OutResp) error {
 	if block.Transactions == nil {
 		return nil
 	}
@@ -171,11 +171,11 @@ func MapTransactions(runID uuid.UUID, block *Block, resp chan cStruct.OutResp) e
 	// Add the block reward transaction
 	if block.Transactions.Coinbase != "0" && block.Transactions.CoinbaseReceiver != nil {
 		t := BlockRewardTransaction(block)
-
 		//		if err != nil {
 		//			return err
 		//		}
 		resp <- cStruct.OutResp{
+			ID:      taskID,
 			Type:    "Transaction",
 			All:     countAll,
 			Payload: t,
@@ -191,6 +191,7 @@ func MapTransactions(runID uuid.UUID, block *Block, resp chan cStruct.OutResp) e
 		//	}
 
 		resp <- cStruct.OutResp{
+			ID:      taskID,
 			Type:    "Transaction",
 			All:     countAll,
 			Payload: t,
@@ -215,6 +216,7 @@ func MapTransactions(runID uuid.UUID, block *Block, resp chan cStruct.OutResp) e
 			return err
 		}
 		resp <- cStruct.OutResp{
+			ID:      taskID,
 			Type:    "Transaction",
 			All:     countAll,
 			Payload: feeTx,

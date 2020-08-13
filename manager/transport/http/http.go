@@ -108,6 +108,8 @@ func (hc *HubbleConnector) GetTransactions(w http.ResponseWriter, req *http.Requ
 	endHeight := req.URL.Query().Get("end_height")
 	intEndHeight, _ := strconv.Atoi(endHeight)
 
+	hash := req.URL.Query().Get("hash")
+
 	network := req.URL.Query().Get("network")
 	if network == "" {
 		network = "cosmos"
@@ -118,11 +120,15 @@ func (hc *HubbleConnector) GetTransactions(w http.ResponseWriter, req *http.Requ
 	ctx, cancel := context.WithTimeout(req.Context(), 1*time.Minute)
 	defer cancel()
 
-	transactions, err := hc.cli.GetTransactions(ctx, nv, shared.HeightRange{
+	hr := shared.HeightRange{
 		Epoch:       "",
 		StartHeight: int64(intHeight),
 		EndHeight:   int64(intEndHeight),
-	})
+	}
+	if hash != "" {
+		hr.Hash = hash
+	}
+	transactions, err := hc.cli.GetTransactions(ctx, nv, hr)
 
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)

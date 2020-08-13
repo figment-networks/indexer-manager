@@ -12,7 +12,7 @@ import (
 	grpc "google.golang.org/grpc"
 	"google.golang.org/grpc/keepalive"
 
-	"github.com/figment-networks/cosmos-indexer/cmd/worker/config"
+	"github.com/figment-networks/cosmos-indexer/cmd/worker_cosmos/config"
 	"github.com/figment-networks/cosmos-indexer/worker/api/cosmos"
 	cli "github.com/figment-networks/cosmos-indexer/worker/client/cosmos"
 	"github.com/figment-networks/cosmos-indexer/worker/connectivity"
@@ -21,11 +21,9 @@ import (
 )
 
 type flags struct {
-	configPath          string
-	runMigration        bool
-	showVersion         bool
-	batchSize           int64
-	heightRangeInterval int64
+	configPath   string
+	runMigration bool
+	showVersion  bool
 }
 
 var configFlags = flags{}
@@ -33,8 +31,6 @@ var configFlags = flags{}
 func init() {
 	flag.BoolVar(&configFlags.showVersion, "v", false, "Show application version")
 	flag.StringVar(&configFlags.configPath, "config", "", "Path to config")
-	flag.Int64Var(&configFlags.batchSize, "batch_size", 0, "pipeline batch size")
-	flag.Int64Var(&configFlags.heightRangeInterval, "range_int", 0, "pipeline batch size")
 	flag.Parse()
 }
 

@@ -155,13 +155,13 @@ SEND_LOOP:
 
 func (ic *IndexerClient) GetBlock(ctx context.Context, tr cStructs.TaskRequest) (*api.Block, error) {
 
-	log.Printf("Received Block Req: %+v ", tr)
 	hr := &structs.HeightHash{}
 	err := json.Unmarshal(tr.Payload, hr)
 	if err != nil {
 		return nil, err
 	}
 
+	log.Printf("Received Block Req: %+v  %+v  ", tr, hr)
 	sCtx, cancel := context.WithTimeout(ctx, time.Second*10)
 	defer cancel()
 	return ic.client.GetBlock(sCtx, hr.Hash)

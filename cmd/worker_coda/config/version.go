@@ -3,7 +3,7 @@ package config
 import "fmt"
 
 const (
-	appName    = "cosmos-indexer"
+	appName    = "coda-indexer"
 	appVersion = "0.1.0"
 	gitCommit  = "-"
 	goVersion  = "-"

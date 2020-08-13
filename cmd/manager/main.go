@@ -70,15 +70,6 @@ func main() {
 	managerStore := store.New(pgsqlDriver)
 	go managerStore.Run(ctx, time.Second*5)
 
-	/*
-		pipeline := indexer.NewPipeline(c, db)
-
-		err = pipeline.Start(idxConfig(configFlags, cfg))
-		if err != nil {
-			panic(fmt.Errorf("error starting pipeline [ERR: %+v]", err))
-		}
-	*/
-
 	connManager := connectivity.NewManager()
 
 	grpcCli := grpcTransport.NewClient()

@@ -99,6 +99,7 @@ func (hc *HubbleClient) GetTransactions(ctx context.Context, nv NetworkVersion, 
 		b, _ := json.Marshal(shared.HeightRange{
 			StartHeight: heightRange.StartHeight + int64(i*100),
 			EndHeight:   heightRange.StartHeight + int64((i+1)*100),
+			Hash:        heightRange.Hash,
 		})
 
 		req = append(req, structs.TaskRequest{
