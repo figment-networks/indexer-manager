@@ -168,11 +168,6 @@ func (hc *HubbleConnector) SearchTransactions(w http.ResponseWriter, req *http.R
 			w.Write([]byte(err.Error()))
 			return
 		}
-		/*
-			Type      []string `json:"type"`
-			StartTime string   `json:"start_time"`
-			EndTime   string   `json:"end_time"`
-		*/
 		ts.Height, _ = strconv.ParseUint(req.Form.Get("height"), 10, 64)
 		ts.Limit, _ = strconv.ParseUint(req.Form.Get("limit"), 10, 64)
 		ts.Account = req.Form.Get("account")

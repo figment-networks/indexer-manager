@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"net"
 	"sync"
 	"time"
 
@@ -14,9 +13,16 @@ import (
 )
 
 type WorkersPool interface {
-	//AddWorker(id string, trCh chan structs.TaskRequest) error
 	AddWorker(id string, stream *structs.StreamAccess) error
 	SendNext(tr structs.TaskRequest, aw *structs.Await) (failedWorkerID string, err error)
+	Ping(ctx context.Context, id string) (time.Duration, error)
+	Close(id string) error
+	BringOnline(id string) error
+	Reconnect(id string) error
+	GetWorker(id string) (twi TaskWorkerInfo, ok bool)
+	GetWorkers() []TaskWorkerInfo
+
+	SendToWoker(id string, tr structs.TaskRequest, aw *structs.Await) error
 }
 
 type State string
@@ -24,33 +30,20 @@ type State string
 const (
 	StateInitialized State = "Initialized"
 	StateOffline     State = "Offline"
-	StateOnline      State = "Offline"
+	StateOnline      State = "Online"
 )
 
-type ConnTransport interface {
-	Run(ctx context.Context, id string, wc WorkerConnection, stream *structs.StreamAccess, removeWorkerCh chan<- string)
-	Type() string
-}
-
-type WorkerAddress struct {
-	IP      net.IP `json:"ip"`
-	Address string `json:"address"`
-}
-
-type WorkerConnection struct {
-	Version   string          `json:"version"`
-	Type      string          `json:"type"`
-	Addresses []WorkerAddress `json:"addresses"`
-}
-
 type WorkerInfo struct {
-	NodeSelfID     string           `json:"node_id"`
-	Type           string           `json:"type"`
-	State          State            `json:"state"`
-	ConnectionInfo WorkerConnection `json:"connection"`
-	LastCheck      time.Time        `json:"last_check"`
+	NodeSelfID     string                   `json:"node_id"`
+	Type           string                   `json:"type"`
+	State          State                    `json:"state"`
+	ConnectionInfo structs.WorkerConnection `json:"connection"`
+	LastCheck      time.Time                `json:"last_check"`
+}
 
-	Cancelation context.CancelFunc `json:"-"`
+type WorkerInfoStatic struct {
+	WorkerInfo
+	TaskWorkerInfo TaskWorkerInfo `json:"tasks"`
 }
 
 type Network struct {
@@ -61,42 +54,25 @@ type Manager struct {
 	networks    map[string]*Network
 	networkLock sync.RWMutex
 
-	transports     map[string]ConnTransport
+	transports     map[string]structs.ConnTransport
 	transportsLock sync.RWMutex
 
 	nextWorkers     map[structs.WorkerCompositeKey]WorkersPool
 	nextWorkersLock sync.RWMutex
 
 	removeWorkerCh chan string
-
-	//	awaits     map[uuid.UUID]*structs.Await
-	//	awaitsLock sync.RWMutex
 }
 
 func NewManager() *Manager {
 	return &Manager{
-		networks:    make(map[string]*Network),
-		transports:  make(map[string]ConnTransport),
-		nextWorkers: make(map[structs.WorkerCompositeKey]WorkersPool),
-
-		//	awaits:         make(map[uuid.UUID]*structs.Await),
+		networks:       make(map[string]*Network),
+		transports:     make(map[string]structs.ConnTransport),
+		nextWorkers:    make(map[structs.WorkerCompositeKey]WorkersPool),
 		removeWorkerCh: make(chan string, 20),
 	}
 }
 
-func (m *Manager) Run(ctx context.Context) {
-	// fan out client requests into their respective node
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case wID := <-m.removeWorkerCh:
-			m.removeWorker("", wID)
-		}
-	}
-}
-
-func (m *Manager) Register(id, kind string, connInfo WorkerConnection) error {
+func (m *Manager) Register(id, kind string, connInfo structs.WorkerConnection) error {
 	m.networkLock.Lock()
 
 	n, ok := m.networks[kind]
@@ -141,32 +117,41 @@ func (m *Manager) Register(id, kind string, connInfo WorkerConnection) error {
 		m.nextWorkersLock.Unlock()
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-
 	m.networkLock.Lock()
 	w.State = StateInitialized
-	w.Cancelation = cancel
 	m.networkLock.Unlock()
 
-	sa := structs.NewStreamAccess()
-	go c.Run(ctx, id, connInfo, sa, m.removeWorkerCh)
-	err := g.AddWorker(id, sa)
-	return err
+	if !ok {
+		sa := structs.NewStreamAccess(c, connInfo)
+		sa.Run()
+		return g.AddWorker(id, sa)
+	}
+
+	return nil
 }
 
-func (m *Manager) GetAllWorkers() map[string]map[string]WorkerInfo {
+func (m *Manager) GetAllWorkers() map[string]map[string]WorkerInfoStatic {
 	m.networkLock.RLock()
 	defer m.networkLock.RUnlock()
 
 	// (lukanus): unlink pointers
-	winfos := make(map[string]map[string]WorkerInfo)
+	winfos := make(map[string]map[string]WorkerInfoStatic)
 	for k, netw := range m.networks {
-		wif := make(map[string]WorkerInfo)
+		wif := make(map[string]WorkerInfoStatic)
 		for kv, w := range netw.workers {
-			wif[kv] = *w
+			wis := WorkerInfoStatic{WorkerInfo: *w}
+			m.nextWorkersLock.RLock()
+			netWorker, ok := m.nextWorkers[structs.WorkerCompositeKey{Network: k, Version: wis.ConnectionInfo.Version}]
+			if ok {
+				wis.TaskWorkerInfo, ok = netWorker.GetWorker(kv)
+			}
+			m.nextWorkersLock.RUnlock()
+
+			wif[kv] = wis
 		}
 		winfos[k] = wif
 	}
+
 	return winfos
 }
 
@@ -188,7 +173,7 @@ func (m *Manager) GetWorkers(kind string) []WorkerInfo {
 	return workers
 }
 
-func (m *Manager) AddTransport(c ConnTransport) error {
+func (m *Manager) AddTransport(c structs.ConnTransport) error {
 	m.transportsLock.Lock()
 	defer m.transportsLock.Unlock()
 
@@ -198,74 +183,6 @@ func (m *Manager) AddTransport(c ConnTransport) error {
 	}
 	m.transports[c.Type()] = c
 	return nil
-}
-
-func (m *Manager) retryWorker(kind, id string) (bool, error) {
-	log.Println("Retrying connection to worker")
-	m.networkLock.RLock()
-
-	var w *WorkerInfo
-	n, ok := m.networks[kind]
-	if !ok {
-		m.networkLock.RUnlock()
-		return false, nil
-	}
-
-	w, ok = n.workers[id]
-	if !ok {
-		m.networkLock.RUnlock()
-		return false, nil
-	}
-	m.networkLock.RUnlock()
-
-	if w != nil {
-		if w.State == StateOffline {
-			err := m.Register(id, kind, w.ConnectionInfo)
-			return (err == nil), err
-		} else if w.State == StateInitialized { // (lukanus) something else brought it up in the meanwhile - let'r retry
-			return true, nil
-		}
-	}
-	return false, nil
-}
-
-func (m *Manager) removeWorker(kind, id string) {
-	m.networkLock.RLock()
-	defer m.networkLock.RUnlock()
-
-	var w *WorkerInfo
-	if kind == "" {
-		for _, n := range m.networks {
-			if worker, ok := n.workers[id]; ok {
-				w = worker
-			}
-		}
-	} else {
-		n, ok := m.networks[kind]
-		if !ok {
-			return
-		}
-
-		w, ok = n.workers[id]
-	}
-
-	if w == nil {
-		return
-	}
-
-	if w.Cancelation != nil {
-		w.Cancelation()
-		w.Cancelation = nil
-	}
-	w.State = StateOffline
-}
-
-func makeUUIDs(count int) []uuid.UUID {
-	uids := make([]uuid.UUID, count)
-	for i := 0; i < count; i++ {
-		uids[i], _ = uuid.NewRandom()
-	}
-	return uids
 }
 
 func (m *Manager) Send(trs []structs.TaskRequest) (*structs.Await, error) {
@@ -290,20 +207,45 @@ func (m *Manager) Send(trs []structs.TaskRequest) (*structs.Await, error) {
 		// (lukanus): if thats only one worker failure, try few times
 	RETRY_LOOP:
 		for i := 0; i < 3; i++ {
-			var ok bool
 			t.ID = uuids[requestNumber]
 			failedID, err = w.SendNext(t, resp)
+
+			log.Println("a ", failedID, err)
 			if failedID == "" && err == nil {
 				break RETRY_LOOP
 			}
 
-			ok, err = m.retryWorker(t.Network, failedID)
-			if !ok {
-				m.removeWorker(t.Network, failedID)
+			if !errors.Is(err, ErrNoWorkersAvailable) {
+				ctx, cancel := context.WithTimeout(context.Background(), time.Second*1)
+				defer cancel()
+
+				log.Printf("Pinging: %s  ", failedID)
+				var duration time.Duration
+				duration, err = w.Ping(ctx, failedID)
+				if err != nil {
+					w.Close(failedID)
+					log.Printf("Error Pinging: %s %+v ", failedID, err)
+					//m.removeWorker(t.Network, failedID)
+					log.Printf("Reconnecting: %s  ", failedID)
+					err = w.Reconnect(failedID)
+				}
+				if err == nil {
+					log.Printf("PINGED %s SUCCESSFULLY  %s", failedID, duration.String)
+					err = w.BringOnline(failedID)
+				}
+
+				if err == nil {
+					err = w.SendToWoker(failedID, t, resp)
+
+					if err == nil {
+						break RETRY_LOOP
+					}
+					log.Printf("Error Retrying: %s %+v ", failedID, err)
+				}
 			}
 
 			if err != nil {
-				log.Println("Retrying failed : ", failedID, err)
+				log.Println("Retry failed : ", failedID, err)
 			}
 		}
 		if err != nil {
@@ -313,13 +255,10 @@ func (m *Manager) Send(trs []structs.TaskRequest) (*structs.Await, error) {
 	return resp, nil
 }
 
-/*
-func (m *Manager) registerRequest(sendIDs []uuid.UUID) *structs.Await {
-	//	m.awaitsLock.Lock()
-	//	defer m.awaitsLock.Unlock()
-	aw :=
-	//	for _, id := range sendIDs {
-	//		m.awaits[id] = aw
-	//	}
-	return aw
-}*/
+func makeUUIDs(count int) []uuid.UUID {
+	uids := make([]uuid.UUID, count)
+	for i := 0; i < count; i++ {
+		uids[i], _ = uuid.NewRandom()
+	}
+	return uids
+}

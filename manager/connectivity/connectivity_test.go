@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/figment-networks/cosmos-indexer/manager/connectivity/structs"
 	"github.com/stretchr/testify/require"
 )
 
@@ -11,7 +12,7 @@ func TestManager_Register(t *testing.T) {
 	type args struct {
 		id             string
 		kind           string
-		connectionInfo WorkerConnection
+		connectionInfo structs.WorkerConnection
 	}
 	tests := []struct {
 		name         string
@@ -24,10 +25,10 @@ func TestManager_Register(t *testing.T) {
 			args: []args{
 				{id: "asdf",
 					kind: "cosmos",
-					connectionInfo: WorkerConnection{
+					connectionInfo: structs.WorkerConnection{
 						Version:   "0.0.1",
 						Type:      "asdf",
-						Addresses: []WorkerAddress{{Address: "something.test"}},
+						Addresses: []structs.WorkerAddress{{Address: "something.test"}},
 					},
 				},
 			},
@@ -36,10 +37,10 @@ func TestManager_Register(t *testing.T) {
 					State:      StateInitialized,
 					NodeSelfID: "asdf",
 					Type:       "cosmos",
-					ConnectionInfo: WorkerConnection{
+					ConnectionInfo: structs.WorkerConnection{
 						Version:   "0.0.1",
 						Type:      "asdf",
-						Addresses: []WorkerAddress{{Address: "something.test"}},
+						Addresses: []structs.WorkerAddress{{Address: "something.test"}},
 					},
 				},
 			},

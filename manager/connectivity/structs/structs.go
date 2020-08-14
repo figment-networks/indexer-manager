@@ -5,11 +5,32 @@ import (
 	"encoding/json"
 	"errors"
 	"log"
+	"net"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
 )
+
+var ErrStreamNotOnline = errors.New("Stream is not Online")
+
+type StreamState int
+
+const (
+	StreamUnknown StreamState = iota
+	StreamOnline
+	StreamError
+	StreamReconnecting
+	StreamClosing
+	StreamOffline
+)
+
+type ConnTransport interface {
+	Run(ctx context.Context, stream *StreamAccess)
+	//Run(ctx context.Context, id string, wc structs.WorkerConnection, stream *structs.StreamAccess, controlChan chan structs.ClientControl)
+	//Run(ctx context.Context, id string, wc structs.WorkerConnection, stream *structs.StreamAccess, removeWorkerCh chan<- string)
+	Type() string
+}
 
 type WorkerCompositeKey struct {
 	Network string
@@ -20,6 +41,17 @@ type WorkerInfo struct {
 	Network string
 	Version string
 	ID      string
+}
+
+type WorkerConnection struct {
+	Version   string          `json:"version"`
+	Type      string          `json:"type"`
+	Addresses []WorkerAddress `json:"addresses"`
+}
+
+type WorkerAddress struct {
+	IP      net.IP `json:"ip"`
+	Address string `json:"address"`
 }
 
 type TaskRequest struct {
@@ -46,6 +78,17 @@ type TaskResponse struct {
 	Final   bool
 	Error   TaskError
 	Payload json.RawMessage
+}
+
+type ClientControl struct {
+	Type string
+	Resp chan ClientResponse
+}
+
+type ClientResponse struct {
+	OK    bool
+	Error string
+	Time  time.Duration
 }
 
 type Await struct {
@@ -119,19 +162,18 @@ type IndexerClienter interface {
 	RegisterStream(ctx context.Context, stream *StreamAccess) error
 }
 
-type StreamState int
-
-const (
-	StreamUnknown StreamState = iota
-	StreamOnline
-	StreamOffline
-)
-
 type StreamAccess struct {
 	State           StreamState
 	StreamID        uuid.UUID
 	ResponseMap     map[uuid.UUID]*Await
 	RequestListener chan TaskRequest
+
+	ClientControl chan ClientControl
+
+	CancelConnection context.CancelFunc
+
+	Conn      WorkerConnection
+	Transport ConnTransport
 
 	respLock sync.RWMutex
 	reqLock  sync.RWMutex
@@ -139,25 +181,58 @@ type StreamAccess struct {
 	mapLock sync.RWMutex
 }
 
-func NewStreamAccess() *StreamAccess {
+func NewStreamAccess(transport ConnTransport, conn WorkerConnection) *StreamAccess {
 	sID, _ := uuid.NewRandom()
 
 	return &StreamAccess{
 		StreamID: sID,
-		State:    StreamOnline,
+		State:    StreamUnknown,
+
+		Transport:     transport,
+		Conn:          conn,
+		ClientControl: make(chan ClientControl, 5),
 
 		ResponseMap:     make(map[uuid.UUID]*Await),
 		RequestListener: make(chan TaskRequest, 100),
 	}
 }
 
+func (sa *StreamAccess) Run() error {
+	sa.mapLock.Lock()
+	if sa.State == StreamReconnecting {
+		return errors.New("Already Reconnecting")
+	}
+
+	log.Println("Running  Stream Access")
+	sa.State = StreamReconnecting
+	sa.mapLock.Unlock()
+
+	if sa.CancelConnection != nil {
+		sa.CancelConnection()
+	}
+
+	var nCtx context.Context
+	nCtx, sa.CancelConnection = context.WithCancel(context.Background())
+	go sa.Transport.Run(nCtx, sa)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+	_, err := sa.Ping(ctx)
+
+	return err
+}
+
+func (sa *StreamAccess) Reconnect() error {
+	return sa.Run()
+}
+
 func (sa *StreamAccess) Recv(tr *TaskResponse) error {
 
 	sa.respLock.RLock()
 	defer sa.respLock.RUnlock()
-	if sa.State != StreamOnline {
-		return errors.New("Stream is not Online")
-	}
+	//	if sa.State != StreamOnline {
+	//		return ErrStreamNotOnline
+	//	}
 
 	sa.mapLock.Lock()
 	resAwait, ok := sa.ResponseMap[tr.ID]
@@ -169,8 +244,11 @@ func (sa *StreamAccess) Recv(tr *TaskResponse) error {
 
 	all, err := resAwait.Send(tr)
 	if err != nil {
+		resAwait.State = StreamError
 		return err
 	}
+
+	resAwait.State = StreamOnline
 
 	if all {
 		sa.mapLock.Lock()
@@ -186,24 +264,53 @@ func (sa *StreamAccess) Req(tr TaskRequest, aw *Await) error {
 
 	sa.reqLock.RLock()
 	defer sa.reqLock.RUnlock()
+
+	log.Println("Req State: ", sa.State)
 	if sa.State != StreamOnline {
-		return errors.New("Stream is not Online")
+		return ErrStreamNotOnline
 	}
 
 	sa.mapLock.Lock()
 	sa.ResponseMap[tr.ID] = aw
 	sa.mapLock.Unlock()
 
+	log.Println("Requesting in ", sa.State)
 	sa.RequestListener <- tr
 
 	return nil
 }
 
-func (sa *StreamAccess) RebufferRequest(tr TaskRequest) {
-	sa.reqLock.RLock()
-	defer sa.reqLock.RUnlock()
+func (sa *StreamAccess) Ping(ctx context.Context) (time.Duration, error) {
 
-	sa.RequestListener <- tr
+	resp := make(chan ClientResponse, 1) //(lukanus): this can be only closed after write
+
+	select {
+	case sa.ClientControl <- ClientControl{
+		Type: "PING",
+		Resp: resp,
+	}:
+	default:
+		return 0, errors.New("Cannot send PING")
+	}
+
+	for {
+		select {
+		case <-ctx.Done(): // timeout
+			sa.reqLock.Lock()
+			sa.respLock.Lock()
+			defer sa.respLock.Unlock()
+			defer sa.reqLock.Unlock()
+			sa.State = StreamOffline
+			return 0, errors.New("Ping TIMEOUT")
+		case a := <-resp:
+			sa.reqLock.Lock()
+			sa.respLock.Lock()
+			defer sa.respLock.Unlock()
+			defer sa.reqLock.Unlock()
+			sa.State = StreamOnline
+			return a.Time, nil
+		}
+	}
 }
 
 func (sa *StreamAccess) Close() error {
@@ -211,13 +318,14 @@ func (sa *StreamAccess) Close() error {
 	sa.respLock.Lock()
 	defer sa.respLock.Unlock()
 	defer sa.reqLock.Unlock()
+
 	if sa.State == StreamOffline {
 		return nil
 	}
-
-	sa.ResponseMap = nil
 	sa.State = StreamOffline
-	close(sa.RequestListener)
+
+	sa.CancelConnection()
+	//close(sa.RequestListener)
 
 	return nil
 }

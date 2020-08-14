@@ -17,6 +17,7 @@ import (
 	"github.com/figment-networks/cosmos-indexer/cmd/manager/config"
 	"github.com/figment-networks/cosmos-indexer/manager/client"
 	"github.com/figment-networks/cosmos-indexer/manager/connectivity"
+	"github.com/figment-networks/cosmos-indexer/manager/connectivity/structs"
 	"github.com/figment-networks/cosmos-indexer/manager/store"
 	"github.com/figment-networks/cosmos-indexer/manager/store/postgres"
 	grpcTransport "github.com/figment-networks/cosmos-indexer/manager/transport/grpc"
@@ -74,7 +75,6 @@ func main() {
 
 	grpcCli := grpcTransport.NewClient()
 	connManager.AddTransport(grpcCli)
-	go connManager.Run(ctx)
 
 	hubbleClient := client.NewHubbleClient(managerStore)
 	hubbleClient.LinkSender(connManager)
@@ -93,8 +93,6 @@ func main() {
 		TLSConfig: &tls.Config{
 			InsecureSkipVerify: true,
 		},
-		//	ReadTimeout:  10 * time.Second,
-		//	WriteTimeout: 10 * time.Second,
 	}
 	log.Printf("Running server on %s", cfg.Address)
 	log.Fatal(s.ListenAndServe())
@@ -158,16 +156,16 @@ func attachConnectionManager(mgr *connectivity.Manager, mux *http.ServeMux) {
 		}
 		block.Unlock()
 
-		log.Printf("Received Ping from %s:%s (%s) ", pi.Kind, pi.Connectivity.Version, pi.Connectivity.Type)
+		log.Printf("Received poke from %s:%s (%s) ", pi.Kind, pi.Connectivity.Version, pi.Connectivity.Type)
 		ipTo := net.ParseIP(r.RemoteAddr)
 		fwd := r.Header.Get("X-FORWARDED-FOR")
 		if fwd != "" {
 			ipTo = net.ParseIP(fwd)
 		}
-		mgr.Register(pi.ID, pi.Kind, connectivity.WorkerConnection{
+		mgr.Register(pi.ID, pi.Kind, structs.WorkerConnection{
 			Version: pi.Connectivity.Version,
 			Type:    pi.Connectivity.Type,
-			Addresses: []connectivity.WorkerAddress{{
+			Addresses: []structs.WorkerAddress{{
 				IP:      ipTo,
 				Address: pi.Connectivity.Address,
 			}},

@@ -22,77 +22,6 @@ func NewIndexerServer(client cStructs.IndexerClienter) *IndexerServer {
 	}
 }
 
-/*
-func NoOp(ctx context.Context, trs chan cStructs.TaskResponse) {
-NOOP_LOOP:
-	for {
-		select {
-		case <-ctx.Done():
-		case t, ok := <-trs:
-			if !ok {
-				break NOOP_LOOP
-			}
-			log.Println("NOOP: SKIPPED SENDING ", t)
-			if t.Final {
-				break NOOP_LOOP
-			}
-
-		}
-	}
-	cStructs.TaskResponseChanPool.Put(trs)
-
-}
-
-func (is *IndexerServer) Run(ctx context.Context) {
-
-	a := map[uuid.UUID]*cStructs.StreamAccess{}
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case t := <-is.streamDelegation:
-			switch t.Type {
-			case cStructs.StreamDelegationResponse:
-				s, ok := a[t.StreamID]
-				if !ok || s.State != cStructs.StreamOnline {
-					// If stream is not available, relieve worker
-					tCtx, _ := context.WithTimeout(ctx, time.Minute*10)
-					go NoOp(tCtx, t.ResponseListener)
-					continue
-				}
-
-			READ_AS_MANY:
-				for {
-					select {
-					case task, ok := <-t.ResponseListener:
-						if !ok {
-							break READ_AS_MANY
-						}
-						s.ResponseListener <- task
-
-					default:
-						break READ_AS_MANY
-					}
-				}
-
-			case cStructs.StreamDelegationAdd:
-				a[t.StreamID] = &cStructs.StreamAccess{
-					State:            cStructs.StreamOnline,
-					StreamID:         t.StreamID,
-					ResponseListener: t.ResponseListener,
-				}
-			case cStructs.StreamDelegationDelete:
-				s, ok := a[t.StreamID]
-				if !ok {
-					continue
-				}
-				s.State = cStructs.StreamOffline
-			}
-		}
-	}
-}
-*/
 func (is *IndexerServer) TaskRPC(taskStream indexer.IndexerService_TaskRPCServer) error {
 
 	ctx := taskStream.Context()
@@ -129,13 +58,28 @@ func (is *IndexerServer) TaskRPC(taskStream indexer.IndexerService_TaskRPCServer
 		}
 
 		uid, err := uuid.Parse(in.Id)
+
+		log.Println("in", in.Type)
+
+		if in.Type == "PING" {
+			log.Println("RECEIVED PING")
+			err := stream.Send(cStructs.TaskResponse{
+				Id:   uid,
+				Type: "PONG",
+			})
+			log.Println("SENDING PONG")
+			if err != nil {
+				log.Printf("Error sending Ping: %s", err.Error())
+			}
+			continue
+		}
+
 		stream.Req(cStructs.TaskRequest{
 			Id:      uid,
 			Type:    in.Type,
 			Payload: in.Payload,
 		})
 	}
-
 }
 
 func Send(taskStream indexer.IndexerService_TaskRPCServer, accessCh *cStructs.StreamAccess, receiverClosed chan error) {
