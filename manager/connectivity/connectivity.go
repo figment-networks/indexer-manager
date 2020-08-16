@@ -25,29 +25,13 @@ type WorkersPool interface {
 	SendToWoker(id string, tr structs.TaskRequest, aw *structs.Await) error
 }
 
-type State string
-
-const (
-	StateInitialized State = "Initialized"
-	StateOffline     State = "Offline"
-	StateOnline      State = "Online"
-)
-
-type WorkerInfo struct {
-	NodeSelfID     string                   `json:"node_id"`
-	Type           string                   `json:"type"`
-	State          State                    `json:"state"`
-	ConnectionInfo structs.WorkerConnection `json:"connection"`
-	LastCheck      time.Time                `json:"last_check"`
-}
-
 type WorkerInfoStatic struct {
-	WorkerInfo
+	structs.WorkerInfo
 	TaskWorkerInfo TaskWorkerInfo `json:"tasks"`
 }
 
 type Network struct {
-	workers map[string]*WorkerInfo
+	workers map[string]*structs.WorkerInfo
 }
 
 type Manager struct {
@@ -77,17 +61,17 @@ func (m *Manager) Register(id, kind string, connInfo structs.WorkerConnection) e
 
 	n, ok := m.networks[kind]
 	if !ok {
-		n = &Network{workers: make(map[string]*WorkerInfo)}
+		n = &Network{workers: make(map[string]*structs.WorkerInfo)}
 		m.networks[kind] = n
 	}
 
 	w, ok := n.workers[id]
 	if !ok {
-		w = &WorkerInfo{
+		w = &structs.WorkerInfo{
 			NodeSelfID:     id,
 			Type:           kind,
 			ConnectionInfo: connInfo,
-			State:          StateInitialized,
+			State:          structs.StreamUnknown,
 		}
 		n.workers[id] = w
 	}
@@ -95,7 +79,9 @@ func (m *Manager) Register(id, kind string, connInfo structs.WorkerConnection) e
 
 	w.LastCheck = time.Now()
 
-	if ok && w.State != StateOffline { // (lukanus): node already registered
+	log.Printf("STATE -  %+v, %+v  %+v ", w.State, w.LastCheck, w)
+
+	if ok && w.State != structs.StreamOffline { // (lukanus): node already registered
 		return nil
 	}
 
@@ -117,17 +103,50 @@ func (m *Manager) Register(id, kind string, connInfo structs.WorkerConnection) e
 		m.nextWorkersLock.Unlock()
 	}
 
-	m.networkLock.Lock()
-	w.State = StateInitialized
-	m.networkLock.Unlock()
-
 	if !ok {
-		sa := structs.NewStreamAccess(c, connInfo)
-		sa.Run()
+		m.networkLock.Lock()
+		w.State = structs.StreamReconnecting
+		m.networkLock.Unlock()
+
+		sa := structs.NewStreamAccess(c, w)
+		err := sa.Run()
+		m.networkLock.Lock()
+		if err != nil {
+			w.State = structs.StreamOffline
+		} else {
+			w.State = structs.StreamOnline
+		}
+		m.networkLock.Unlock()
+
 		return g.AddWorker(id, sa)
 	}
 
-	return nil
+	log.Printf("Reconn %s %+v", connInfo.Type, connInfo)
+	err := g.Reconnect(id)
+
+	log.Printf("Reconnecting Error", err)
+	if err != nil {
+		m.networkLock.Lock()
+		w.State = structs.StreamReconnecting
+		m.networkLock.Unlock()
+
+		sa := structs.NewStreamAccess(c, w)
+		err := sa.Run()
+		m.networkLock.Lock()
+		if err != nil {
+			w.State = structs.StreamOffline
+		} else {
+			w.State = structs.StreamOnline
+		}
+		m.networkLock.Unlock()
+
+		return g.AddWorker(id, sa)
+
+		//	return errors.New("Cannot Reconnect")
+
+	}
+
+	return g.BringOnline(id)
 }
 
 func (m *Manager) GetAllWorkers() map[string]map[string]WorkerInfoStatic {
@@ -155,7 +174,7 @@ func (m *Manager) GetAllWorkers() map[string]map[string]WorkerInfoStatic {
 	return winfos
 }
 
-func (m *Manager) GetWorkers(kind string) []WorkerInfo {
+func (m *Manager) GetWorkers(kind string) []structs.WorkerInfo {
 	m.networkLock.RLock()
 	defer m.networkLock.RUnlock()
 	k, ok := m.networks[kind]
@@ -163,7 +182,7 @@ func (m *Manager) GetWorkers(kind string) []WorkerInfo {
 		return nil
 	}
 
-	workers := make([]WorkerInfo, len(k.workers))
+	workers := make([]structs.WorkerInfo, len(k.workers))
 	var i int
 	for _, worker := range k.workers {
 		workers[i] = *worker

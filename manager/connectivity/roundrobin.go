@@ -186,13 +186,15 @@ func (rrw *RoundRobinWorkers) SendToWoker(id string, tr structs.TaskRequest, aw 
 
 func (rrw *RoundRobinWorkers) Reconnect(id string) error {
 
+	log.Println("RoundRobinWorkers Reconnecting  ")
 	rrw.lock.RLock()
 	t, ok := rrw.trws[id]
 	rrw.lock.RUnlock()
 	if !ok {
+		log.Println("RoundRobinWorkers Reconnecting NO SUCH WORKER  ")
 		return errors.New("No Such Worker")
 	}
-	log.Println("Reconnecting ")
+	log.Println("RoundRobinWorkers Reconnecting ")
 	return t.stream.Reconnect()
 }
 

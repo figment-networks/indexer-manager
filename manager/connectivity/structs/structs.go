@@ -37,10 +37,18 @@ type WorkerCompositeKey struct {
 	Version string
 }
 
-type WorkerInfo struct {
+type SimpleWorkerInfo struct {
 	Network string
 	Version string
 	ID      string
+}
+
+type WorkerInfo struct {
+	NodeSelfID     string           `json:"node_id"`
+	Type           string           `json:"type"`
+	State          StreamState      `json:"state"`
+	ConnectionInfo WorkerConnection `json:"connection"`
+	LastCheck      time.Time        `json:"last_check"`
 }
 
 type WorkerConnection struct {
@@ -172,8 +180,8 @@ type StreamAccess struct {
 
 	CancelConnection context.CancelFunc
 
-	Conn      WorkerConnection
-	Transport ConnTransport
+	WorkerInfo *WorkerInfo
+	Transport  ConnTransport
 
 	respLock sync.RWMutex
 	reqLock  sync.RWMutex
@@ -181,7 +189,7 @@ type StreamAccess struct {
 	mapLock sync.RWMutex
 }
 
-func NewStreamAccess(transport ConnTransport, conn WorkerConnection) *StreamAccess {
+func NewStreamAccess(transport ConnTransport, conn *WorkerInfo) *StreamAccess {
 	sID, _ := uuid.NewRandom()
 
 	return &StreamAccess{
@@ -189,7 +197,7 @@ func NewStreamAccess(transport ConnTransport, conn WorkerConnection) *StreamAcce
 		State:    StreamUnknown,
 
 		Transport:     transport,
-		Conn:          conn,
+		WorkerInfo:    conn,
 		ClientControl: make(chan ClientControl, 5),
 
 		ResponseMap:     make(map[uuid.UUID]*Await),
@@ -323,8 +331,9 @@ func (sa *StreamAccess) Close() error {
 		return nil
 	}
 	sa.State = StreamOffline
-
 	sa.CancelConnection()
+
+	sa.WorkerInfo.State = StreamOffline
 	//close(sa.RequestListener)
 
 	return nil

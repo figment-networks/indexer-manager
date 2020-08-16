@@ -18,7 +18,7 @@ func TestManager_Register(t *testing.T) {
 		name         string
 		args         []args
 		expectedKind string
-		expected     []WorkerInfo
+		expected     []structs.WorkerInfo
 	}{
 		{name: "happy path",
 			expectedKind: "cosmos",
@@ -32,9 +32,9 @@ func TestManager_Register(t *testing.T) {
 					},
 				},
 			},
-			expected: []WorkerInfo{
+			expected: []structs.WorkerInfo{
 				{
-					State:      StateInitialized,
+					State:      structs.StreamUnknown,
 					NodeSelfID: "asdf",
 					Type:       "cosmos",
 					ConnectionInfo: structs.WorkerConnection{
@@ -62,7 +62,7 @@ func TestManager_Register(t *testing.T) {
 				found = false
 				for _, w := range workers {
 					if w.NodeSelfID == exp.NodeSelfID &&
-						w.State == StateInitialized &&
+						w.State == structs.StreamUnknown &&
 						reflect.DeepEqual(w.ConnectionInfo, exp.ConnectionInfo) &&
 						!w.LastCheck.IsZero() {
 						found = true

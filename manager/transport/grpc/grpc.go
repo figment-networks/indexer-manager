@@ -34,13 +34,13 @@ func (c *Client) Type() string {
 func (c *Client) Run(ctx context.Context, stream *structs.StreamAccess) {
 	defer stream.Close()
 	id, _ := uuid.NewRandom()
-	log.Printf("Running connections %s %+v", id.String(), stream.Conn)
+	log.Printf("Running connections %s %+v", id.String(), stream.WorkerInfo.ConnectionInfo)
 	var conn *grpc.ClientConn
 	var errSet []error
 	var dialErr error
 	var connectedTo string
 	// (lukanus): try every possibility
-	for _, address := range stream.Conn.Addresses {
+	for _, address := range stream.WorkerInfo.ConnectionInfo.Addresses {
 		if address.Address != "" {
 			connectedTo = address.Address
 			conn, dialErr = grpc.Dial(address.Address, grpc.WithInsecure(), grpc.WithKeepaliveParams(keepalive.ClientParameters{
@@ -72,7 +72,7 @@ func (c *Client) Run(ctx context.Context, stream *structs.StreamAccess) {
 	taskStream, err := gIndexer.TaskRPC(ctx, grpc.WaitForReady(true))
 	if err != nil {
 		//log.Errorf(ctx, "Cannot connect to any address given by worker : %+v", wc)
-		log.Printf("Cannot connect to any address given by worker: %s  %+v", id.String(), stream.Conn)
+		log.Printf("Cannot connect to any address given by worker: %s  %+v", id.String(), stream.WorkerInfo)
 	}
 
 	log.Printf("Sucessfully Dialed %s %s  ", id.String(), connectedTo)
