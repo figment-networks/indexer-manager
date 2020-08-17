@@ -2,3 +2,4 @@
 .vscode/launch.json
 cmd/artificial-source/data
 client.json
+*.env
