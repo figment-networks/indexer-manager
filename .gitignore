@@ -1,3 +1,4 @@
 .DS_store
 .vscode/launch.json
 cmd/artificial-source/data
+client.json
