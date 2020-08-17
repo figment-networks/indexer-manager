@@ -157,15 +157,13 @@ func (rrw *RoundRobinWorkers) Ping(ctx context.Context, id string) (time.Duratio
 }
 
 func (rrw *RoundRobinWorkers) BringOnline(id string) error {
-	rrw.lock.RLock()
+	rrw.lock.Lock()
 	t, ok := rrw.trws[id]
-	rrw.lock.RUnlock()
+	defer rrw.lock.Unlock()
 	if !ok {
 		return errors.New("No Such Worker")
 	}
-
-	rrw.lock.Lock()
-	defer rrw.lock.Unlock()
+	removeFromChannel(rrw.next, id)
 
 	log.Println("Bringing Online")
 	select {
@@ -226,8 +224,8 @@ func removeFromChannel(next chan *TaskWorkerRecord, id string) {
 	inCh := len(next)
 	for i := 0; i < inCh; i++ {
 		w := <-next
-		if w.workerID != id {
-			return
+		if w.workerID == id {
+			continue
 		}
 		next <- w
 	}
