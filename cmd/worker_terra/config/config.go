@@ -14,12 +14,14 @@ const (
 
 // Config holds the configuration data
 type Config struct {
-	AppEnv  string `json:"app_env" envconfig:"APP_ENV" default:"development"`
-	Address string `json:"address" envconfig:"ADDRESS" default:"localhost:3000"`
-	//	DefaultBatchSize           int64  `json:"default_batch_size" envconfig:"DEFAULT_BATCH_SIZE" default:"0"`
-	//	DefaultHeightRangeInterval int64  `json:"default_height_range_interval" envconfig:"DEFAULT_HEIGHT_RANGE_INTERVAL" default:"0"`
-	TerraRPCAddr     string `json:"terra_rpc_addr" envconfig:"TERRA_RPC_ADDR" required:"true"`
-	FirstBlockHeight int64  `json:"first_block_height" envconfig:"FIRST_BLOCK_HEIGHT" default:"1"`
+	AppEnv string `json:"app_env" envconfig:"APP_ENV" default:"development"`
+
+	TerraRPCAddr string `json:"terra_rpc_addr" envconfig:"TERRA_RPC_ADDR" required:"true"`
+	Address      string `json:"address" envconfig:"ADDRESS" default:"0.0.0.0"`
+	Port         string `json:"port" envconfig:"PORT" default:"3000"`
+
+	Managers string `json:"managers" envconfig:"MANAGERS" default:"127.0.0.1:8085"`
+	Hostname string `json:"hostname" envconfig:"HOSTNAME"`
 }
 
 // FromFile reads the config from a file

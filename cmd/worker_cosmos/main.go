@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	grpc "google.golang.org/grpc"
-	"google.golang.org/grpc/keepalive"
 
 	"github.com/figment-networks/cosmos-indexer/cmd/worker_cosmos/config"
 	cli "github.com/figment-networks/cosmos-indexer/worker/client/cosmos"
@@ -40,35 +40,42 @@ func main() {
 		panic(fmt.Errorf("error initializing config [ERR: %+v]", err))
 	}
 
-	grpcServer := grpc.NewServer(
+	grpcServer := grpc.NewServer() /*
 		grpc.KeepaliveEnforcementPolicy(
 			keepalive.EnforcementPolicy{
-				MinTime:             (time.Duration(4000) * time.Second),
+				//			MinTime:             (time.Duration(4000) * time.Second),
 				PermitWithoutStream: true,
 			},
-		))
+		))*/
 
 	workerRunID, err := uuid.NewRandom() // UUID V4
 	if err != nil {
 		log.Fatalf("error generating UUID: %v", err)
 	}
 
-	c := connectivity.NewWorkerConnections(workerRunID.String(), cfg.Address, "cosmos", "0.0.1")
-	c.AddManager("localhost:8085/client_ping")
+	managers := strings.Split(cfg.Managers, ",")
+
+	log.Printf("Hostname is %s", cfg.Hostname)
+	hostname := cfg.Hostname
+	if hostname == "" {
+		hostname = cfg.Address
+	}
+	c := connectivity.NewWorkerConnections(workerRunID.String(), hostname+":"+cfg.Port, "cosmos", "0.0.1")
+
+	for _, m := range managers {
+		c.AddManager(m + "/client_ping")
+	}
 
 	go c.Run(context.Background(), time.Second*10)
-
 	workerClient := cli.NewIndexerClient(context.Background(), cfg.TendermintRPCAddr, cfg.DatahubKey)
 
 	worker := grpcIndexer.NewIndexerServer(workerClient)
 	grpcProtoIndexer.RegisterIndexerServiceServer(grpcServer, worker)
 
-	//address := fmt.Sprintf("localhost:%d", 3000)
-	lis, err := net.Listen("tcp", cfg.Address)
+	lis, err := net.Listen("tcp", "0.0.0.0:"+cfg.Port)
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
-	log.Printf("Listening on %s", cfg.Address)
 	// (lukanus): blocking call on grpc server
 	grpcServer.Serve(lis)
 }
@@ -87,23 +94,3 @@ func initConfig(path string) (*config.Config, error) {
 
 	return cfg, nil
 }
-
-/*
-func idxConfig(flags flags, cfg *config.Config) *indexer.Config {
-	batchSize := flags.batchSize
-	if batchSize == 0 {
-		batchSize = cfg.DefaultBatchSize
-	}
-
-	heightRange := flags.heightRangeInterval
-	if heightRange == 0 {
-		heightRange = cfg.DefaultHeightRangeInterval
-	}
-
-	return &indexer.Config{
-		BatchSize:           batchSize,
-		HeightRangeInterval: heightRange,
-		StartHeight:         0,
-	}
-}
-*/

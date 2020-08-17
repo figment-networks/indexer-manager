@@ -80,9 +80,36 @@ services:
     networks:
       - internal
     environment:
-      ADDRESS: cosmos-indexer_workercoda_1:3000
       MANAGERS: cosmos-indexer_managerone_1:8085,cosmos-indexer_managertwo_1:8085
       CODA_ENDPOINT: http://cosmos-indexer_artificialsource_1:3000/coda
+    depends_on:
+      - postgresdatabase
+      - migrate
+
+  workercosmos:
+    build:
+      context: .
+      dockerfile: ./Dockerfile.worker.cosmos
+    networks:
+      - internal
+    env_file:
+      - .cosmos.env
+    environment:
+      MANAGERS: cosmos-indexer_managerone_1:8085,cosmos-indexer_managertwo_1:8085
+    depends_on:
+      - postgresdatabase
+      - migrate
+
+  workerterra:
+    build:
+      context: .
+      dockerfile: ./Dockerfile.worker.terra
+    networks:
+      - internal
+    env_file:
+      - .terra.env
+    environment:
+      MANAGERS: cosmos-indexer_managerone_1:8085,cosmos-indexer_managertwo_1:8085
     depends_on:
       - postgresdatabase
       - migrate

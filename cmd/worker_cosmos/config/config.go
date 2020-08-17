@@ -15,12 +15,14 @@ const (
 // Config holds the configuration data
 type Config struct {
 	AppEnv  string `json:"app_env" envconfig:"APP_ENV" default:"development"`
-	Address string `json:"address" envconfig:"ADDRESS" default:"localhost:3000"`
-	//	DefaultBatchSize           int64  `json:"default_batch_size" envconfig:"DEFAULT_BATCH_SIZE" default:"0"`
-	//	DefaultHeightRangeInterval int64  `json:"default_height_range_interval" envconfig:"DEFAULT_HEIGHT_RANGE_INTERVAL" default:"0"`
+	Address string `json:"address" envconfig:"ADDRESS" default:"0.0.0.0"`
+	Port    string `json:"port" envconfig:"PORT" default:"3000"`
+
 	TendermintRPCAddr string `json:"tendermint_rpc_addr" envconfig:"TENDERMINT_RPC_ADDR" required:"true"`
 	DatahubKey        string `json:"datahub_key" envconfig:"DATAHUB_KEY" required:"true"`
-	FirstBlockHeight  int64  `json:"first_block_height" envconfig:"FIRST_BLOCK_HEIGHT" default:"1"`
+
+	Managers string `json:"managers" envconfig:"MANAGERS" default:"127.0.0.1:8085"`
+	Hostname string `json:"hostname" envconfig:"HOSTNAME"`
 }
 
 // FromFile reads the config from a file

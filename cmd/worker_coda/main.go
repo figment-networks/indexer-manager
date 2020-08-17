@@ -11,7 +11,6 @@ import (
 
 	"github.com/google/uuid"
 	grpc "google.golang.org/grpc"
-	"google.golang.org/grpc/keepalive"
 
 	"github.com/figment-networks/cosmos-indexer/cmd/worker_coda/config"
 	cli "github.com/figment-networks/cosmos-indexer/worker/client/coda"
@@ -41,13 +40,13 @@ func main() {
 		panic(fmt.Errorf("error initializing config [ERR: %+v]", err))
 	}
 
-	grpcServer := grpc.NewServer(
+	grpcServer := grpc.NewServer() /*
 		grpc.KeepaliveEnforcementPolicy(
 			keepalive.EnforcementPolicy{
-				MinTime:             (time.Duration(4000) * time.Second),
+				//			MinTime:             (time.Duration(4000) * time.Second),
 				PermitWithoutStream: true,
 			},
-		))
+		))*/
 
 	workerRunID, err := uuid.NewRandom() // UUID V4
 	if err != nil {

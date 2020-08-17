@@ -10,15 +10,15 @@ build-manager-migration:
 
 .PHONY: build-cosmos
 build-cosmos:
-	go build -o worker_cosmos ./cmd/worker_cosmos
+	go build -o worker_cosmos_bin ./cmd/worker_cosmos
 
 .PHONY: build-terra
 build-terra:
-	go build -o worker_terra ./cmd/worker_terra
+	go build -o worker_terra_bin ./cmd/worker_terra
 
 .PHONY: build-coda
 build-coda:
-	go build -o worker_coda ./cmd/worker_coda
+	go build -o worker_coda_bin ./cmd/worker_coda
 
 .PHONY: build-artificial
 build-artificial:

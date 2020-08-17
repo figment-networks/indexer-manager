@@ -84,7 +84,6 @@ func main() {
 	hubbleHTTPTransport.AttachToHandler(mux)
 
 	attachChecks(managerStore, mux)
-
 	attachConnectionManager(connManager, mux)
 
 	s := &http.Server{

@@ -19,14 +19,14 @@ ENV GOOS=linux
 RUN \
   GO_VERSION=$(go version | awk {'print $3'}) \
   GIT_COMMIT=$(git rev-parse HEAD) \
-  make build-coda
+  make build-cosmos
 
 # ------------------------------------------------------------------------------
 # Target Image
 # ------------------------------------------------------------------------------
 FROM alpine:3.10 AS release
 
-WORKDIR /app/coda
-COPY --from=build /go/src/github.com/figment-networks/cosmos-indexer/worker_coda_bin /app/coda/worker
+WORKDIR /app/cosmos
+COPY --from=build /go/src/github.com/figment-networks/cosmos-indexer/worker_cosmos_bin /app/cosmos/worker
 RUN chmod a+x ./worker
 CMD ["./worker"]

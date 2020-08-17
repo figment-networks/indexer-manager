@@ -10,7 +10,6 @@ import (
 	"github.com/figment-networks/cosmos-indexer/manager/transport/grpc/indexer"
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/keepalive"
 )
 
 type ConnectGRPCRunner interface {
@@ -47,14 +46,14 @@ func (c *Client) Run(ctx context.Context, stream *structs.StreamAccess) {
 	for _, address := range stream.WorkerInfo.ConnectionInfo.Addresses {
 		if address.Address != "" {
 			connectedTo = address.Address
-			conn, dialErr = grpc.Dial(address.Address, grpc.WithInsecure(), grpc.WithKeepaliveParams(keepalive.ClientParameters{
+			conn, dialErr = grpc.Dial(address.Address, grpc.WithInsecure()) /*, grpc.WithKeepaliveParams(keepalive.ClientParameters{
 				PermitWithoutStream: false,
-			}))
+			}))*/
 		} else {
 			connectedTo = address.IP.String()
-			conn, dialErr = grpc.Dial(address.IP.String(), grpc.WithInsecure(), grpc.WithKeepaliveParams(keepalive.ClientParameters{
+			conn, dialErr = grpc.Dial(address.IP.String(), grpc.WithInsecure()) /*, grpc.WithKeepaliveParams(keepalive.ClientParameters{
 				PermitWithoutStream: false,
-			}))
+			})) */
 		}
 
 		if dialErr != nil {
