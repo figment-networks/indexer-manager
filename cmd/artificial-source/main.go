@@ -4,12 +4,14 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"flag"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
 
+	"github.com/figment-networks/cosmos-indexer/cmd/artificial-source/config"
 	"github.com/figment-networks/cosmos-indexer/worker/api/coda"
 )
 
@@ -26,6 +28,12 @@ func main() {
 
 	cm := NewCodaMem()
 
+	// Initialize configuration
+	cfg, err := initConfig("")
+	if err != nil {
+		panic(fmt.Errorf("error initializing config [ERR: %+v]", err))
+	}
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/coda", cm.ServeCoda)
 
@@ -33,13 +41,13 @@ func main() {
 
 	//	log.Printf("%+v", cm.Store)
 	s := &http.Server{
-		Addr:    address,
+		Addr:    "0.0.0.0:" + cfg.Port,
 		Handler: mux,
 		TLSConfig: &tls.Config{
 			InsecureSkipVerify: true,
 		},
 	}
-	log.Printf("Running server on %s", address)
+	log.Printf("Running server on %s", "0.0.0.0:"+cfg.Port)
 	log.Fatal(s.ListenAndServe())
 }
 
@@ -77,9 +85,9 @@ func (cm *CodaMem) ServeCoda(w http.ResponseWriter, r *http.Request) {
 
 	a := map[string]interface{}{}
 	dec := json.NewDecoder(r.Body)
-
 	dec.Decode(&a)
 
+	log.Printf("New Serve request ")
 	//hash := "D2rcXVQa7H1zPu2qZoGsnxLiHcZJdutSBVf6K57QdausbBeF76FhVCWc2VWpQw3ccy8vqREVaQvBsbPRrBL8NKVzh9RAxRe232EZw7x16YNaHuzh1WbbmnrjvGpJsxWZVTyxmuqhwfRXSAWLnWeMBJBf8F1ck3Jteo5eNDUHp7viMXonxGUceQHkeRNokAMYSpBkGZ617ngQgQk7VqP5CmQ6277mdwp4dKsKv7W7S662q6StF7eguFMbQXEtCogxH5KGXZ86ZfKrjFEE33jpZf7XEdNfvbpWg4KHKC8oDF2e39L5Nh8RFTwXB96eAABPmX"
 
 	reg := regexp.MustCompile(`stateHash:\s+"([^"]+)"`)
@@ -121,4 +129,19 @@ func (cm *CodaMem) ServeCoda(w http.ResponseWriter, r *http.Request) {
 		}*/
 
 	w.Write([]byte("}"))
+}
+
+func initConfig(path string) (*config.Config, error) {
+	cfg := &config.Config{}
+	if path != "" {
+		if err := config.FromFile(path, cfg); err != nil {
+			return nil, err
+		}
+	}
+
+	if err := config.FromEnv(cfg); err != nil {
+		return nil, err
+	}
+
+	return cfg, nil
 }

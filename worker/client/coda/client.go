@@ -161,7 +161,6 @@ SEND_LOOP:
 }
 
 func (ic *IndexerClient) GetBlock(ctx context.Context, client *api.Client, tr cStructs.TaskRequest) (*api.Block, error) {
-
 	hr := &structs.HeightHash{}
 	err := json.Unmarshal(tr.Payload, hr)
 	if err != nil {

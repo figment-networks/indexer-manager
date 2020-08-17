@@ -170,15 +170,14 @@ func Recv(id uuid.UUID, stream indexer.IndexerService_TaskRPCClient, internalStr
 			return
 		}
 
-		//log.Printf("Receiver TaskResponse %+v", in)
-
 		id, err := uuid.Parse(in.Id)
 		if err != nil {
 			log.Printf("Cannot parseid %+v %s", in, err.Error())
+			continue
 		}
 
 		if in.Type == "PONG" {
-			log.Printf("Received PONG %+v ", in)
+			//	log.Printf("Received PONG %+v ", in)
 			select { // (lukanus): Never stuck
 			case pingCh <- structs.TaskResponse{ID: id, Type: in.Type}:
 			default:
@@ -202,7 +201,7 @@ func Recv(id uuid.UUID, stream indexer.IndexerService_TaskRPCClient, internalStr
 			}
 		}
 
-		if err = internalStream.Recv(resp); err != nil { // (lukanus): Cannot pass to output
+		if err = internalStream.Recv(resp); err != nil { // (lukanus): This error means it Cannot pass data to output
 			log.Printf("Error in Recv %s %+v", id.String(), err.Error())
 		}
 	}

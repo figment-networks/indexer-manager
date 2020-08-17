@@ -19,16 +19,14 @@ ENV GOOS=linux
 RUN \
   GO_VERSION=$(go version | awk {'print $3'}) \
   GIT_COMMIT=$(git rev-parse HEAD) \
-  make build-manager-migration
+  make build-manager
 
 # ------------------------------------------------------------------------------
 # Target Image
 # ------------------------------------------------------------------------------
 FROM alpine:3.10 AS release
 
-WORKDIR /app/migration
-
-COPY --from=build /go/src/github.com/figment-networks/cosmos-indexer/migration /app/migration/migration
-COPY --from=build /go/src/github.com/figment-networks/cosmos-indexer/cmd/manager-migration/migrations/ /app/migration/migrations/
-RUN chmod a+x ./migration
-CMD ["./migration"]
+WORKDIR /app/manager
+COPY --from=build /go/src/github.com/figment-networks/cosmos-indexer/manager_bin /app/manager/manager
+RUN chmod a+x ./manager
+CMD ["./manager"]

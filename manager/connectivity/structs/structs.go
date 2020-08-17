@@ -27,8 +27,6 @@ const (
 
 type ConnTransport interface {
 	Run(ctx context.Context, stream *StreamAccess)
-	//Run(ctx context.Context, id string, wc structs.WorkerConnection, stream *structs.StreamAccess, controlChan chan structs.ClientControl)
-	//Run(ctx context.Context, id string, wc structs.WorkerConnection, stream *structs.StreamAccess, removeWorkerCh chan<- string)
 	Type() string
 }
 
@@ -130,12 +128,6 @@ func (aw *Await) Send(tr *TaskResponse) (bool, error) {
 	}
 
 	aw.Resp <- tr
-	//	select {
-	//	case aw.Resp <- tr:
-	//log.Printf("Successfully sent")
-	//	default:
-	//		log.Printf("STREAM ERROR")
-	//	}
 
 	if len(aw.Uids) == aw.ReceivedFinals {
 		log.Printf("Received All %s ", time.Now().Sub(aw.Created).String())
@@ -214,7 +206,6 @@ func (sa *StreamAccess) Run() error {
 		return errors.New("Already Reconnecting")
 	}
 
-	log.Println("Running  Stream Access")
 	sa.State = StreamReconnecting
 	sa.mapLock.Unlock()
 
@@ -276,7 +267,6 @@ func (sa *StreamAccess) Req(tr TaskRequest, aw *Await) error {
 	sa.reqLock.RLock()
 	defer sa.reqLock.RUnlock()
 
-	log.Println("Req State: ", sa.State)
 	if sa.State != StreamOnline {
 		return ErrStreamNotOnline
 	}
@@ -285,7 +275,6 @@ func (sa *StreamAccess) Req(tr TaskRequest, aw *Await) error {
 	sa.ResponseMap[tr.ID] = aw
 	sa.mapLock.Unlock()
 
-	log.Println("Requesting in ", sa.State)
 	sa.RequestListener <- tr
 
 	return nil

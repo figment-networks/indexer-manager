@@ -80,10 +80,10 @@ func (m *Manager) Register(id, kind string, connInfo structs.WorkerConnection) e
 					for _, newAddr := range connInfo.Addresses {
 						if (newAddr.Address != "" && newAddr.Address == oldAddr.Address) ||
 							(!newAddr.IP.IsUnspecified() && newAddr.IP.Equal(oldAddr.IP)) {
+							// Same Address!
+							log.Printf("Node under the same address previously registered. Removing.")
+							m.Unregister(work.NodeSelfID, work.Type, work.ConnectionInfo.Version)
 						}
-						// Same Address!
-						log.Printf("Node under the same address previously registered. Removing.")
-						m.Unregister(work.NodeSelfID, work.Type, work.ConnectionInfo.Version)
 					}
 				}
 			}
@@ -161,8 +161,6 @@ func (m *Manager) Register(id, kind string, connInfo structs.WorkerConnection) e
 		}
 		m.networkLock.Unlock()
 		return g.AddWorker(id, sa)
-
-		//	return errors.New("Cannot Reconnect")
 	}
 
 	return g.BringOnline(id)
@@ -260,7 +258,6 @@ func (m *Manager) Send(trs []structs.TaskRequest) (*structs.Await, error) {
 			t.ID = uuids[requestNumber]
 			failedID, err = w.SendNext(t, resp)
 
-			log.Println("a ", failedID, err)
 			if failedID == "" && err == nil {
 				break RETRY_LOOP
 			}
@@ -295,7 +292,7 @@ func (m *Manager) Send(trs []structs.TaskRequest) (*structs.Await, error) {
 			}
 
 			if err != nil {
-				log.Println("Retry failed : ", failedID, err)
+				log.Println("Retry failed: ", failedID, err)
 			}
 		}
 		if err != nil {

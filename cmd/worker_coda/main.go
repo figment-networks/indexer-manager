@@ -21,11 +21,9 @@ import (
 )
 
 type flags struct {
-	configPath          string
-	runMigration        bool
-	showVersion         bool
-	batchSize           int64
-	heightRangeInterval int64
+	configPath   string
+	runMigration bool
+	showVersion  bool
 }
 
 var configFlags = flags{}
@@ -33,8 +31,6 @@ var configFlags = flags{}
 func init() {
 	flag.BoolVar(&configFlags.showVersion, "v", false, "Show application version")
 	flag.StringVar(&configFlags.configPath, "config", "", "Path to config")
-	flag.Int64Var(&configFlags.batchSize, "batch_size", 0, "pipeline batch size")
-	flag.Int64Var(&configFlags.heightRangeInterval, "range_int", 0, "pipeline batch size")
 	flag.Parse()
 }
 
@@ -60,7 +56,12 @@ func main() {
 
 	managers := strings.Split(cfg.Managers, ",")
 
-	c := connectivity.NewWorkerConnections(workerRunID.String(), cfg.Address, "coda", "0.0.1")
+	log.Printf("Hostname is %s", cfg.Hostname)
+	hostname := cfg.Hostname
+	if hostname == "" {
+		hostname = cfg.Address
+	}
+	c := connectivity.NewWorkerConnections(workerRunID.String(), hostname+":"+cfg.Port, "coda", "0.0.1")
 
 	for _, m := range managers {
 		c.AddManager(m + "/client_ping")
@@ -73,11 +74,10 @@ func main() {
 	worker := grpcIndexer.NewIndexerServer(workerClient)
 	grpcProtoIndexer.RegisterIndexerServiceServer(grpcServer, worker)
 
-	lis, err := net.Listen("tcp", cfg.Address)
+	lis, err := net.Listen("tcp", "0.0.0.0:"+cfg.Port)
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
-	log.Printf("Listening on %s", cfg.Address)
 	// (lukanus): blocking call on grpc server
 	grpcServer.Serve(lis)
 }

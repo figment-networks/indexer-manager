@@ -3,7 +3,7 @@ version: "3.7"
 networks:
   internal:
     name: internal
-    driver: bridge
+    driver: overlay
 
 volumes:
   postgresdatabase:
@@ -29,6 +29,60 @@ services:
     networks:
       - internal
     environment:
-      DATABASE_URL: postgres://cosmos:cosmos@postgresdatabase/cosmos?sslmode=disable
+      DATABASE_URL: postgres://cosmos:cosmos@cosmos-indexer_postgresdatabase_1/cosmos?sslmode=disable
     depends_on:
       - postgresdatabase
+
+  managerone:
+    build:
+      context: .
+      dockerfile: ./Dockerfile.manager
+    networks:
+      - internal
+    ports:
+      - "8085:8085"
+    environment:
+      ADDRESS: 0.0.0.0:8085
+      DATABASE_URL: postgres://cosmos:cosmos@cosmos-indexer_postgresdatabase_1/cosmos?sslmode=disable
+    depends_on:
+      - postgresdatabase
+      - migrate
+
+  managertwo:
+    build:
+      context: .
+      dockerfile: ./Dockerfile.manager
+    ports:
+      - "8086:8085"
+    networks:
+      - internal
+    environment:
+      ADDRESS: 0.0.0.0:8085
+      DATABASE_URL: postgres://cosmos:cosmos@cosmos-indexer_postgresdatabase_1/cosmos?sslmode=disable
+    depends_on:
+      - postgresdatabase
+      - migrate
+
+  artificialsource:
+    build:
+      context: .
+      dockerfile: ./Dockerfile.artificial_source
+    networks:
+      - internal
+    depends_on:
+      - postgresdatabase
+      - migrate
+
+  workercoda:
+    build:
+      context: .
+      dockerfile: ./Dockerfile.worker.coda
+    networks:
+      - internal
+    environment:
+      ADDRESS: cosmos-indexer_workercoda_1:3000
+      MANAGERS: cosmos-indexer_managerone_1:8085,cosmos-indexer_managertwo_1:8085
+      CODA_ENDPOINT: http://cosmos-indexer_artificialsource_1:3000/coda
+    depends_on:
+      - postgresdatabase
+      - migrate

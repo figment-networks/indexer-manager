@@ -219,6 +219,7 @@ func (d *Driver) GetTransactions(ctx context.Context, tsearch params.Transaction
 			}
 		}
 	*/
+
 	if len(tsearch.Memo) > 2 {
 		parts = append(parts, "memo ILIKE $"+strconv.Itoa(i))
 		data = append(data, fmt.Sprintf("%%%s%%", tsearch.Memo))

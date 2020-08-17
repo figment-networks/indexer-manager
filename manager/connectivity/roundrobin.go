@@ -165,7 +165,6 @@ func (rrw *RoundRobinWorkers) BringOnline(id string) error {
 	}
 	removeFromChannel(rrw.next, id)
 
-	log.Println("Bringing Online")
 	select {
 	case rrw.next <- t:
 	default:
@@ -191,8 +190,6 @@ func (rrw *RoundRobinWorkers) SendToWoker(id string, tr structs.TaskRequest, aw 
 }
 
 func (rrw *RoundRobinWorkers) Reconnect(id string) error {
-
-	log.Println("RoundRobinWorkers Reconnecting  ")
 	rrw.lock.RLock()
 	t, ok := rrw.trws[id]
 	rrw.lock.RUnlock()
@@ -200,7 +197,6 @@ func (rrw *RoundRobinWorkers) Reconnect(id string) error {
 		log.Println("RoundRobinWorkers Reconnecting NO SUCH WORKER  ")
 		return errors.New("No Such Worker")
 	}
-	log.Println("RoundRobinWorkers Reconnecting ")
 	return t.stream.Reconnect()
 }
 
@@ -216,7 +212,6 @@ func (rrw *RoundRobinWorkers) Close(id string) error {
 	removeFromChannel(rrw.next, id)
 	t.stream.State = structs.StreamOffline
 
-	log.Println("RoundRobinWorkers Closing ")
 	return t.stream.Close()
 }
 
