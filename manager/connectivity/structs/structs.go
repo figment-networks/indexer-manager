@@ -150,6 +150,9 @@ func (aw *Await) Close() {
 	//	log.Println("CLOSING AWAIT")
 	aw.Lock()
 	defer aw.Unlock()
+	if aw.State != StreamOffline {
+		return
+	}
 	aw.State = StreamOffline
 
 DRAIN:
@@ -334,7 +337,12 @@ func (sa *StreamAccess) Close() error {
 	sa.CancelConnection()
 
 	sa.WorkerInfo.State = StreamOffline
-	//close(sa.RequestListener)
+
+	for id, aw := range sa.ResponseMap {
+		// (lukanus): Close all awaits, they won't get full response anyway.
+		aw.Close()
+		delete(sa.ResponseMap, id)
+	}
 
 	return nil
 }

@@ -20,9 +20,15 @@ type WorkersPool interface {
 	BringOnline(id string) error
 	Reconnect(id string) error
 	GetWorker(id string) (twi TaskWorkerInfo, ok bool)
-	GetWorkers() []TaskWorkerInfo
+	GetWorkers() TaskWorkerRecordInfo
 
 	SendToWoker(id string, tr structs.TaskRequest, aw *structs.Await) error
+}
+
+type WorkerNetworkStatic struct {
+	Workers map[string]WorkerInfoStatic `json:"workers"`
+	All     int                         `json:"all"`
+	Active  int                         `json:"active"`
 }
 
 type WorkerInfoStatic struct {
@@ -58,15 +64,31 @@ func NewManager() *Manager {
 
 func (m *Manager) Register(id, kind string, connInfo structs.WorkerConnection) error {
 	m.networkLock.Lock()
-
 	n, ok := m.networks[kind]
 	if !ok {
 		n = &Network{workers: make(map[string]*structs.WorkerInfo)}
 		m.networks[kind] = n
 	}
+	m.networkLock.Unlock()
 
 	w, ok := n.workers[id]
 	if !ok {
+		// (lukanus): check if the node is not previously registred under old selfID
+		for _, work := range n.workers {
+			if work.Type == kind {
+				for _, oldAddr := range work.ConnectionInfo.Addresses {
+					for _, newAddr := range connInfo.Addresses {
+						if (newAddr.Address != "" && newAddr.Address == oldAddr.Address) ||
+							(!newAddr.IP.IsUnspecified() && newAddr.IP.Equal(oldAddr.IP)) {
+						}
+						// Same Address!
+						log.Printf("Node under the same address previously registered. Removing.")
+						m.Unregister(work.NodeSelfID, work.Type, work.ConnectionInfo.Version)
+					}
+				}
+			}
+		}
+
 		w = &structs.WorkerInfo{
 			NodeSelfID:     id,
 			Type:           kind,
@@ -75,7 +97,6 @@ func (m *Manager) Register(id, kind string, connInfo structs.WorkerConnection) e
 		}
 		n.workers[id] = w
 	}
-	m.networkLock.Unlock()
 
 	w.LastCheck = time.Now()
 
@@ -139,39 +160,49 @@ func (m *Manager) Register(id, kind string, connInfo structs.WorkerConnection) e
 			w.State = structs.StreamOnline
 		}
 		m.networkLock.Unlock()
-
 		return g.AddWorker(id, sa)
 
 		//	return errors.New("Cannot Reconnect")
-
 	}
 
 	return g.BringOnline(id)
 }
 
-func (m *Manager) GetAllWorkers() map[string]map[string]WorkerInfoStatic {
+func (m *Manager) GetAllWorkers() map[string]WorkerNetworkStatic {
 	m.networkLock.RLock()
 	defer m.networkLock.RUnlock()
 
 	// (lukanus): unlink pointers
-	winfos := make(map[string]map[string]WorkerInfoStatic)
+	winfos := make(map[string]WorkerNetworkStatic)
 	for k, netw := range m.networks {
-		wif := make(map[string]WorkerInfoStatic)
+		wif := WorkerNetworkStatic{
+			Workers: make(map[string]WorkerInfoStatic),
+		}
 		for kv, w := range netw.workers {
 			wis := WorkerInfoStatic{WorkerInfo: *w}
 			m.nextWorkersLock.RLock()
 			netWorker, ok := m.nextWorkers[structs.WorkerCompositeKey{Network: k, Version: wis.ConnectionInfo.Version}]
 			if ok {
 				wis.TaskWorkerInfo, ok = netWorker.GetWorker(kv)
+				allWorkers := netWorker.GetWorkers()
+				wif.Active = allWorkers.Active
+				wif.All = allWorkers.All
 			}
 			m.nextWorkersLock.RUnlock()
-
-			wif[kv] = wis
+			wif.Workers[kv] = wis
 		}
+
 		winfos[k] = wif
 	}
 
 	return winfos
+}
+
+func (m *Manager) Unregister(id, kind, version string) error {
+	m.nextWorkersLock.Lock()
+	defer m.nextWorkersLock.Unlock()
+	nw := m.nextWorkers[structs.WorkerCompositeKey{kind, version}]
+	return nw.Close(id)
 }
 
 func (m *Manager) GetWorkers(kind string) []structs.WorkerInfo {
@@ -249,7 +280,7 @@ func (m *Manager) Send(trs []structs.TaskRequest) (*structs.Await, error) {
 					err = w.Reconnect(failedID)
 				}
 				if err == nil {
-					log.Printf("PINGED %s SUCCESSFULLY  %s", failedID, duration.String)
+					log.Printf("PINGED %s SUCCESSFULLY  %s", failedID, duration.String())
 					err = w.BringOnline(failedID)
 				}
 

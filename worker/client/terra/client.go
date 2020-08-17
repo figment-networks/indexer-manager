@@ -19,32 +19,39 @@ import (
 const page = 100
 
 type IndexerClient struct {
-	client *api.Client
+	terraAddress string
 
 	streams map[uuid.UUID]*cStructs.StreamAccess
 	sLock   sync.Mutex
 }
 
-func NewIndexerClient(ctx context.Context, client *api.Client) *IndexerClient {
-	return &IndexerClient{client: client, streams: make(map[uuid.UUID]*cStructs.StreamAccess)}
+func NewIndexerClient(ctx context.Context, terraAddress string) *IndexerClient {
+	return &IndexerClient{terraAddress: terraAddress, streams: make(map[uuid.UUID]*cStructs.StreamAccess)}
+}
+
+func (ic *IndexerClient) CloseStream(ctx context.Context, streamID uuid.UUID) error {
+	ic.sLock.Lock()
+	delete(ic.streams, streamID)
+	ic.sLock.Unlock()
+	return nil
 }
 
 func (ic *IndexerClient) RegisterStream(ctx context.Context, stream *cStructs.StreamAccess) error {
 	log.Println("REGISTER STREAM")
 	ic.sLock.Lock()
 	ic.streams[stream.StreamID] = stream
-
-	go sendResp(ctx, ic.client.Out(), stream)
+	client := api.NewClient(ic.terraAddress, "", nil)
+	go sendResp(ctx, client, stream)
 	// Limit workers not to create new goroutines over and over again
 	for i := 0; i < 20; i++ {
-		go ic.Run(ctx, stream)
+		go ic.Run(ctx, client, stream)
 	}
 
 	ic.sLock.Unlock()
 	return nil
 }
 
-func (ic *IndexerClient) Run(ctx context.Context, stream *cStructs.StreamAccess) {
+func (ic *IndexerClient) Run(ctx context.Context, client *api.Client, stream *cStructs.StreamAccess) {
 
 	for {
 		select {
@@ -58,7 +65,7 @@ func (ic *IndexerClient) Run(ctx context.Context, stream *cStructs.StreamAccess)
 		case taskRequest := <-stream.RequestListener:
 			switch taskRequest.Type {
 			case "GetTransactions":
-				ic.GetTransactions(ctx, taskRequest, stream)
+				ic.GetTransactions(ctx, taskRequest, stream, client)
 			default:
 				stream.Send(cStructs.TaskResponse{
 					Id:    taskRequest.Id,
@@ -70,7 +77,7 @@ func (ic *IndexerClient) Run(ctx context.Context, stream *cStructs.StreamAccess)
 	}
 }
 
-func (ic *IndexerClient) GetTransactions(ctx context.Context, tr cStructs.TaskRequest, stream *cStructs.StreamAccess) {
+func (ic *IndexerClient) GetTransactions(ctx context.Context, tr cStructs.TaskRequest, stream *cStructs.StreamAccess, client *api.Client) {
 	log.Printf("Received: %+v ", tr)
 	now := time.Now()
 	hr := &structs.HeightRange{}
@@ -88,7 +95,7 @@ func (ic *IndexerClient) GetTransactions(ctx context.Context, tr cStructs.TaskRe
 
 	uniqueRID, _ := uuid.NewRandom()
 	sCtx, cancel := context.WithCancel(ctx)
-	count, err := ic.client.SearchTx(sCtx, tr.Id, uniqueRID, *hr, 1, page, fin)
+	count, err := client.SearchTx(sCtx, tr.Id, uniqueRID, *hr, 1, page, fin)
 
 	if err != nil {
 		stream.Send(cStructs.TaskResponse{
@@ -102,7 +109,7 @@ func (ic *IndexerClient) GetTransactions(ctx context.Context, tr cStructs.TaskRe
 	toBeDone := int(math.Ceil(float64(count-page) / page))
 	if count > page {
 		for i := 2; i < toBeDone+2; i++ {
-			go ic.client.SearchTx(sCtx, tr.Id, uniqueRID, structs.HeightRange{
+			go client.SearchTx(sCtx, tr.Id, uniqueRID, structs.HeightRange{
 				StartHeight: hr.StartHeight,
 				EndHeight:   hr.EndHeight,
 			}, i, page, fin)
@@ -131,13 +138,14 @@ type TData struct {
 	All   uint64
 }
 
-func sendResp(ctx context.Context, resp chan cStructs.OutResp, stream *cStructs.StreamAccess) {
+func sendResp(ctx context.Context, client *api.Client, stream *cStructs.StreamAccess) {
 
 	opened := make(map[[2]uuid.UUID]*TData)
 
 	b := &bytes.Buffer{}
 	enc := json.NewEncoder(b)
 
+	resp := client.Out()
 SEND_LOOP:
 	for {
 		select {
@@ -193,39 +201,3 @@ SEND_LOOP:
 		}
 	}
 }
-
-/*
-func (ic *IndexerClient) GetBlock(ctx context.Context, tr cStructs.TaskRequest, stream *cStructs.StreamAccess, resp chan cStructs.OutResp) {
-
-	log.Printf("Received Block Req: %+v ", tr)
-	hr := &structs.HeightHash{}
-	err := json.Unmarshal(tr.Payload, hr)
-	if err != nil {
-		stream.Send(cStructs.TaskResponse{
-			Id:    tr.Id,
-			Error: cStructs.TaskError{Msg: "Cannot unmarshal payment"},
-			Final: true,
-		})
-		return
-	}
-
-	uniqueRID, _ := uuid.NewRandom()
-	sCtx, cancel := context.WithTimeout(ctx, time.Second*2)
-	defer cancel()
-	block, err := ic.client.GetBlock(sCtx, *hr)
-	if err != nil {
-		stream.Send(cStructs.TaskResponse{
-			Id:    tr.Id,
-			Error: cStructs.TaskError{Msg: "Error getting block data " + err.Error()},
-			Final: true,
-		})
-		return
-	}
-	resp <- cStructs.OutResp{
-		ID:      tr.Id,
-		RunID:   uniqueRID,
-		Type:    "Block",
-		Payload: block,
-		All:     1,
-	}
-}*/

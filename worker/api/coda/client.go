@@ -42,15 +42,8 @@ func NewClient(url string, c *http.Client) *Client {
 	cli := &Client{
 		endpoint: url, //tendermint rpc url
 		client:   c,
-		//	inTx:     make(chan TxResponse, 20),
-		out: make(chan cStruct.OutResp, 20),
+		out:      make(chan cStruct.OutResp, 20),
 	}
-	//	ctx := context.Background()
-	/*
-		for i := 0; i < 5; i++ {
-			go rawToTransaction(ctx, cli, cli.inTx, cli.out)
-		}
-	*/
 	return cli
 }
 

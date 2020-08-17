@@ -13,7 +13,6 @@ import (
 	"google.golang.org/grpc/keepalive"
 
 	"github.com/figment-networks/cosmos-indexer/cmd/worker_cosmos/config"
-	"github.com/figment-networks/cosmos-indexer/worker/api/cosmos"
 	cli "github.com/figment-networks/cosmos-indexer/worker/client/cosmos"
 	"github.com/figment-networks/cosmos-indexer/worker/connectivity"
 	grpcIndexer "github.com/figment-networks/cosmos-indexer/worker/transport/grpc"
@@ -59,8 +58,7 @@ func main() {
 
 	go c.Run(context.Background(), time.Second*10)
 
-	cosmosClient := cosmos.NewClient(cfg.TendermintRPCAddr, cfg.DatahubKey, nil)
-	workerClient := cli.NewIndexerClient(context.Background(), cosmosClient)
+	workerClient := cli.NewIndexerClient(context.Background(), cfg.TendermintRPCAddr, cfg.DatahubKey)
 
 	worker := grpcIndexer.NewIndexerServer(workerClient)
 	grpcProtoIndexer.RegisterIndexerServiceServer(grpcServer, worker)

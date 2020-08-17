@@ -11,6 +11,7 @@ import (
 	"github.com/figment-networks/cosmos-indexer/structs"
 	"github.com/google/uuid"
 
+	"github.com/figment-networks/cosmos-indexer/worker/api/coda"
 	api "github.com/figment-networks/cosmos-indexer/worker/api/coda"
 	cStructs "github.com/figment-networks/cosmos-indexer/worker/connectivity/structs"
 )
@@ -18,46 +19,51 @@ import (
 const page = 100
 
 type IndexerClient struct {
-	client *api.Client
-
-	streams map[uuid.UUID]*cStructs.StreamAccess
-	sLock   sync.Mutex
+	streams      map[uuid.UUID]*cStructs.StreamAccess
+	sLock        sync.Mutex
+	codaEndpoint string
 }
 
-func NewIndexerClient(ctx context.Context, client *api.Client) *IndexerClient {
-	return &IndexerClient{client: client, streams: make(map[uuid.UUID]*cStructs.StreamAccess)}
+func NewIndexerClient(ctx context.Context, codaEndpoint string) *IndexerClient {
+	return &IndexerClient{streams: make(map[uuid.UUID]*cStructs.StreamAccess), codaEndpoint: codaEndpoint}
 }
 
-func (ic *IndexerClient) RegisterStream(ctx context.Context, stream *cStructs.StreamAccess) error {
-	log.Println("REGISTER STREAM")
+func (ic *IndexerClient) CloseStream(ctx context.Context, streamID uuid.UUID) error {
 	ic.sLock.Lock()
-	ic.streams[stream.StreamID] = stream
-
-	go sendResp(ctx, ic.client.Out(), stream)
-	// Limit workers not to create new goroutines over and over again
-	for i := 0; i < 20; i++ {
-		go ic.Run(ctx, stream)
-	}
-
+	delete(ic.streams, streamID)
 	ic.sLock.Unlock()
 	return nil
 }
 
-func (ic *IndexerClient) Run(ctx context.Context, stream *cStructs.StreamAccess) {
+func (ic *IndexerClient) RegisterStream(ctx context.Context, stream *cStructs.StreamAccess) error {
+	log.Println("REGISTER STREAM ", stream.StreamID.String())
+	ic.sLock.Lock()
+	defer ic.sLock.Unlock()
+	ic.streams[stream.StreamID] = stream
+
+	codaClient := coda.NewClient(ic.codaEndpoint, nil)
+
+	go sendResp(ctx, codaClient, stream)
+	// Limit workers not to create new goroutines over and over again
+	for i := 0; i < 20; i++ {
+		go ic.Run(ctx, codaClient, stream)
+	}
+
+	return nil
+}
+
+func (ic *IndexerClient) Run(ctx context.Context, client *api.Client, stream *cStructs.StreamAccess) {
 
 	for {
 		select {
 		case <-ctx.Done():
-			ic.sLock.Lock()
-			delete(ic.streams, stream.StreamID)
-			ic.sLock.Unlock()
 			return
 		case <-stream.Finish:
 			return
 		case taskRequest := <-stream.RequestListener:
 			switch taskRequest.Type {
 			case "GetTransactions":
-				block, err := ic.GetBlock(ctx, taskRequest)
+				block, err := ic.GetBlock(ctx, client, taskRequest)
 				if err != nil {
 					stream.Send(cStructs.TaskResponse{
 						Id:    taskRequest.Id,
@@ -67,7 +73,7 @@ func (ic *IndexerClient) Run(ctx context.Context, stream *cStructs.StreamAccess)
 					continue
 				}
 
-				if err := api.MapTransactions(taskRequest.Id, block, ic.client.Out()); err != nil {
+				if err := api.MapTransactions(taskRequest.Id, block, client.Out()); err != nil {
 					stream.Send(cStructs.TaskResponse{
 						Id:    taskRequest.Id,
 						Error: cStructs.TaskError{Msg: "Error getting transactions: " + err.Error()},
@@ -91,13 +97,14 @@ type TData struct {
 	All   uint64
 }
 
-func sendResp(ctx context.Context, resp chan cStructs.OutResp, stream *cStructs.StreamAccess) {
+func sendResp(ctx context.Context, client *api.Client, stream *cStructs.StreamAccess) {
 
 	opened := make(map[[2]uuid.UUID]*TData)
 
 	b := &bytes.Buffer{}
 	enc := json.NewEncoder(b)
 
+	resp := client.Out()
 SEND_LOOP:
 	for {
 		select {
@@ -153,7 +160,7 @@ SEND_LOOP:
 	}
 }
 
-func (ic *IndexerClient) GetBlock(ctx context.Context, tr cStructs.TaskRequest) (*api.Block, error) {
+func (ic *IndexerClient) GetBlock(ctx context.Context, client *api.Client, tr cStructs.TaskRequest) (*api.Block, error) {
 
 	hr := &structs.HeightHash{}
 	err := json.Unmarshal(tr.Payload, hr)
@@ -164,5 +171,5 @@ func (ic *IndexerClient) GetBlock(ctx context.Context, tr cStructs.TaskRequest) 
 	log.Printf("Received Block Req: %+v  %+v  ", tr, hr)
 	sCtx, cancel := context.WithTimeout(ctx, time.Second*10)
 	defer cancel()
-	return ic.client.GetBlock(sCtx, hr.Hash)
+	return client.GetBlock(sCtx, hr.Hash)
 }

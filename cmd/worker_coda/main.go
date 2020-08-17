@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -13,7 +14,6 @@ import (
 	"google.golang.org/grpc/keepalive"
 
 	"github.com/figment-networks/cosmos-indexer/cmd/worker_coda/config"
-	"github.com/figment-networks/cosmos-indexer/worker/api/coda"
 	cli "github.com/figment-networks/cosmos-indexer/worker/client/coda"
 	"github.com/figment-networks/cosmos-indexer/worker/connectivity"
 	grpcIndexer "github.com/figment-networks/cosmos-indexer/worker/transport/grpc"
@@ -58,13 +58,17 @@ func main() {
 		log.Fatalf("error generating UUID: %v", err)
 	}
 
+	managers := strings.Split(cfg.Managers, ",")
+
 	c := connectivity.NewWorkerConnections(workerRunID.String(), cfg.Address, "coda", "0.0.1")
-	c.AddManager("localhost:8085/client_ping")
+
+	for _, m := range managers {
+		c.AddManager(m + "/client_ping")
+	}
 
 	go c.Run(context.Background(), time.Second*10)
 
-	codaClient := coda.NewClient(cfg.CodaEndpoint, nil)
-	workerClient := cli.NewIndexerClient(context.Background(), codaClient)
+	workerClient := cli.NewIndexerClient(context.Background(), cfg.CodaEndpoint)
 
 	worker := grpcIndexer.NewIndexerServer(workerClient)
 	grpcProtoIndexer.RegisterIndexerServiceServer(grpcServer, worker)

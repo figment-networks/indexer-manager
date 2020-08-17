@@ -9,9 +9,14 @@ import (
 	"github.com/figment-networks/cosmos-indexer/manager/connectivity/structs"
 	"github.com/figment-networks/cosmos-indexer/manager/transport/grpc/indexer"
 	"github.com/google/uuid"
-	grpc "google.golang.org/grpc"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/keepalive"
 )
+
+type ConnectGRPCRunner interface {
+	Connect(ctx context.Context, stream *structs.StreamAccess) error
+	Run(ctx context.Context, stream *structs.StreamAccess)
+}
 
 type AwaitingPing struct {
 	t    time.Time
@@ -20,7 +25,6 @@ type AwaitingPing struct {
 }
 
 type Client struct {
-	state structs.StreamState
 }
 
 func NewClient() *Client {
@@ -71,8 +75,8 @@ func (c *Client) Run(ctx context.Context, stream *structs.StreamAccess) {
 	gIndexer := indexer.NewIndexerServiceClient(conn)
 	taskStream, err := gIndexer.TaskRPC(ctx, grpc.WaitForReady(true))
 	if err != nil {
-		//log.Errorf(ctx, "Cannot connect to any address given by worker : %+v", wc)
 		log.Printf("Cannot connect to any address given by worker: %s  %+v", id.String(), stream.WorkerInfo)
+		return
 	}
 
 	log.Printf("Sucessfully Dialed %s %s  ", id.String(), connectedTo)
@@ -137,9 +141,6 @@ CONTROLRPC:
 			}
 		}
 
-		//	if stream.RequestListener == nil {
-		//		break CONTROLRPC
-		//	}
 	}
 
 	if taskStream != nil {

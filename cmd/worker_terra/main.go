@@ -13,7 +13,6 @@ import (
 	"google.golang.org/grpc/keepalive"
 
 	"github.com/figment-networks/cosmos-indexer/cmd/worker_terra/config"
-	"github.com/figment-networks/cosmos-indexer/worker/api/terra"
 	cli "github.com/figment-networks/cosmos-indexer/worker/client/terra"
 	"github.com/figment-networks/cosmos-indexer/worker/connectivity"
 	grpcIndexer "github.com/figment-networks/cosmos-indexer/worker/transport/grpc"
@@ -63,8 +62,7 @@ func main() {
 
 	go c.Run(context.Background(), time.Second*10)
 
-	terraClient := terra.NewClient(cfg.TerraRPCAddr, "", nil)
-	workerClient := cli.NewIndexerClient(context.Background(), terraClient)
+	workerClient := cli.NewIndexerClient(context.Background(), cfg.TerraRPCAddr)
 
 	worker := grpcIndexer.NewIndexerServer(workerClient)
 	grpcProtoIndexer.RegisterIndexerServiceServer(grpcServer, worker)

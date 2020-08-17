@@ -70,9 +70,9 @@ func NewStreamAccess() *StreamAccess {
 }
 
 func (sa *StreamAccess) Send(tr TaskResponse) error {
-
 	sa.respLock.RLock()
 	defer sa.respLock.RUnlock()
+
 	if sa.State != StreamOnline {
 		return errors.New("Stream is not Online")
 	}
@@ -140,4 +140,5 @@ type TaskResponse struct {
 
 type IndexerClienter interface {
 	RegisterStream(ctx context.Context, stream *StreamAccess) error
+	CloseStream(ctx context.Context, streamID uuid.UUID) error
 }

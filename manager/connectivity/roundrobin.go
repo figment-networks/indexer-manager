@@ -33,6 +33,12 @@ type TaskWorkerInfoAwait struct {
 	Uids           []uuid.UUID         `json:"expected"`
 }
 
+type TaskWorkerRecordInfo struct {
+	Workers []TaskWorkerInfo `json:"workers"`
+	All     int              `json:"all"`
+	Active  int              `json:"active"`
+}
+
 type TaskWorkerRecord struct {
 	workerID string
 	stream   *structs.StreamAccess
@@ -85,16 +91,19 @@ func (rrw *RoundRobinWorkers) SendNext(tr structs.TaskRequest, aw *structs.Await
 	return "", nil
 }
 
-func (rrw *RoundRobinWorkers) GetWorkers() []TaskWorkerInfo {
+func (rrw *RoundRobinWorkers) GetWorkers() TaskWorkerRecordInfo {
 	rrw.lock.RLock()
 	defer rrw.lock.RUnlock()
 
-	twrs := []TaskWorkerInfo{}
+	twri := TaskWorkerRecordInfo{
+		All:    len(rrw.trws),
+		Active: len(rrw.next),
+	}
 	for _, w := range rrw.trws {
-		twrs = append(twrs, getWorker(w))
+		twri.Workers = append(twri.Workers, getWorker(w))
 	}
 
-	return twrs
+	return twri
 }
 
 func (rrw *RoundRobinWorkers) GetWorker(id string) (twi TaskWorkerInfo, ok bool) {
@@ -132,7 +141,6 @@ func getWorker(w *TaskWorkerRecord) TaskWorkerInfo {
 				twr.ResponseMap[k] = twia
 			}
 		}
-
 	}
 	return twr
 }
@@ -199,29 +207,28 @@ func (rrw *RoundRobinWorkers) Reconnect(id string) error {
 }
 
 func (rrw *RoundRobinWorkers) Close(id string) error {
-	rrw.lock.RLock()
+	rrw.lock.Lock()
+	defer rrw.lock.Unlock()
+
 	t, ok := rrw.trws[id]
-	rrw.lock.RUnlock()
 	if !ok {
 		return errors.New("No Such Worker")
 	}
+
+	removeFromChannel(rrw.next, id)
+	t.stream.State = structs.StreamOffline
 
 	log.Println("RoundRobinWorkers Closing ")
 	return t.stream.Close()
 }
 
-/*
-func (rrw *RoundRobinWorkers) DeleteWorker(id string) error {
-	rrw.lock.Lock()
-	defer rrw.lock.Unlock()
-
-
-	t, ok := rrw.trws[id]
-	if !ok {
-		return nil
+func removeFromChannel(next chan *TaskWorkerRecord, id string) {
+	inCh := len(next)
+	for i := 0; i < inCh; i++ {
+		w := <-next
+		if w.workerID != id {
+			return
+		}
+		next <- w
 	}
-	t.stream.State = structs.StreamOffline
-
-	return nil
 }
-*/
