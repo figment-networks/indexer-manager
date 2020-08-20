@@ -22,19 +22,11 @@ import (
 	"github.com/figment-networks/cosmos-indexer/manager/store/postgres"
 	grpcTransport "github.com/figment-networks/cosmos-indexer/manager/transport/grpc"
 	httpTransport "github.com/figment-networks/cosmos-indexer/manager/transport/http"
-	/*
-		"github.com/golang-migrate/migrate/v4"
-		"github.com/golang-migrate/migrate/v4/database/postgres"
-		_ "github.com/golang-migrate/migrate/v4/database/postgres"
-		_ "github.com/golang-migrate/migrate/v4/source/file"
-	*/)
+)
 
 type flags struct {
-	configPath          string
-	runMigration        bool
-	showVersion         bool
-	batchSize           int64
-	heightRangeInterval int64
+	configPath  string
+	showVersion bool
 }
 
 var configFlags = flags{}
@@ -42,9 +34,6 @@ var configFlags = flags{}
 func init() {
 	flag.BoolVar(&configFlags.showVersion, "v", false, "Show application version")
 	flag.StringVar(&configFlags.configPath, "config", "", "Path to config")
-	flag.BoolVar(&configFlags.runMigration, "migrate", false, "Command to run")
-	//	flag.Int64Var(&configFlags.batchSize, "batch_size", 0, "pipeline batch size")
-	//	flag.Int64Var(&configFlags.heightRangeInterval, "range_int", 0, "pipeline batch size")
 	flag.Parse()
 }
 

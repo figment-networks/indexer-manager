@@ -20,9 +20,8 @@ import (
 )
 
 type flags struct {
-	configPath   string
-	runMigration bool
-	showVersion  bool
+	configPath  string
+	showVersion bool
 }
 
 var configFlags = flags{}

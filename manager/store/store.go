@@ -38,7 +38,6 @@ type Store struct {
 	driver DBDriver
 }
 
-//func New(conn *sql.Conn, driver DBDriver) *Store {
 func New(driver DBDriver) *Store {
 	return &Store{driver: driver}
 }

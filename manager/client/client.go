@@ -130,7 +130,6 @@ WAIT_FOR_ALL_TRANSACTIONS:
 		case <-ctx.Done():
 			return nil, errors.New("Request timed out")
 		case response := <-respAwait.Resp:
-
 			if response.Error.Msg != "" {
 				return nil, fmt.Errorf("Error getting response: %s", response.Error.Msg)
 			}

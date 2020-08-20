@@ -20,11 +20,8 @@ import (
 )
 
 type flags struct {
-	configPath          string
-	runMigration        bool
-	showVersion         bool
-	batchSize           int64
-	heightRangeInterval int64
+	configPath  string
+	showVersion bool
 }
 
 var configFlags = flags{}
@@ -32,8 +29,6 @@ var configFlags = flags{}
 func init() {
 	flag.BoolVar(&configFlags.showVersion, "v", false, "Show application version")
 	flag.StringVar(&configFlags.configPath, "config", "", "Path to config")
-	flag.Int64Var(&configFlags.batchSize, "batch_size", 0, "pipeline batch size")
-	flag.Int64Var(&configFlags.heightRangeInterval, "range_int", 0, "pipeline batch size")
 	flag.Parse()
 }
 
