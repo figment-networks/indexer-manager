@@ -28,6 +28,8 @@ type TransactionStore interface {
 	StoreTransactions([]structs.TransactionExtra) error
 
 	GetTransactions(ctx context.Context, tsearch params.TransactionSearch) ([]structs.Transaction, error)
+
+	GetLatestTransaction(ctx context.Context, tx structs.TransactionExtra) (structs.Transaction, error)
 }
 
 type BlockStore interface {
@@ -69,4 +71,8 @@ func (s *Store) StoreBlock(bl structs.Block) error {
 
 func (s *Store) GetTransactions(ctx context.Context, tsearch params.TransactionSearch) ([]structs.Transaction, error) {
 	return s.driver.GetTransactions(ctx, tsearch)
+}
+
+func (s *Store) GetLatestTransaction(ctx context.Context, in structs.TransactionExtra) (out structs.Transaction, err error) {
+	return s.driver.GetLatestTransaction(ctx, in)
 }

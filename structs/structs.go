@@ -11,13 +11,30 @@ import (
 type HeightRange struct {
 	Epoch       string
 	Hash        string
-	StartHeight int64
-	EndHeight   int64
+	StartHeight uint64
+	EndHeight   uint64
 }
 
 type HeightHash struct {
-	Height int64
+	Height uint64
 	Hash   string
+}
+
+type LatestDataRequest struct {
+	Network string `json:"network"`
+	Version string `json:"version"`
+
+	LastHash   string    `json:"lastHash"`
+	LastHeight uint64    `json:"lastheight"`
+	LastTime   time.Time `json:"lastTime"`
+	Nonce      []byte    `json:"nonce"`
+}
+
+type LatestDataResponse struct {
+	LastHash   string    `json:"lastHash"`
+	LastHeight uint64    `json:"lastheight"`
+	LastTime   time.Time `json:"lastTime"`
+	Nonce      []byte    `json:"nonce"`
 }
 
 type TransactionExtra struct {

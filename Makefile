@@ -6,7 +6,7 @@ build-manager:
 
 .PHONY: build-manager-migration
 build-manager-migration:
-	go build -o migration ./cmd/manager-migration
+	go build -o manager_migration_bin ./cmd/manager-migration
 
 .PHONY: build-cosmos
 build-cosmos:
@@ -23,6 +23,14 @@ build-coda:
 .PHONY: build-artificial
 build-artificial:
 	go build -o artificial_source ./cmd/artificial-source
+
+.PHONY: build-scheduler
+build-scheduler:
+	go build -o scheduler_bin ./cmd/scheduler
+
+.PHONY: build-scheduler-migration
+build-scheduler-migration:
+	go build -o scheduler_migration_bin ./cmd/scheduler-migration
 
 .PHONY: build-proto
 build-proto:

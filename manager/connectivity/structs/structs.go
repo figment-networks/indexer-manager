@@ -171,6 +171,8 @@ type StreamAccess struct {
 	ResponseMap     map[uuid.UUID]*Await
 	RequestListener chan TaskRequest
 
+	ManagerID string
+
 	ClientControl chan ClientControl
 
 	CancelConnection context.CancelFunc
@@ -184,12 +186,13 @@ type StreamAccess struct {
 	mapLock sync.RWMutex
 }
 
-func NewStreamAccess(transport ConnTransport, conn *WorkerInfo) *StreamAccess {
+func NewStreamAccess(transport ConnTransport, managerID string, conn *WorkerInfo) *StreamAccess {
 	sID, _ := uuid.NewRandom()
 
 	return &StreamAccess{
-		StreamID: sID,
-		State:    StreamUnknown,
+		StreamID:  sID,
+		State:     StreamUnknown,
+		ManagerID: managerID,
 
 		Transport:     transport,
 		WorkerInfo:    conn,

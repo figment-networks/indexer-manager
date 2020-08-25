@@ -122,8 +122,8 @@ func (hc *HubbleConnector) GetTransactions(w http.ResponseWriter, req *http.Requ
 
 	hr := shared.HeightRange{
 		Epoch:       "",
-		StartHeight: int64(intHeight),
-		EndHeight:   int64(intEndHeight),
+		StartHeight: uint64(intHeight),
+		EndHeight:   uint64(intEndHeight),
 	}
 	if hash != "" {
 		hr.Hash = hash
@@ -196,7 +196,7 @@ func (hc *HubbleConnector) SearchTransactions(w http.ResponseWriter, req *http.R
 		return
 	}
 
-	log.Printf("Returning %d transactions", len(transactions))
+	//	log.Printf("Returning %d transactions", len(transactions))
 	w.Header().Add("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	enc := json.NewEncoder(w)
@@ -231,6 +231,34 @@ func (hc *HubbleConnector) GetAccount(w http.ResponseWriter, req *http.Request) 
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+func (hc *HubbleConnector) ScrapeLatest(w http.ResponseWriter, req *http.Request) {
+
+	ct := req.Header.Get("Content-Type")
+
+	ldReq := &shared.LatestDataRequest{}
+	if strings.Contains(ct, "json") {
+		dec := json.NewDecoder(req.Body)
+		err := dec.Decode(ldReq)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte(err.Error()))
+			return
+		}
+	}
+	ldResp, err := hc.cli.ScrapeLatest(req.Context(), *ldReq)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	}
+
+	w.Header().Add("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	enc := json.NewEncoder(w)
+	enc.Encode(ldResp)
+
+}
+
 func (hc *HubbleConnector) AttachToHandler(mux *http.ServeMux) {
 	mux.HandleFunc("/height", hc.GetCurrentHeight)
 	mux.HandleFunc("/block", hc.GetCurrentBlock)
@@ -245,4 +273,7 @@ func (hc *HubbleConnector) AttachToHandler(mux *http.ServeMux) {
 	mux.HandleFunc("/accounts/", hc.GetAccount)
 
 	mux.HandleFunc("/transactions_insert/", hc.InsertTransactions)
+
+	mux.HandleFunc("/scrape_latest", hc.ScrapeLatest)
+
 }

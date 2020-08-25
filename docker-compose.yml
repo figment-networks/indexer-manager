@@ -4,9 +4,18 @@ networks:
   internal:
     name: internal
     driver: overlay
+    attachable: true
+
+configs:
+  node_rules:
+    file: .monitoring/prometheus/rules/swarm_node.rules.yml
+  task_rules:
+    file: .monitoring/prometheus/rules/swarm_task.rules.yml
 
 volumes:
-  postgresdatabase:
+  postgresdatabase: {}
+  prometheus: {}
+  grafana: {}
 
 services:
   postgresdatabase:
@@ -22,10 +31,10 @@ services:
     volumes:
       - postgresdatabase:/var/lib/postgresql/data/
 
-  migrate:
+  managermigrate:
     build:
       context: .
-      dockerfile: ./Dockerfile.migration
+      dockerfile: ./Dockerfile.manager.migration
     networks:
       - internal
     environment:
@@ -46,7 +55,7 @@ services:
       DATABASE_URL: postgres://cosmos:cosmos@cosmos-indexer_postgresdatabase_1/cosmos?sslmode=disable
     depends_on:
       - postgresdatabase
-      - migrate
+      - managermigrate
 
   managertwo:
     build:
@@ -61,7 +70,7 @@ services:
       DATABASE_URL: postgres://cosmos:cosmos@cosmos-indexer_postgresdatabase_1/cosmos?sslmode=disable
     depends_on:
       - postgresdatabase
-      - migrate
+      - managermigrate
 
   artificialsource:
     build:
@@ -69,9 +78,6 @@ services:
       dockerfile: ./Dockerfile.artificial_source
     networks:
       - internal
-    depends_on:
-      - postgresdatabase
-      - migrate
 
   workercoda:
     build:
@@ -79,26 +85,24 @@ services:
       dockerfile: ./Dockerfile.worker.coda
     networks:
       - internal
+    ports:
+      - "8087:8087"
     environment:
       MANAGERS: cosmos-indexer_managerone_1:8085,cosmos-indexer_managertwo_1:8085
-      CODA_ENDPOINT: http://cosmos-indexer_artificialsource_1:3000/coda
-    depends_on:
-      - postgresdatabase
-      - migrate
+      CODA_ENDPOINT: http://cosmos-indexer_artificialsource_1:3334/coda
 
   workercosmos:
     build:
       context: .
       dockerfile: ./Dockerfile.worker.cosmos
+    ports:
+      - "8088:8087"
     networks:
       - internal
     env_file:
       - .cosmos.env
     environment:
       MANAGERS: cosmos-indexer_managerone_1:8085,cosmos-indexer_managertwo_1:8085
-    depends_on:
-      - postgresdatabase
-      - migrate
 
   workerterra:
     build:
@@ -106,10 +110,91 @@ services:
       dockerfile: ./Dockerfile.worker.terra
     networks:
       - internal
+    ports:
+      - "8089:8087"
     env_file:
       - .terra.env
     environment:
       MANAGERS: cosmos-indexer_managerone_1:8085,cosmos-indexer_managertwo_1:8085
+
+  scheduler:
+    build:
+      context: .
+      dockerfile: ./Dockerfile.scheduler
+    networks:
+      - internal
+    ports:
+      - "8090:8085"
+    environment:
+      ADDRESS: 0.0.0.0:8085
+      DATABASE_URL: postgres://cosmos:cosmos@cosmos-indexer_postgresdatabase_1/cosmos?sslmode=disable
     depends_on:
       - postgresdatabase
-      - migrate
+      - schedulermigrate
+
+  schedulermigrate:
+    build:
+      context: .
+      dockerfile: ./Dockerfile.scheduler.migration
+    networks:
+      - internal
+    environment:
+      DATABASE_URL: postgres://cosmos:cosmos@cosmos-indexer_postgresdatabase_1/cosmos?sslmode=disable
+    depends_on:
+      - postgresdatabase
+
+  grafana:
+    image: stefanprodan/swarmprom-grafana:5.3.4
+    networks:
+      - internal
+    environment:
+      - GF_SECURITY_ADMIN_USER=${ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      #- GF_SERVER_ROOT_URL=${GF_SERVER_ROOT_URL:-localhost}
+      #- GF_SMTP_ENABLED=${GF_SMTP_ENABLED:-false}
+      #- GF_SMTP_FROM_ADDRESS=${GF_SMTP_FROM_ADDRESS:-grafana@test.com}
+      #- GF_SMTP_FROM_NAME=${GF_SMTP_FROM_NAME:-Grafana}
+      #- GF_SMTP_HOST=${GF_SMTP_HOST:-smtp:25}
+      #- GF_SMTP_USER=${GF_SMTP_USER}
+      #- GF_SMTP_PASSWORD=${GF_SMTP_PASSWORD}
+    volumes:
+      - .monitoring/grafana:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      resources:
+        limits:
+          memory: 128M
+        reservations:
+          memory: 64M
+
+  prometheus:
+    image: stefanprodan/swarmprom-prometheus:v2.5.0
+    networks:
+      - internal
+    ports:
+      - "9090:9090"
+    command:
+#      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--config.file=/prometheus/conf/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus/data'
+      - '--storage.tsdb.retention=${PROMETHEUS_RETENTION:-24h}'
+    volumes:
+      - .monitoring/prometheus:/prometheus
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      resources:
+        limits:
+          memory: 2048M
+        reservations:
+          memory: 128M

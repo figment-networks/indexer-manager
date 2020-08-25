@@ -8,8 +8,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/figment-networks/cosmos-indexer/cmd/manager/config"
-	"github.com/figment-networks/cosmos-indexer/manager/store/postgres"
+	"github.com/figment-networks/cosmos-indexer/cmd/manager-migration/config"
+	"github.com/golang-migrate/migrate/v4"
+	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 )
 
 type flags struct {
@@ -46,7 +47,7 @@ func main() {
 	srcPath := fmt.Sprintf("file://%s", srcDir)
 
 	log.Println("using migrations from", srcPath)
-	err = postgres.RunMigrations(srcPath, cfg.DatabaseURL)
+	err = RunMigrations(srcPath, cfg.DatabaseURL)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -67,4 +68,15 @@ func initConfig(path string) (config.Config, error) {
 	}
 
 	return *cfg, nil
+}
+
+func RunMigrations(srcPath string, dbURL string) error {
+	m, err := migrate.New(srcPath, dbURL)
+	defer m.Close()
+
+	if err != nil {
+		return err
+	}
+
+	return m.Up()
 }

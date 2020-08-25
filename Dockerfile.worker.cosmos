@@ -10,7 +10,11 @@ COPY ./go.sum .
 
 RUN go mod download
 
-COPY . .
+COPY .git .git
+COPY ./Makefile ./Makefile
+COPY ./worker ./worker
+COPY ./structs ./structs
+COPY ./cmd/worker_cosmos ./cmd/worker_cosmos
 
 ENV CGO_ENABLED=0
 ENV GOARCH=amd64

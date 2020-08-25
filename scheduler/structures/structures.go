@@ -7,7 +7,10 @@ import (
 	"github.com/google/uuid"
 )
 
-var ErrDoesNotExists = errors.New("does not exists")
+var (
+	ErrDoesNotExists      = errors.New("does not exists")
+	ErrNoWorkersAvailable = errors.New("no workers available")
+)
 
 type RunConfig struct {
 	ID uuid.UUID `json:"id"`
@@ -26,4 +29,5 @@ type LatestRecord struct {
 	Height uint64    `json:"height"`
 	Time   time.Time `json:"time"`
 	From   string    `json:"from"`
+	Nonce  []byte    `json:"nonce"`
 }

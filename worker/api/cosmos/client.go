@@ -3,6 +3,7 @@ package cosmos
 import (
 	"context"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/cosmos/cosmos-sdk/codec"
@@ -14,8 +15,15 @@ import (
 	"github.com/cosmos/cosmos-sdk/x/gov"
 	"github.com/cosmos/cosmos-sdk/x/slashing"
 	"github.com/cosmos/cosmos-sdk/x/staking"
+	"go.uber.org/zap"
 
+	"github.com/figment-networks/cosmos-indexer/structs"
 	cStruct "github.com/figment-networks/cosmos-indexer/worker/connectivity/structs"
+	"github.com/figment-networks/indexing-engine/metrics"
+)
+
+var (
+	convertionDurationObserver *metrics.GroupObserver
 )
 
 // Client is a Tendermint RPC client for cosmos using figmentnetworks datahub
@@ -24,19 +32,23 @@ type Client struct {
 	key        string
 	httpClient *http.Client
 	cdc        *codec.Codec
+	logger     *zap.Logger
 
 	inTx chan TxResponse
 	out  chan cStruct.OutResp
-	//conn *client.WSClient
+
+	Sbc *SimpleBlockCache
 }
 
 // NewClient returns a new client for a given endpoint
-func NewClient(url, key string, c *http.Client) *Client {
+func NewClient(url, key string, logger *zap.Logger, c *http.Client) *Client {
 	if c == nil {
 		c = &http.Client{
 			Timeout: time.Second * 40,
 		}
 	}
+
+	convertionDurationObserver = conversionDuration.WithLabels("conversion")
 
 	/* (lukanus): to use  ws in future "github.com/tendermint/tendermint/rpc/jsonrpc/client"
 	conn, err := client.NewWS(addr, "/websocket")
@@ -50,11 +62,12 @@ func NewClient(url, key string, c *http.Client) *Client {
 		cdc:        makeCodec(),
 		inTx:       make(chan TxResponse, 20),
 		out:        make(chan cStruct.OutResp, 20),
+		Sbc:        NewSimpleBlockCache(400),
 	}
 	ctx := context.Background()
 
 	for i := 0; i < 5; i++ {
-		go rawToTransaction(ctx, cli, cli.inTx, cli.out, cli.cdc)
+		go rawToTransaction(ctx, cli, cli.inTx, cli.out, logger, cli.cdc)
 	}
 
 	return cli
@@ -77,4 +90,48 @@ func makeCodec() *codec.Codec {
 	codec.RegisterCrypto(cdc)
 	codec.RegisterEvidences(cdc)
 	return cdc
+}
+
+type SimpleBlockCache struct {
+	space  map[uint64]structs.Block
+	blocks chan *structs.Block
+	l      sync.RWMutex
+}
+
+func NewSimpleBlockCache(cap int) *SimpleBlockCache {
+	return &SimpleBlockCache{
+		space:  make(map[uint64]structs.Block),
+		blocks: make(chan *structs.Block, cap),
+	}
+}
+
+func (sbc *SimpleBlockCache) Add(bl structs.Block) {
+	sbc.l.Lock()
+	defer sbc.l.Unlock()
+
+	_, ok := sbc.space[bl.Height]
+	if ok {
+		return
+	}
+
+	sbc.space[bl.Height] = bl
+	select {
+	case sbc.blocks <- &bl:
+	default:
+		oldBlock := <-sbc.blocks
+		if oldBlock != nil {
+			delete(sbc.space, oldBlock.Height)
+		}
+		sbc.blocks <- &bl
+	}
+
+}
+
+func (sbc *SimpleBlockCache) Get(height uint64) (bl structs.Block, ok bool) {
+	sbc.l.RLock()
+	defer sbc.l.RUnlock()
+
+	bl, ok = sbc.space[bl.Height]
+	return bl, ok
+
 }

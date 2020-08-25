@@ -48,7 +48,7 @@ func TestManager_Register(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			m := NewManager()
+			m := NewManager("test")
 
 			for _, a := range tt.args {
 				m.Register(a.id, a.kind, a.connectionInfo)

@@ -9,47 +9,72 @@ import (
 	"sync"
 	"time"
 
+	"github.com/figment-networks/indexing-engine/metrics"
+
 	"github.com/figment-networks/cosmos-indexer/structs"
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 
 	api "github.com/figment-networks/cosmos-indexer/worker/api/cosmos"
 	cStructs "github.com/figment-networks/cosmos-indexer/worker/connectivity/structs"
 )
 
 const page = 100
+const maximumHeightsToGet = 100
+
+var (
+	getTransactionDuration *metrics.GroupObserver
+	getLatestDuration      *metrics.GroupObserver
+	getBlockDuration       *metrics.GroupObserver
+)
 
 type IndexerClient struct {
 	cosmosEndpoint string
 	cosmosKey      string
 
+	logger  *zap.Logger
 	streams map[uuid.UUID]*cStructs.StreamAccess
 	sLock   sync.Mutex
 }
 
-func NewIndexerClient(ctx context.Context, cosmosEndpoint string, cosmosKey string) *IndexerClient {
-	return &IndexerClient{cosmosEndpoint: cosmosEndpoint, cosmosKey: cosmosKey, streams: make(map[uuid.UUID]*cStructs.StreamAccess)}
+func NewIndexerClient(ctx context.Context, logger *zap.Logger, cosmosEndpoint string, cosmosKey string) *IndexerClient {
+	getTransactionDuration = endpointDuration.WithLabels("getTransactions")
+	getLatestDuration = endpointDuration.WithLabels("getLatest")
+	getBlockDuration = endpointDuration.WithLabels("getBlock")
+
+	return &IndexerClient{
+		logger:         logger,
+		cosmosEndpoint: cosmosEndpoint,
+		cosmosKey:      cosmosKey,
+		streams:        make(map[uuid.UUID]*cStructs.StreamAccess),
+	}
 }
 
 func (ic *IndexerClient) CloseStream(ctx context.Context, streamID uuid.UUID) error {
 	ic.sLock.Lock()
+	defer ic.sLock.Unlock()
+
+	ic.logger.Debug("[COSMOS-CLIENT] Close Stream", zap.Stringer("streamID", streamID))
 	delete(ic.streams, streamID)
-	ic.sLock.Unlock()
+
 	return nil
 }
 
 func (ic *IndexerClient) RegisterStream(ctx context.Context, stream *cStructs.StreamAccess) error {
-	log.Println("REGISTER STREAM")
+	ic.logger.Debug("[COSMOS-CLIENT] Register Stream", zap.Stringer("streamID", stream.StreamID))
+	newStreamsMetric.WithLabels().Inc()
+
 	ic.sLock.Lock()
+	defer ic.sLock.Unlock()
 	ic.streams[stream.StreamID] = stream
 
-	cosmosClient := api.NewClient(ic.cosmosEndpoint, ic.cosmosKey, nil)
-	go sendResp(ctx, cosmosClient, stream)
+	cosmosClient := api.NewClient(ic.cosmosEndpoint, ic.cosmosKey, ic.logger, nil)
+	go sendResp(ctx, cosmosClient, ic.logger, stream)
 	// Limit workers not to create new goroutines over and over again
 	for i := 0; i < 20; i++ {
 		go ic.Run(ctx, cosmosClient, stream)
 	}
 
-	ic.sLock.Unlock()
 	return nil
 }
 
@@ -65,11 +90,14 @@ func (ic *IndexerClient) Run(ctx context.Context, client *api.Client, stream *cS
 		case <-stream.Finish:
 			return
 		case taskRequest := <-stream.RequestListener:
+			receivedRequestsMetric.WithLabels(taskRequest.Type).Inc()
 			switch taskRequest.Type {
 			case "GetTransactions":
 				ic.GetTransactions(ctx, taskRequest, stream, client)
 			case "GetBlock":
 				ic.GetBlock(ctx, taskRequest, stream, client)
+			case "GetLatest":
+				ic.GetLatest(ctx, taskRequest, stream, client)
 			default:
 				stream.Send(cStructs.TaskResponse{
 					Id:    taskRequest.Id,
@@ -82,16 +110,19 @@ func (ic *IndexerClient) Run(ctx context.Context, client *api.Client, stream *cS
 }
 
 func (ic *IndexerClient) GetTransactions(ctx context.Context, tr cStructs.TaskRequest, stream *cStructs.StreamAccess, client *api.Client) {
-	log.Printf("Received: %+v ", tr)
-	now := time.Now()
+	timer := metrics.NewTimer(getTransactionDuration)
+	defer timer.ObserveDuration()
+
 	hr := &structs.HeightRange{}
 	err := json.Unmarshal(tr.Payload, hr)
 	if err != nil {
 		stream.Send(cStructs.TaskResponse{
 			Id:    tr.Id,
-			Error: cStructs.TaskError{Msg: "Cannot unmarshal payment"},
+			Error: cStructs.TaskError{Msg: "cannot unmarshal payload: " + err.Error()},
 			Final: true,
 		})
+
+		ic.logger.Debug("[COSMOS-CLIENT] Register Stream", zap.Stringer("streamID", stream.StreamID))
 	}
 
 	fin := make(chan string, 2)
@@ -99,6 +130,7 @@ func (ic *IndexerClient) GetTransactions(ctx context.Context, tr cStructs.TaskRe
 
 	uniqueRID, _ := uuid.NewRandom()
 	sCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	count, err := client.SearchTx(sCtx, tr.Id, uniqueRID, *hr, 1, page, fin)
 
 	if err != nil {
@@ -113,13 +145,137 @@ func (ic *IndexerClient) GetTransactions(ctx context.Context, tr cStructs.TaskRe
 	toBeDone := int(math.Ceil(float64(count-page) / page))
 	if count > page {
 		for i := 2; i < toBeDone+2; i++ {
-			go client.SearchTx(sCtx, tr.Id, uniqueRID, structs.HeightRange{
-				StartHeight: hr.StartHeight,
-				EndHeight:   hr.EndHeight,
-			}, i, page, fin)
+			go client.SearchTx(sCtx, tr.Id, uniqueRID, *hr, i, page, fin)
 		}
 	}
 
+	var received int
+	for {
+		select {
+		case <-fin:
+			//	if e != "" {
+			//		cancel()
+			//	}
+			received++
+			if received == toBeDone+1 {
+				return
+			}
+		}
+	}
+}
+
+func (ic *IndexerClient) GetBlock(ctx context.Context, tr cStructs.TaskRequest, stream *cStructs.StreamAccess, client *api.Client) {
+	timer := metrics.NewTimer(getBlockDuration)
+	defer timer.ObserveDuration()
+
+	//	log.Printf("Received Block Req: %+v ", tr)
+	hr := &structs.HeightHash{}
+	err := json.Unmarshal(tr.Payload, hr)
+	if err != nil {
+		stream.Send(cStructs.TaskResponse{
+			Id:    tr.Id,
+			Error: cStructs.TaskError{Msg: "Cannot unmarshal payment"},
+			Final: true,
+		})
+		return
+	}
+
+	uniqueRID, _ := uuid.NewRandom()
+	sCtx, cancel := context.WithTimeout(ctx, time.Second*2)
+	defer cancel()
+
+	block, err := client.GetBlock(sCtx, *hr)
+	if err != nil {
+		stream.Send(cStructs.TaskResponse{
+			Id:    tr.Id,
+			Error: cStructs.TaskError{Msg: "Error getting block data " + err.Error()},
+			Final: true,
+		})
+		return
+	}
+	client.Out() <- cStructs.OutResp{
+		ID:      tr.Id,
+		RunID:   uniqueRID,
+		Type:    "Block",
+		Payload: block,
+		All:     1,
+	}
+}
+
+func (ic *IndexerClient) GetLatest(ctx context.Context, tr cStructs.TaskRequest, stream *cStructs.StreamAccess, client *api.Client) {
+	timer := metrics.NewTimer(getLatestDuration)
+	defer timer.ObserveDuration()
+
+	ldr := &structs.LatestDataRequest{}
+	err := json.Unmarshal(tr.Payload, ldr)
+	if err != nil {
+		stream.Send(cStructs.TaskResponse{Id: tr.Id, Error: cStructs.TaskError{Msg: "Cannot unmarshal payment"}, Final: true})
+	}
+
+	sCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	fin := make(chan string, 2)
+	defer close(fin)
+
+	// (lukanus): Get latest block (height = 0)
+	block, err := client.GetBlock(sCtx, structs.HeightHash{})
+	if err != nil {
+		stream.Send(cStructs.TaskResponse{
+			Id:    tr.Id,
+			Error: cStructs.TaskError{Msg: "Error getting block data " + err.Error()},
+			Final: true,
+		})
+		return
+	}
+
+	client.Out() <- cStructs.OutResp{
+		ID:      tr.Id,
+		Type:    "Block",
+		Payload: block,
+	}
+
+	startingHeight := ldr.LastHeight
+	missing := false
+
+	// (lukanus): When nothing is scraped we want to get only X number of last requests
+	if ldr.LastHeight == 0 {
+		lastHundred := block.Height - maximumHeightsToGet
+		if lastHundred > 0 {
+			startingHeight = lastHundred
+		}
+	} else {
+		diff := block.Height - ldr.LastHeight
+		if diff > maximumHeightsToGet {
+			startingHeight = diff
+			missing = true
+		}
+	}
+
+	hr := structs.HeightRange{
+		StartHeight: startingHeight,
+		EndHeight:   block.Height,
+	}
+
+	uniqueRID, _ := uuid.NewRandom()
+	count, err := client.SearchTx(sCtx, tr.Id, uniqueRID, hr, 1, page, fin)
+
+	if err != nil {
+		stream.Send(cStructs.TaskResponse{
+			Id:    tr.Id,
+			Error: cStructs.TaskError{Msg: "Error Getting Transactions"},
+			Final: true,
+		})
+		return
+	}
+
+	toBeDone := int(math.Ceil(float64(count-page) / page))
+	if count > page {
+		for i := 2; i < toBeDone+2; i++ {
+			go client.SearchTx(sCtx, tr.Id, uniqueRID, hr, i, page, fin)
+		}
+	}
+
+	log.Println("print missed", missing)
 	var received int
 	for {
 		select {
@@ -129,12 +285,11 @@ func (ic *IndexerClient) GetTransactions(ctx context.Context, tr cStructs.TaskRe
 			}
 			received++
 			if received == toBeDone+1 {
-				log.Printf("Taken: %s", time.Now().Sub(now))
+				//log.Printf("Taken: %s", time.Now().Sub(now))
 				return
 			}
 		}
 	}
-
 }
 
 type TData struct {
@@ -142,10 +297,9 @@ type TData struct {
 	All   uint64
 }
 
-func sendResp(ctx context.Context, client *api.Client, stream *cStructs.StreamAccess) {
+func sendResp(ctx context.Context, client *api.Client, logger *zap.Logger, stream *cStructs.StreamAccess) {
 
 	opened := make(map[[2]uuid.UUID]*TData)
-
 	b := &bytes.Buffer{}
 	enc := json.NewEncoder(b)
 
@@ -166,7 +320,7 @@ SEND_LOOP:
 			}
 			b.Reset()
 
-			log.Printf("Task to send: %s, %d - %d , new(%d)", t.ID.String(), n.Order, t.All, ok)
+			//logger.Debug("Task to send", zap.Stringer("taskID", t.ID), zap.Uint64("order", n.Order), zap.Uint64("order", t.All))
 
 			if !t.Additional && n.All == 0 {
 				n.All = t.All
@@ -174,7 +328,7 @@ SEND_LOOP:
 
 			err := enc.Encode(t.Payload)
 			if err != nil {
-				log.Printf("%s", err.Error())
+				logger.Error("[COSMOS-CLIENT] Error encoding payload data", zap.Error(err))
 			}
 
 			var final = (n.Order == n.All-1)
@@ -190,10 +344,9 @@ SEND_LOOP:
 			}
 			b.Read(tr.Payload)
 
-			//	log.Printf("Task out: %d,  %+v %s", n.Order, tr, string(tr.Payload))
-			stream.Send(tr)
+			err = stream.Send(tr)
 			if err != nil {
-				log.Printf("%s", err.Error())
+				logger.Error("[COSMOS-CLIENT] Error sending data", zap.Error(err))
 			}
 
 			if !t.Additional {
@@ -201,42 +354,10 @@ SEND_LOOP:
 					delete(opened, [2]uuid.UUID{t.ID, t.RunID})
 				}
 				n.Order++
+				sendResponseMetric.WithLabels(t.Type, "yes")
+			} else {
+				sendResponseMetric.WithLabels(t.Type, "no")
 			}
 		}
-	}
-}
-
-func (ic *IndexerClient) GetBlock(ctx context.Context, tr cStructs.TaskRequest, stream *cStructs.StreamAccess, client *api.Client) {
-
-	log.Printf("Received Block Req: %+v ", tr)
-	hr := &structs.HeightHash{}
-	err := json.Unmarshal(tr.Payload, hr)
-	if err != nil {
-		stream.Send(cStructs.TaskResponse{
-			Id:    tr.Id,
-			Error: cStructs.TaskError{Msg: "Cannot unmarshal payment"},
-			Final: true,
-		})
-		return
-	}
-
-	uniqueRID, _ := uuid.NewRandom()
-	sCtx, cancel := context.WithTimeout(ctx, time.Second*2)
-	defer cancel()
-	block, err := client.GetBlock(sCtx, *hr)
-	if err != nil {
-		stream.Send(cStructs.TaskResponse{
-			Id:    tr.Id,
-			Error: cStructs.TaskError{Msg: "Error getting block data " + err.Error()},
-			Final: true,
-		})
-		return
-	}
-	client.Out() <- cStructs.OutResp{
-		ID:      tr.Id,
-		RunID:   uniqueRID,
-		Type:    "Block",
-		Payload: block,
-		All:     1,
 	}
 }

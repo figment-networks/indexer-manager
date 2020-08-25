@@ -17,6 +17,9 @@ import (
 	shared "github.com/figment-networks/cosmos-indexer/structs"
 )
 
+// SelfCheck Flag describing should manager check anyway the latest version for network it has
+var SelfCheck = true
+
 type NetworkVersion struct {
 	Network string
 	Version string
@@ -97,8 +100,8 @@ func (hc *HubbleClient) GetTransactions(ctx context.Context, nv NetworkVersion, 
 
 	for i := 0; i < times; i++ {
 		b, _ := json.Marshal(shared.HeightRange{
-			StartHeight: heightRange.StartHeight + int64(i*100),
-			EndHeight:   heightRange.StartHeight + int64((i+1)*100),
+			StartHeight: heightRange.StartHeight + uint64(i*100),
+			EndHeight:   heightRange.StartHeight + uint64((i+1)*100),
 			Hash:        heightRange.Hash,
 		})
 
@@ -237,4 +240,99 @@ func (hc *HubbleClient) InsertTransactions(ctx context.Context, nv NetworkVersio
 
 	return nil
 
+}
+
+func (hc *HubbleClient) ScrapeLatest(ctx context.Context, ldr shared.LatestDataRequest) (ldResp shared.LatestDataResponse, er error) {
+	log.Println("waiting for transactions")
+
+	times := 1
+
+	// (lukanus): self consistency check (optional)
+	if SelfCheck {
+		lastTransaction, err := hc.storeEng.GetLatestTransaction(ctx, shared.TransactionExtra{ChainID: ldr.Version, Network: ldr.Network})
+		if err == nil {
+			if lastTransaction.Hash != "" {
+				ldr.LastHash = lastTransaction.Hash
+			}
+
+			if lastTransaction.Height > 0 {
+				ldr.LastHeight = lastTransaction.Height
+			}
+
+			if !lastTransaction.Time.IsZero() {
+				ldr.LastTime = lastTransaction.Time
+			}
+		}
+	}
+
+	taskReq, _ := json.Marshal(ldr)
+
+	respAwait, err := hc.sender.Send([]structs.TaskRequest{{
+		Network: ldr.Network,
+		Version: ldr.Version,
+		Type:    "GetLatest",
+		Payload: taskReq,
+	}})
+	if err != nil {
+		log.Println("Error Sending data")
+		return ldResp, err
+	}
+
+	defer respAwait.Close()
+
+	trs := []shared.Transaction{}
+
+	buff := &bytes.Buffer{}
+	dec := json.NewDecoder(buff)
+
+	var receivedTransactions int
+WAIT_FOR_ALL_TRANSACTIONS:
+	for {
+		select {
+		case <-ctx.Done():
+			return ldResp, errors.New("Request timed out")
+		case response := <-respAwait.Resp:
+			if response.Error.Msg != "" {
+				return ldResp, fmt.Errorf("Error getting response: %s", response.Error.Msg)
+			}
+
+			if response.Type != "Transaction" {
+				continue
+			}
+
+			//	if !ok {
+			//		return nil, errors.New("Response closed.")
+			//	}
+			//log.Printf("Got Response !!! %s ", string(response.Payload))
+			buff.Reset()
+			buff.ReadFrom(bytes.NewReader(response.Payload))
+			m := &shared.Transaction{}
+			err := dec.Decode(m)
+			if err != nil {
+				return ldResp, fmt.Errorf("Error getting response: %w", err)
+			}
+
+			err = hc.storeEng.StoreTransaction(
+				shared.TransactionExtra{
+					Network:     ldr.Network,
+					ChainID:     ldr.Version,
+					Transaction: *m,
+				})
+
+			if err != nil {
+				log.Printf("Error storing transaction : %+v", err)
+			}
+
+			trs = append(trs, *m)
+			if response.Final {
+				receivedTransactions++
+			}
+
+			if receivedTransactions == times {
+				break WAIT_FOR_ALL_TRANSACTIONS
+			}
+		}
+	}
+
+	return ldResp, nil
 }

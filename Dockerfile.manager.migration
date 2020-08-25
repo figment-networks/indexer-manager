@@ -12,9 +12,8 @@ RUN go mod download
 
 COPY .git .git
 COPY ./Makefile ./Makefile
-COPY ./worker ./worker
-COPY ./structs ./structs
-COPY ./cmd/worker_coda ./cmd/worker_coda
+COPY ./cmd/manager-migration ./cmd/manager-migration
+
 
 ENV CGO_ENABLED=0
 ENV GOARCH=amd64
@@ -23,14 +22,16 @@ ENV GOOS=linux
 RUN \
   GO_VERSION=$(go version | awk {'print $3'}) \
   GIT_COMMIT=$(git rev-parse HEAD) \
-  make build-coda
+  make build-manager-migration
 
 # ------------------------------------------------------------------------------
 # Target Image
 # ------------------------------------------------------------------------------
 FROM alpine:3.10 AS release
 
-WORKDIR /app/coda
-COPY --from=build /go/src/github.com/figment-networks/cosmos-indexer/worker_coda_bin /app/coda/worker
-RUN chmod a+x ./worker
-CMD ["./worker"]
+WORKDIR /app/migration
+
+COPY --from=build /go/src/github.com/figment-networks/cosmos-indexer/manager_migration_bin /app/migration/migration
+COPY --from=build /go/src/github.com/figment-networks/cosmos-indexer/cmd/manager-migration/migrations/ /app/migration/migrations/
+RUN chmod a+x ./migration
+CMD ["./migration"]

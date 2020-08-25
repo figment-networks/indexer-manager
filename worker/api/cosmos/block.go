@@ -31,14 +31,16 @@ func (c Client) GetBlock(ctx context.Context, params structs.HeightHash) (b stru
 
 	q := req.URL.Query()
 	if params.Height > 0 {
-		q.Add("height", strconv.FormatInt(params.Height, 10))
+		q.Add("height", strconv.FormatUint(params.Height, 10))
 	}
 	req.URL.RawQuery = q.Encode()
 
+	n := time.Now()
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return b, err
 	}
+	rawRequestDuration.WithLabels("/block", resp.Status).Observe(time.Since(n).Seconds())
 
 	defer resp.Body.Close()
 

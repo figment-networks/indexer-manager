@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/figment-networks/cosmos-indexer/cmd/manager/config"
+	"github.com/figment-networks/cosmos-indexer/cmd/manager/logger"
 	"github.com/figment-networks/cosmos-indexer/manager/client"
 	"github.com/figment-networks/cosmos-indexer/manager/connectivity"
 	"github.com/figment-networks/cosmos-indexer/manager/connectivity/structs"
@@ -22,6 +23,9 @@ import (
 	"github.com/figment-networks/cosmos-indexer/manager/store/postgres"
 	grpcTransport "github.com/figment-networks/cosmos-indexer/manager/transport/grpc"
 	httpTransport "github.com/figment-networks/cosmos-indexer/manager/transport/http"
+	"github.com/figment-networks/indexing-engine/metrics"
+	"github.com/figment-networks/indexing-engine/metrics/prometheusmetrics"
+	"github.com/google/uuid"
 )
 
 type flags struct {
@@ -45,6 +49,16 @@ func main() {
 		log.Fatal(fmt.Errorf("error initializing config [ERR: %+v]", err))
 	}
 
+	prom := prometheusmetrics.New()
+	err = metrics.AddEngine(prom)
+	if err != nil {
+		logger.Error(err)
+	}
+	err = metrics.Hotload(prom.Name())
+	if err != nil {
+		logger.Error(err)
+	}
+
 	log.Println("Connecting to ", cfg.DatabaseURL)
 	db, err := sql.Open("postgres", cfg.DatabaseURL)
 	if err != nil {
@@ -60,7 +74,8 @@ func main() {
 	managerStore := store.New(pgsqlDriver)
 	go managerStore.Run(ctx, time.Second*5)
 
-	connManager := connectivity.NewManager()
+	mID, _ := uuid.NewRandom()
+	connManager := connectivity.NewManager(mID.String())
 
 	grpcCli := grpcTransport.NewClient()
 	connManager.AddTransport(grpcCli)
@@ -74,6 +89,8 @@ func main() {
 
 	attachChecks(managerStore, mux)
 	attachConnectionManager(connManager, mux)
+
+	mux.Handle("/metrics", metrics.Handler())
 
 	s := &http.Server{
 		Addr:    cfg.Address,
@@ -128,6 +145,7 @@ func attachConnectionManager(mgr *connectivity.Manager, mux *http.ServeMux) {
 		block.Lock()
 		b.Reset()
 		_, err := b.ReadFrom(r.Body)
+		defer r.Body.Close()
 		if err != nil {
 			block.Unlock()
 			log.Println(err)

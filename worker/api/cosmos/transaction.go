@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -12,15 +11,15 @@ import (
 	"strings"
 	"time"
 
+	"github.com/figment-networks/cosmos-indexer/structs"
+	shared "github.com/figment-networks/cosmos-indexer/structs"
+	cStruct "github.com/figment-networks/cosmos-indexer/worker/connectivity/structs"
+	"github.com/figment-networks/indexing-engine/metrics"
+	"go.uber.org/zap"
+
 	"github.com/cosmos/cosmos-sdk/codec"
 	"github.com/cosmos/cosmos-sdk/x/auth"
-	"github.com/figment-networks/cosmos-indexer/structs"
 	"github.com/google/uuid"
-
-	shared "github.com/figment-networks/cosmos-indexer/structs"
-
-	cStruct "github.com/figment-networks/cosmos-indexer/worker/connectivity/structs"
-
 	log "github.com/sirupsen/logrus"
 )
 
@@ -39,7 +38,6 @@ func (c *Client) SearchTx(ctx context.Context, taskID, runUUID uuid.UUID, r stru
 		req.Header.Add("Authorization", c.key)
 	}
 
-	//log.Printf("GOT %+v", r)
 	q := req.URL.Query()
 
 	s := strings.Builder{}
@@ -62,33 +60,40 @@ func (c *Client) SearchTx(ctx context.Context, taskID, runUUID uuid.UUID, r stru
 
 	now := time.Now()
 	resp, err := c.httpClient.Do(req)
-	log.Printf("Request Time: %s", time.Now().Sub(now).String())
+
+	log.Debug("[COSMOS-API] Request Time (/tx_search)", zap.Duration("duration", time.Now().Sub(now)))
 	if err != nil {
 		fin <- err.Error()
 		return 0, err
 	}
+	rawRequestDuration.WithLabels("/tx_search", resp.Status).Observe(time.Since(now).Seconds())
 
 	decoder := json.NewDecoder(resp.Body)
 
 	result := &GetTxSearchResponse{}
 	if err = decoder.Decode(result); err != nil {
-		err := fmt.Sprintf("unable to decode result body: %s", err.Error())
-		fin <- err
-		return 0, errors.New(err)
+		c.logger.Error("[COSMOS-API] unable to decode result body", zap.Error(err))
+		err := fmt.Errorf("unable to decode result body %w", err)
+		fin <- err.Error()
+		return 0, err
 	}
 
 	if result.Error.Message != "" {
-		log.Println("err:", result.Error.Message)
-		err := fmt.Sprintf("Error getting search: %s", result.Error.Message)
-		fin <- err
-		return 0, errors.New(err)
+		//err := fmt.Sprintf("Error getting search: %s", result.Error.Message)
+		err := fmt.Errorf("Error getting search: %s", result.Error.Message)
+		c.logger.Error("[COSMOS-API] Error getting search", zap.Error(err))
+		fin <- err.Error()
+		return 0, err
 	}
 
 	totalCount, err := strconv.ParseInt(result.Result.TotalCount, 10, 64)
 	if err != nil {
+		c.logger.Error("[COSMOS-API] Error getting totalCount", zap.Error(err))
 		fin <- err.Error()
 		return 0, err
 	}
+
+	numberOfPagesTransactions.Observe(float64(totalCount))
 
 	for _, tx := range result.Result.Txs {
 		select {
@@ -106,27 +111,48 @@ func (c *Client) SearchTx(ctx context.Context, taskID, runUUID uuid.UUID, r stru
 	return totalCount, nil
 }
 
-func rawToTransaction(ctx context.Context, c *Client, in chan TxResponse, out chan cStruct.OutResp, cdc *codec.Codec) {
-
+func rawToTransaction(ctx context.Context, c *Client, in chan TxResponse, out chan cStruct.OutResp, logger *zap.Logger, cdc *codec.Codec) {
 	readr := strings.NewReader("")
 	dec := json.NewDecoder(readr)
 	for txRaw := range in {
+		timer := metrics.NewTimer(transactionConversionDuration)
+
 		tx := &auth.StdTx{}
 
-		log.Printf("%+v", txRaw.TxResult.Log)
 		readr.Reset(txRaw.TxResult.Log)
 		lf := []LogFormat{}
 		err := dec.Decode(&lf)
 		if err != nil {
+			logger.Error("[COSMOS-API] Problem decoding raw transaction (json)", zap.Error(err))
+
+			out <- cStruct.OutResp{
+				ID:    txRaw.TaskID.TaskID,
+				RunID: txRaw.TaskID.RunID,
+				Error: fmt.Errorf("[COSMOS-API] Problem decoding raw transaction (json) %w", err),
+			}
+			continue
 		}
 
 		base64Dec := base64.NewDecoder(base64.StdEncoding, strings.NewReader(txRaw.TxData))
 		_, err = cdc.UnmarshalBinaryLengthPrefixedReader(base64Dec, tx, 0)
-
-		hInt, _ := strconv.ParseInt(txRaw.Height, 10, 64)
-		block, err := c.GetBlock(ctx, shared.HeightHash{Height: hInt})
 		if err != nil {
-			log.Println(err)
+			logger.Error("[COSMOS-API] Problem decoding raw transaction (cdc) ", zap.Error(err))
+		}
+		hInt, err := strconv.ParseUint(txRaw.Height, 10, 64)
+		if err != nil {
+			logger.Error("[COSMOS-API] Problem parsing height", zap.Error(err))
+		}
+		block, ok := c.Sbc.Get(uint64(hInt))
+		if ok {
+			blockCacheEfficiencyHit.Inc()
+		} else {
+			blockCacheEfficiencyMissed.Inc()
+
+			block, err = c.GetBlock(ctx, shared.HeightHash{Height: hInt})
+			if err != nil {
+				logger.Error("[COSMOS-API] Problem getting block at height", zap.Uint64("height", hInt), zap.Error(err))
+				log.Println(err)
+			}
 		}
 
 		outTX := cStruct.OutResp{
@@ -165,7 +191,6 @@ func rawToTransaction(ctx context.Context, c *Client, in chan TxResponse, out ch
 					Type: ev.Type,
 				}
 				for _, attr := range ev.Attributes {
-
 					sub.Module = attr.Module
 					sub.Action = attr.Action
 
@@ -211,10 +236,10 @@ func rawToTransaction(ctx context.Context, c *Client, in chan TxResponse, out ch
 			Type:       "Block",
 			Payload:    block,
 		}
+		timer.ObserveDuration()
 	}
 }
 
 func getCurrency(in string) []string {
 	return curencyRegex.FindAllString(in, 2)
-
 }

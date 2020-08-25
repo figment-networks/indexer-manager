@@ -98,6 +98,7 @@ CONTROLRPC:
 				pings[u] = AwaitingPing{time.Now(), cT.Resp, true}
 				taskStream.Send(&indexer.TaskRequest{
 					Id:   u.String(),
+					From: stream.ManagerID,
 					Type: "PING",
 				})
 			} else if cT.Type == "CLOSE" {
@@ -129,6 +130,7 @@ CONTROLRPC:
 			log.Printf("SENDING REQUEST %s  - %+v", id, req)
 			if err := taskStream.Send(&indexer.TaskRequest{
 				Id:      req.ID.String(),
+				From:    stream.ManagerID,
 				Type:    req.Type,
 				Payload: req.Payload,
 			}); err != nil {

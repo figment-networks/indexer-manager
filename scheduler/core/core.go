@@ -54,6 +54,7 @@ func NewCore(store persistence.CoreStorage, scheduler *process.Scheduler) *Core 
 func (c *Core) LoadRunner(name string, runner process.Runner) {
 	c.runLock.Lock()
 	defer c.runLock.Unlock()
+
 	c.runners[name] = runner
 }
 
@@ -99,7 +100,7 @@ func (c *Core) LoadScheduler(ctx context.Context) ([]structures.RunConfig, error
 		}
 
 		// In fact run scheduler
-		go c.scheduler.Run(ctx, s.ID.String(), r.Duration, runner)
+		go c.scheduler.Run(ctx, s.ID.String(), r.Duration, r.Network, r.Version, runner)
 		err := c.store.MarkRunning(ctx, s.RunID, s.ID)
 		log.Printf("%w", err.Error())
 	}
@@ -132,7 +133,7 @@ func (c *Core) EnableSchedule(ctx context.Context, sID uuid.UUID) error {
 	}
 
 	runner, _ := c.runners[r.Kind]
-	go c.scheduler.Run(ctx, sID.String(), r.Duration, runner)
+	go c.scheduler.Run(ctx, sID.String(), r.Duration, r.Network, r.Version, runner)
 
 	return nil
 }

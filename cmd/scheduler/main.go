@@ -2,20 +2,25 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"database/sql"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
+	"strings"
+	"time"
 
 	"github.com/figment-networks/cosmos-indexer/cmd/scheduler/config"
 
 	"github.com/figment-networks/cosmos-indexer/scheduler/core"
+	"github.com/figment-networks/cosmos-indexer/scheduler/destination"
 	"github.com/figment-networks/cosmos-indexer/scheduler/persistence"
 	"github.com/figment-networks/cosmos-indexer/scheduler/persistence/postgresstore"
 	"github.com/figment-networks/cosmos-indexer/scheduler/process"
-	"github.com/figment-networks/cosmos-indexer/scheduler/runner/lasthash"
+	"github.com/figment-networks/cosmos-indexer/scheduler/runner/lastdata"
 	"github.com/figment-networks/cosmos-indexer/scheduler/structures"
 )
 
@@ -44,6 +49,7 @@ func main() {
 	db, err := sql.Open("postgres", cfg.DatabaseURL)
 	if err != nil {
 		log.Fatal(err)
+		return
 	}
 	err = db.PingContext(ctx)
 	if err != nil {
@@ -51,14 +57,25 @@ func main() {
 	}
 	defer db.Close()
 
+	mux := http.NewServeMux()
 	d := postgresstore.NewDriver(db)
 
 	sch := process.NewScheduler()
+
 	c := core.NewCore(persistence.CoreStorage{d}, sch)
 
-	// (lukanus): this might be loaded as plugins ;)
-	lh := lasthash.NewClient(persistence.Storage{d})
+	scheme := destination.NewScheme()
 
+	managers := strings.Split(cfg.Managers, ",")
+	if len(managers) == 0 {
+		log.Fatal("There is no manager to connect to")
+		return
+	}
+
+	go recheck(scheme, managers, time.Second*20)
+
+	// (lukanus): this might be loaded as plugins ;)
+	lh := lastdata.NewClient(persistence.Storage{d}, scheme)
 	c.LoadRunner("lasthash", lh)
 
 	if cfg.InitialConfig != "" {
@@ -74,9 +91,18 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-
 		c.AddSchedules(ctx, rcs)
 	}
+
+	s := &http.Server{
+		Addr:    cfg.Address,
+		Handler: mux,
+		TLSConfig: &tls.Config{
+			InsecureSkipVerify: true,
+		},
+	}
+	log.Printf("Running server on %s", cfg.Address)
+	log.Fatal(s.ListenAndServe())
 
 }
 
@@ -94,4 +120,19 @@ func initConfig(path string) (config.Config, error) {
 	}
 
 	return *cfg, nil
+}
+
+func recheck(scheme *destination.Scheme, addresses []string, dur time.Duration) (config.Config, error) {
+	for _, a := range addresses {
+		scheme.AddManager(a)
+	}
+
+	tckr := time.NewTicker(dur)
+	for {
+		select {
+		case <-tckr.C:
+			scheme.Refresh()
+		}
+	}
+
 }

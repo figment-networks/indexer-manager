@@ -5,7 +5,6 @@ import (
 	"database/sql"
 
 	"github.com/figment-networks/cosmos-indexer/structs"
-	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 )
@@ -24,16 +23,6 @@ func New(ctx context.Context, db *sql.DB) *Driver {
 		txBuff: make(chan structs.TransactionExtra, 10),
 		blBuff: make(chan structs.Block, 10),
 	}
-}
-func RunMigrations(srcPath string, dbURL string) error {
-	m, err := migrate.New(srcPath, dbURL)
-	defer m.Close()
-
-	if err != nil {
-		return err
-	}
-
-	return m.Up()
 }
 
 func (d *Driver) Flush() error {

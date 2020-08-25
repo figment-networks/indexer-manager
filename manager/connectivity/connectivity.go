@@ -41,6 +41,7 @@ type Network struct {
 }
 
 type Manager struct {
+	ID          string
 	networks    map[string]*Network
 	networkLock sync.RWMutex
 
@@ -53,8 +54,9 @@ type Manager struct {
 	removeWorkerCh chan string
 }
 
-func NewManager() *Manager {
+func NewManager(id string) *Manager {
 	return &Manager{
+		ID:             id,
 		networks:       make(map[string]*Network),
 		transports:     make(map[string]structs.ConnTransport),
 		nextWorkers:    make(map[structs.WorkerCompositeKey]WorkersPool),
@@ -129,7 +131,7 @@ func (m *Manager) Register(id, kind string, connInfo structs.WorkerConnection) e
 		w.State = structs.StreamReconnecting
 		m.networkLock.Unlock()
 
-		sa := structs.NewStreamAccess(c, w)
+		sa := structs.NewStreamAccess(c, m.ID, w)
 		err := sa.Run()
 		m.networkLock.Lock()
 		if err != nil {
@@ -151,7 +153,7 @@ func (m *Manager) Register(id, kind string, connInfo structs.WorkerConnection) e
 		w.State = structs.StreamReconnecting
 		m.networkLock.Unlock()
 
-		sa := structs.NewStreamAccess(c, w)
+		sa := structs.NewStreamAccess(c, m.ID, w)
 		err := sa.Run()
 		m.networkLock.Lock()
 		if err != nil {

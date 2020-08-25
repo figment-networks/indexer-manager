@@ -7,7 +7,7 @@ import (
 )
 
 type Runner interface {
-	Run(ctx context.Context) error
+	Run(ctx context.Context, network, version string) error
 }
 
 type Running struct {
@@ -27,7 +27,7 @@ func NewScheduler() *Scheduler {
 	}
 }
 
-func (s *Scheduler) Run(ctx context.Context, name string, d time.Duration, r Runner) {
+func (s *Scheduler) Run(ctx context.Context, name string, d time.Duration, network, version string, r Runner) {
 
 	cCtx, cancel := context.WithCancel(ctx)
 	tckr := time.NewTicker(d)
@@ -43,7 +43,7 @@ RUN_LOOP:
 	for {
 		select {
 		case <-tckr.C:
-			if err := r.Run(cCtx); err != nil {
+			if err := r.Run(cCtx, network, version); err != nil {
 				tckr.Stop()
 				break RUN_LOOP
 			}

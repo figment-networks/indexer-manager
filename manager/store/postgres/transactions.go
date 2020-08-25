@@ -274,42 +274,15 @@ func (d *Driver) GetTransactions(ctx context.Context, tsearch params.Transaction
 	return txs, nil
 }
 
-/*
+func (d *Driver) GetLatestTransaction(ctx context.Context, in structs.TransactionExtra) (out structs.Transaction, err error) {
+	tx := structs.Transaction{}
 
-// CreateIfNotExists creates the transaction if it does not exist
-func (s *Store) CreateIfNotExists(t *shared.Transaction) error {
-	_, err := s.findByHash(t.Hash)
-	if isNotFound(err) {
-		err := s.db.Create(t).Error
-		return checkErr(err)
+	row := d.db.QueryRowContext(ctx, "SELECT id, version, height, hash, block_hash, time FROM public.transaction_events WHERE version = $1 AND network = $2 ORDER BY time DESC LIMIT 1", in.ChainID, in.Network)
+	if row == nil {
+		return out, params.ErrNotFound
 	}
-	return err
-}
 
-// findByHash returns a transaction for a given hash
-func (s *Store) findByHash(hash string) (*shared.Transaction, error) {
-	return s.findBy("hash", hash)
-}
+	err = row.Scan(&tx.ID, &tx.Version, &tx.Height, &tx.Hash, &tx.BlockHash, &tx.Time, &tx.GasWanted, &tx.GasUsed, &tx.Memo, &tx.Events)
 
-func (s *Store) findBy(key string, value interface{}) (*shared.Transaction, error) {
-	result := &shared.Transaction{}
-	err := s.db.
-		Model(result).
-		Where(fmt.Sprintf("%s = ?", key), value).
-		Take(result).
-		Error
-
-	return result, checkErr(err)
+	return out, err
 }
-
-func checkErr(err error) error {
-	if gorm.IsRecordNotFoundError(err) {
-		return ErrNotFound
-	}
-	return err
-}
-
-func isNotFound(err error) bool {
-	return gorm.IsRecordNotFoundError(err) || err == ErrNotFound
-}
-*/

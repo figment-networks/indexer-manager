@@ -121,7 +121,6 @@ type kvHolder struct {
 }
 
 func (lea *LogEventsAttributes) UnmarshalJSON(b []byte) error {
-	//	lea = &LogEventsAttributes{}
 	lea.Others = make(map[string][]string)
 
 	dec := json.NewDecoder(bytes.NewReader(b))
