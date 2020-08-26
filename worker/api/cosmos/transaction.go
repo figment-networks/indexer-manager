@@ -99,7 +99,7 @@ func (c *Client) SearchTx(ctx context.Context, taskID, runUUID uuid.UUID, r stru
 		return 0, err
 	}
 
-	numberOfPagesTransactions.Observe(float64(totalCount))
+	numberOfItemsTransactions.Observe(float64(totalCount))
 
 	for _, tx := range result.Result.Txs {
 		select {
@@ -154,16 +154,11 @@ func rawToTransaction(ctx context.Context, c *Client, in chan TxResponse, out ch
 		if err != nil {
 			logger.Error("[COSMOS-API] Problem parsing height", zap.Error(err))
 		}
-		block, ok := c.Sbc.Get(uint64(hInt))
-		if ok {
-			blockCacheEfficiencyHit.Inc()
-		} else {
-			blockCacheEfficiencyMissed.Inc()
 
-			block, err = c.GetBlock(ctx, shared.HeightHash{Height: hInt})
-			if err != nil {
-				logger.Error("[COSMOS-API] Problem getting block at height", zap.Uint64("height", hInt), zap.Error(err))
-			}
+		// (lukanus): it has embedded cache in int
+		block, err := c.GetBlock(ctx, shared.HeightHash{Height: hInt})
+		if err != nil {
+			logger.Error("[COSMOS-API] Problem getting block at height", zap.Uint64("height", hInt), zap.Error(err))
 		}
 
 		outTX := cStruct.OutResp{
