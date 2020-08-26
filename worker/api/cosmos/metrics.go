@@ -11,8 +11,6 @@ var (
 		Tags:      []string{"type"},
 	})
 
-	transactionConversionDuration = conversionDuration.WithLabels("transaction")
-
 	rawRequestDuration = metrics.MustNewHistogramWithTags(metrics.HistogramOptions{
 		Namespace: "indexers",
 		Subsystem: "worker_api_cosmos",
@@ -28,7 +26,6 @@ var (
 		Desc:      "Number of pages returned from api",
 		Tags:      []string{"type"},
 	})
-	numberOfPagesTransactions = numberOfPages.WithLabels("transactions")
 
 	numberOfItems = metrics.MustNewHistogramWithTags(metrics.HistogramOptions{
 		Namespace: "indexers",
@@ -37,7 +34,6 @@ var (
 		Desc:      "Number of all transactions returned from one request",
 		Tags:      []string{"type"},
 	})
-	numberOfItemsTransactions = numberOfItems.WithLabels("transactions")
 
 	blockCacheEfficiency = metrics.MustNewCounterWithTags(metrics.Options{
 		Namespace: "indexers",
@@ -47,6 +43,18 @@ var (
 		Tags:      []string{"cache"},
 	})
 
-	blockCacheEfficiencyHit    = blockCacheEfficiency.WithLabels("hit")
-	blockCacheEfficiencyMissed = blockCacheEfficiency.WithLabels("missed")
+	blockCacheEfficiencyHit       *metrics.GroupCounter
+	blockCacheEfficiencyMissed    *metrics.GroupCounter
+	numberOfItemsTransactions     *metrics.GroupObserver
+	numberOfPagesTransactions     *metrics.GroupObserver
+	transactionConversionDuration *metrics.GroupObserver
 )
+
+func init() {
+	transactionConversionDuration = conversionDuration.WithLabels("transaction")
+	blockCacheEfficiencyHit = blockCacheEfficiency.WithLabels("hit")
+	blockCacheEfficiencyMissed = blockCacheEfficiency.WithLabels("missed")
+
+	numberOfPagesTransactions = numberOfPages.WithLabels("transactions")
+	numberOfItemsTransactions = numberOfItems.WithLabels("transactions")
+}

@@ -186,6 +186,7 @@ func (ic *IndexerClient) GetBlock(ctx context.Context, tr cStructs.TaskRequest, 
 
 	block, err := client.GetBlock(sCtx, *hr)
 	if err != nil {
+		ic.logger.Error("Error getting block", zap.Error(err))
 		stream.Send(cStructs.TaskResponse{
 			Id:    tr.Id,
 			Error: cStructs.TaskError{Msg: "Error getting block data " + err.Error()},

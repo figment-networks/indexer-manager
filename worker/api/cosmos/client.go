@@ -26,6 +26,10 @@ var (
 	convertionDurationObserver *metrics.GroupObserver
 )
 
+func init() {
+	convertionDurationObserver = conversionDuration.WithLabels("conversion")
+}
+
 // Client is a Tendermint RPC client for cosmos using figmentnetworks datahub
 type Client struct {
 	baseURL    string
@@ -47,8 +51,6 @@ func NewClient(url, key string, logger *zap.Logger, c *http.Client) *Client {
 			Timeout: time.Second * 40,
 		}
 	}
-
-	convertionDurationObserver = conversionDuration.WithLabels("conversion")
 
 	/* (lukanus): to use  ws in future "github.com/tendermint/tendermint/rpc/jsonrpc/client"
 	conn, err := client.NewWS(addr, "/websocket")

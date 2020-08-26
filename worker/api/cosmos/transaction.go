@@ -123,7 +123,7 @@ func rawToTransaction(ctx context.Context, c *Client, in chan TxResponse, out ch
 		lf := []LogFormat{}
 		err := dec.Decode(&lf)
 		if err != nil {
-			logger.Error("[COSMOS-API] Problem decoding raw transaction (json)", zap.Error(err))
+			logger.Error("[COSMOS-API] Problem decoding raw transaction (json)", zap.Error(err), zap.String("content_log", txRaw.TxResult.Log), zap.Any("content", txRaw))
 
 			out <- cStruct.OutResp{
 				ID:    txRaw.TaskID.TaskID,
@@ -151,7 +151,6 @@ func rawToTransaction(ctx context.Context, c *Client, in chan TxResponse, out ch
 			block, err = c.GetBlock(ctx, shared.HeightHash{Height: hInt})
 			if err != nil {
 				logger.Error("[COSMOS-API] Problem getting block at height", zap.Uint64("height", hInt), zap.Error(err))
-				log.Println(err)
 			}
 		}
 
@@ -205,9 +204,12 @@ func rawToTransaction(ctx context.Context, c *Client, in chan TxResponse, out ch
 					if len(attr.Validator) > 0 {
 						sub.Validator = attr.Validator
 					}
+					if attr.CompletionTime != "" {
+						cTime, _ := time.Parse(time.RFC3339Nano, attr.CompletionTime)
+						sub.Completion = &cTime
+					}
 
 					if attr.Amount != "" {
-
 						sliced := getCurrency(attr.Amount)
 
 						sub.Amount = &shared.TransactionAmount{

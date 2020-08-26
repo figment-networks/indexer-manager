@@ -106,13 +106,15 @@ type LogEvents struct {
 }
 
 type LogEventsAttributes struct {
-	Module    string
-	Action    string
-	Amount    string
-	Sender    []string
-	Validator []string
-	Recipient []string
-	Others    map[string][]string
+	Module         string
+	Action         string
+	Amount         string
+	Sender         []string
+	Validator      map[string][]string
+	Recipient      []string
+	CompletionTime string
+	Commission     []string
+	Others         map[string][]string
 }
 
 type kvHolder struct {
@@ -128,12 +130,19 @@ func (lea *LogEventsAttributes) UnmarshalJSON(b []byte) error {
 	for dec.More() {
 		err := dec.Decode(kc)
 		if err != nil {
-			log.Println("ERROR!")
 			return err
 		}
 		switch kc.Key {
-		case "validator":
-			lea.Validator = append(lea.Validator, kc.Value)
+		case "validator", "destination_validator", "source_validator":
+			if lea.Validator == nil {
+				lea.Validator = make(map[string][]string)
+			}
+			v, ok := lea.Validator[kc.Key]
+			if !ok {
+				v = []string{}
+			}
+			v = append(v, kc.Value)
+			lea.Validator[kc.Key] = v
 		case "sender":
 			lea.Sender = append(lea.Sender, kc.Value)
 		case "recipient":
@@ -142,10 +151,12 @@ func (lea *LogEventsAttributes) UnmarshalJSON(b []byte) error {
 			lea.Module = kc.Value
 		case "action":
 			lea.Action = kc.Value
+		case "completion_time":
+			lea.CompletionTime = kc.Value
 		case "amount":
 			lea.Amount = kc.Value
 		default:
-			log.Println("Unknown, ", kc.Key, kc.Value)
+			log.Println("FOUND UNKNOWN EVENT ATTRIBUTE, ", kc.Key, kc.Value)
 			k, ok := lea.Others[kc.Key]
 			if !ok {
 				k = []string{}

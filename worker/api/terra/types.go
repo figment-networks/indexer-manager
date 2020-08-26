@@ -104,7 +104,7 @@ type LogEventsAttributes struct {
 	Action    string
 	Amount    string
 	Sender    []string
-	Validator []string
+	Validator map[string][]string
 	Recipient []string
 
 	Voter  []string
@@ -128,13 +128,20 @@ func (lea *LogEventsAttributes) UnmarshalJSON(b []byte) error {
 	for dec.More() {
 		err := dec.Decode(kc)
 		if err != nil {
-			log.Println("ERROR!")
 			return err
 		}
 		switch kc.Key {
-		case "validator":
-		case "voter":
-			lea.Validator = append(lea.Validator, kc.Value)
+
+		case "validator", "voter":
+			if lea.Validator == nil {
+				lea.Validator = make(map[string][]string)
+			}
+			v, ok := lea.Validator[kc.Key]
+			if !ok {
+				v = []string{}
+			}
+			v = append(v, kc.Value)
+			lea.Validator[kc.Key] = v
 		case "sender":
 			lea.Sender = append(lea.Sender, kc.Value)
 		case "recipient":

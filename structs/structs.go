@@ -100,12 +100,13 @@ type SubsetEvent struct {
 	Action string `json:"action,omitempty"`
 	Module string `json:"module,omitempty"`
 
-	Sender    []string `json:"sender,omitempty"`
-	Recipient []string `json:"recipient,omitempty"`
-	Validator []string `json:"validator,omitempty"`
-	Feeder    []string `json:"feeder,omitempty"`
+	Sender    []string            `json:"sender,omitempty"`
+	Recipient []string            `json:"recipient,omitempty"`
+	Validator map[string][]string `json:"validator,omitempty"`
+	Feeder    []string            `json:"feeder,omitempty"`
 
-	Nonce int `json:"nonce,omitempty"`
+	Nonce      int        `json:"nonce,omitempty"`
+	Completion *time.Time `json:"completion,omitempty"`
 
 	Amount *TransactionAmount `json:"amount,omitempty"`
 }

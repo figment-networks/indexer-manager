@@ -70,7 +70,9 @@ READ_ALL:
 					}
 
 					if len(sub.Validator) > 0 {
-						parties = uniqueEntries(sub.Validator, parties)
+						for _, v := range sub.Validator {
+							parties = uniqueEntries(v, parties)
+						}
 					}
 
 					if len(sub.Feeder) > 0 {

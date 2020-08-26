@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 	grpc "google.golang.org/grpc"
 
 	"github.com/figment-networks/cosmos-indexer/cmd/worker_cosmos/config"
@@ -46,13 +47,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("error initializing config [ERR: %v]", err.Error())
 	}
-
 	if cfg.AppEnv == "development" {
 		logger.Init("console", "debug", []string{"stderr"})
 	} else {
 		logger.Init("json", "info", []string{"stderr"})
 	}
-
 	defer logger.Sync()
 
 	prom := prometheusmetrics.New()
@@ -107,8 +106,8 @@ func main() {
 	signal.Notify(osSig, syscall.SIGTERM)
 	signal.Notify(osSig, syscall.SIGINT)
 
-	go runGRPC(grpcServer, cfg, exit)
-	go runHTTP(s, cfg, exit)
+	go runGRPC(grpcServer, cfg, logger.GetLogger(), exit)
+	go runHTTP(s, cfg, logger.GetLogger(), exit)
 	ctx := context.Background()
 
 RUN_LOOP:
@@ -145,11 +144,13 @@ func initConfig(path string) (*config.Config, error) {
 	return cfg, nil
 }
 
-func runGRPC(grpcServer *grpc.Server, cfg *config.Config, exit chan<- string) {
-	log.Printf("[GRPC] Listening on 0.0.0.0:%s", cfg.Port)
+func runGRPC(grpcServer *grpc.Server, cfg *config.Config, logger *zap.Logger, exit chan<- string) {
+	defer logger.Sync()
+
+	logger.Info(fmt.Sprintf("[GRPC] Listening on 0.0.0.0:%s", cfg.Port))
 	lis, err := net.Listen("tcp", "0.0.0.0:"+cfg.Port)
 	if err != nil {
-		log.Println("failed to listen: %w", err)
+		logger.Error("[GRPC] failed to listen", zap.Error(err))
 		exit <- "grpc"
 		return
 	}
@@ -159,11 +160,13 @@ func runGRPC(grpcServer *grpc.Server, cfg *config.Config, exit chan<- string) {
 	exit <- "grpc"
 }
 
-func runHTTP(s *http.Server, cfg *config.Config, exit chan<- string) {
-	log.Printf("[HTTP] Listening on 0.0.0.0:%s", cfg.HTTPPort)
+func runHTTP(s *http.Server, cfg *config.Config, logger *zap.Logger, exit chan<- string) {
+	defer logger.Sync()
+
+	logger.Info(fmt.Sprintf("[HTTP] Listening on 0.0.0.0:%s", cfg.HTTPPort))
 
 	if err := s.ListenAndServe(); err != nil {
-		log.Println("failed to listen: %w", err)
+		logger.Error("[HTTP] failed to listen", zap.Error(err))
 	}
 	exit <- "http"
 }
