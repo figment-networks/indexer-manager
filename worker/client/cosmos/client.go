@@ -41,6 +41,7 @@ func NewIndexerClient(ctx context.Context, logger *zap.Logger, cosmosEndpoint st
 	getTransactionDuration = endpointDuration.WithLabels("getTransactions")
 	getLatestDuration = endpointDuration.WithLabels("getLatest")
 	getBlockDuration = endpointDuration.WithLabels("getBlock")
+	api.InitMetrics()
 
 	return &IndexerClient{
 		logger:         logger,

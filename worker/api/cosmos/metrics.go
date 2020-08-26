@@ -48,13 +48,5 @@ var (
 	numberOfItemsTransactions     *metrics.GroupObserver
 	numberOfPagesTransactions     *metrics.GroupObserver
 	transactionConversionDuration *metrics.GroupObserver
+	convertionDurationObserver    *metrics.GroupObserver
 )
-
-func init() {
-	transactionConversionDuration = conversionDuration.WithLabels("transaction")
-	blockCacheEfficiencyHit = blockCacheEfficiency.WithLabels("hit")
-	blockCacheEfficiencyMissed = blockCacheEfficiency.WithLabels("missed")
-
-	numberOfPagesTransactions = numberOfPages.WithLabels("transactions")
-	numberOfItemsTransactions = numberOfItems.WithLabels("transactions")
-}

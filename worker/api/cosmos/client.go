@@ -19,16 +19,7 @@ import (
 
 	"github.com/figment-networks/cosmos-indexer/structs"
 	cStruct "github.com/figment-networks/cosmos-indexer/worker/connectivity/structs"
-	"github.com/figment-networks/indexing-engine/metrics"
 )
-
-var (
-	convertionDurationObserver *metrics.GroupObserver
-)
-
-func init() {
-	convertionDurationObserver = conversionDuration.WithLabels("conversion")
-}
 
 // Client is a Tendermint RPC client for cosmos using figmentnetworks datahub
 type Client struct {
@@ -135,5 +126,14 @@ func (sbc *SimpleBlockCache) Get(height uint64) (bl structs.Block, ok bool) {
 
 	bl, ok = sbc.space[bl.Height]
 	return bl, ok
+}
 
+func InitMetrics() {
+	convertionDurationObserver = conversionDuration.WithLabels("conversion")
+	transactionConversionDuration = conversionDuration.WithLabels("transaction")
+	blockCacheEfficiencyHit = blockCacheEfficiency.WithLabels("hit")
+	blockCacheEfficiencyMissed = blockCacheEfficiency.WithLabels("missed")
+
+	numberOfPagesTransactions = numberOfPages.WithLabels("transactions")
+	numberOfItemsTransactions = numberOfItems.WithLabels("transactions")
 }

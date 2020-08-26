@@ -108,7 +108,13 @@ type SubsetEvent struct {
 	Nonce      int        `json:"nonce,omitempty"`
 	Completion *time.Time `json:"completion,omitempty"`
 
+	Error *SubsetEventError `json:"error,omitempty"`
+
 	Amount *TransactionAmount `json:"amount,omitempty"`
+}
+
+type SubsetEventError struct {
+	Message string `json:"message,omitempty"`
 }
 
 // Block

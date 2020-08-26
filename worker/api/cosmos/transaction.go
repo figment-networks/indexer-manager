@@ -23,6 +23,12 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+type TxLogError struct {
+	Codespace string  `json:"codespace"`
+	Code      float64 `json:"code"`
+	Message   string  `json:"message"`
+}
+
 var curencyRegex = regexp.MustCompile("([0-9\\.\\,\\-\\s]+)([^0-9\\s]+)$")
 
 // SearchTx is making search api call
@@ -121,16 +127,22 @@ func rawToTransaction(ctx context.Context, c *Client, in chan TxResponse, out ch
 
 		readr.Reset(txRaw.TxResult.Log)
 		lf := []LogFormat{}
+		txErr := TxLogError{}
 		err := dec.Decode(&lf)
 		if err != nil {
-			logger.Error("[COSMOS-API] Problem decoding raw transaction (json)", zap.Error(err), zap.String("content_log", txRaw.TxResult.Log), zap.Any("content", txRaw))
+			// (lukanus): Try to fallback to known error format
+			readr.Reset(txRaw.TxResult.Log)
+			errin := dec.Decode(&txErr)
+			if errin != nil {
+				logger.Error("[COSMOS-API] Problem decoding raw transaction (json)", zap.Error(err), zap.String("content_log", txRaw.TxResult.Log), zap.Any("content", txRaw))
 
-			out <- cStruct.OutResp{
-				ID:    txRaw.TaskID.TaskID,
-				RunID: txRaw.TaskID.RunID,
-				Error: fmt.Errorf("[COSMOS-API] Problem decoding raw transaction (json) %w", err),
+				out <- cStruct.OutResp{
+					ID:    txRaw.TaskID.TaskID,
+					RunID: txRaw.TaskID.RunID,
+					Error: fmt.Errorf("[COSMOS-API] Problem decoding raw transaction (json) %w", err),
+				}
+				continue
 			}
-			continue
 		}
 
 		base64Dec := base64.NewDecoder(base64.StdEncoding, strings.NewReader(txRaw.TxData))
@@ -225,6 +237,16 @@ func rawToTransaction(ctx context.Context, c *Client, in chan TxResponse, out ch
 					}
 				}
 				tev.Sub = append(tev.Sub, sub)
+			}
+			trans.Events = append(trans.Events, tev)
+		}
+
+		if txErr.Message != "" {
+			tev := shared.TransactionEvent{
+				Sub: []shared.SubsetEvent{{
+					Module: txErr.Codespace,
+					Error:  &shared.SubsetEventError{Message: txErr.Message},
+				}},
 			}
 			trans.Events = append(trans.Events, tev)
 		}
