@@ -6,6 +6,7 @@ import (
 
 	"github.com/figment-networks/cosmos-indexer/manager/connectivity/structs"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap/zaptest"
 )
 
 func TestManager_Register(t *testing.T) {
@@ -48,7 +49,8 @@ func TestManager_Register(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			m := NewManager("test")
+			logger := zaptest.NewLogger(t)
+			m := NewManager("test", logger)
 
 			for _, a := range tt.args {
 				m.Register(a.id, a.kind, a.connectionInfo)

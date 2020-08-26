@@ -2,42 +2,49 @@ package grpc
 
 import (
 	"context"
+	"fmt"
 	"io"
-	"log"
 	"time"
 
 	"github.com/figment-networks/cosmos-indexer/manager/connectivity/structs"
 	"github.com/figment-networks/cosmos-indexer/manager/transport/grpc/indexer"
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
 )
 
+// ConnectGRPCRunner
 type ConnectGRPCRunner interface {
 	Connect(ctx context.Context, stream *structs.StreamAccess) error
-	Run(ctx context.Context, stream *structs.StreamAccess)
+	Run(ctx context.Context, logger *zap.Logger, stream *structs.StreamAccess)
 }
 
+// AwaitingPing is basic iinformation about sent ping's
 type AwaitingPing struct {
 	t    time.Time
 	resp chan structs.ClientResponse
 	live bool
 }
 
-type Client struct {
-}
+// Client is GRPC implementation for connectivity
+type Client struct{}
 
+// NewClient Client constructor
 func NewClient() *Client {
 	return &Client{}
 }
 
+// Type returns client type
 func (c *Client) Type() string {
 	return "grpc"
 }
 
-func (c *Client) Run(ctx context.Context, stream *structs.StreamAccess) {
+// Run runs grpc client, connecting to given address and maintaining connection
+func (c *Client) Run(ctx context.Context, logger *zap.Logger, stream *structs.StreamAccess) {
 	defer stream.Close()
 	id, _ := uuid.NewRandom()
-	log.Printf("Running connections %s %+v", id.String(), stream.WorkerInfo.ConnectionInfo)
+
+	logger.Info("[GRPC] Trying to connect with ", zap.Stringer("id", id), zap.Any("connection_info", stream.WorkerInfo.ConnectionInfo))
 	var conn *grpc.ClientConn
 	var errSet []error
 	var dialErr error
@@ -46,14 +53,10 @@ func (c *Client) Run(ctx context.Context, stream *structs.StreamAccess) {
 	for _, address := range stream.WorkerInfo.ConnectionInfo.Addresses {
 		if address.Address != "" {
 			connectedTo = address.Address
-			conn, dialErr = grpc.Dial(address.Address, grpc.WithInsecure()) /*, grpc.WithKeepaliveParams(keepalive.ClientParameters{
-				PermitWithoutStream: false,
-			}))*/
+			conn, dialErr = grpc.Dial(address.Address, grpc.WithInsecure())
 		} else {
 			connectedTo = address.IP.String()
-			conn, dialErr = grpc.Dial(address.IP.String(), grpc.WithInsecure()) /*, grpc.WithKeepaliveParams(keepalive.ClientParameters{
-				PermitWithoutStream: false,
-			})) */
+			conn, dialErr = grpc.Dial(address.IP.String(), grpc.WithInsecure())
 		}
 
 		if dialErr != nil {
@@ -66,7 +69,7 @@ func (c *Client) Run(ctx context.Context, stream *structs.StreamAccess) {
 	}
 
 	if conn == nil || len(errSet) > 0 {
-		log.Printf("Cannot connect to any address given by worker: %s  %+v", id.String(), errSet)
+		logger.Error(fmt.Sprintf("Cannot connect to any address given by worker: %s ", id.String()), zap.Errors("errors", errSet))
 		return
 	}
 	defer conn.Close()
@@ -74,11 +77,11 @@ func (c *Client) Run(ctx context.Context, stream *structs.StreamAccess) {
 	gIndexer := indexer.NewIndexerServiceClient(conn)
 	taskStream, err := gIndexer.TaskRPC(ctx, grpc.WaitForReady(true))
 	if err != nil {
-		log.Printf("Cannot connect to any address given by worker: %s  %+v", id.String(), stream.WorkerInfo)
+		logger.Error(fmt.Sprintf("Error during connecting to worker: %s", id.String()), zap.Any("worker_info", stream.WorkerInfo))
 		return
 	}
 
-	log.Printf("Sucessfully Dialed %s %s  ", id.String(), connectedTo)
+	logger.Info("[GRPC] Sucessfully Dialed ", zap.Stringer("id", id), zap.String("address", connectedTo))
 
 	receiverClosed := make(chan error)
 
@@ -87,7 +90,7 @@ func (c *Client) Run(ctx context.Context, stream *structs.StreamAccess) {
 
 	pings := make(map[uuid.UUID]AwaitingPing)
 
-	go Recv(id, taskStream, stream, pingCh, receiverClosed)
+	go Recv(id, logger, taskStream, stream, pingCh, receiverClosed)
 
 CONTROLRPC:
 	for {
@@ -107,27 +110,27 @@ CONTROLRPC:
 				close(cT.Resp)
 				return
 			} else {
-				log.Printf("Unknown ControlType %s %+v", id.String(), cT)
+				logger.Error("[GRPC] Unknown ControlType", zap.Stringer("id", id), zap.Any("control_type", cT))
 			}
 		case resp := <-pingCh:
 			p, ok := pings[resp.ID]
 			if !ok {
-				log.Printf("Unknown PONG message %s %+v", id.String(), p)
+				logger.Error("[GRPC] Unknown PONG message", zap.Stringer("id", id), zap.Any("message", p))
 				continue
 			}
 			if p.resp != nil {
-				log.Printf("Sending ClientResponse PONG %s", time.Since(p.t).String())
+				logger.Debug("[GRPC] Sending ClientResponse PONG", zap.Duration("duration", time.Since(p.t)))
 				p.resp <- structs.ClientResponse{OK: true, Time: time.Since(p.t)}
 			}
 			delete(pings, resp.ID)
 		case <-ctx.Done():
-			log.Printf("Context Done: %s", id.String())
+			logger.Debug("[GRPC] Context Done", zap.Stringer("id", id))
 			break CONTROLRPC
 		case <-receiverClosed:
-			log.Printf("ReceiverClosed: %s", id.String())
+			logger.Debug("[GRPC] ReceiverClosed", zap.Stringer("id", id))
 			break CONTROLRPC
 		case req := <-stream.RequestListener:
-			log.Printf("SENDING REQUEST %s  - %+v", id, req)
+			//log.Printf("SENDING REQUEST %s  - %+v", id, req)
 			if err := taskStream.Send(&indexer.TaskRequest{
 				Id:      req.ID.String(),
 				From:    stream.ManagerID,
@@ -135,10 +138,11 @@ CONTROLRPC:
 				Payload: req.Payload,
 			}); err != nil {
 				if err == io.EOF {
-					log.Printf("Stream io.EOF")
+					logger.Debug("[GRPC] Stream io.EOF", zap.Stringer("id", id))
 					break CONTROLRPC
 				}
-				log.Printf("Error sending TaskResponse: %s %w", id.String(), err)
+
+				logger.Error("[GRPC] Error sending TaskResponse", zap.Stringer("id", id), zap.Error(err))
 			}
 		}
 
@@ -151,44 +155,45 @@ CONTROLRPC:
 	for _, p := range pings {
 		close(p.resp)
 	}
-	log.Printf("Finished: %s.String()", id)
 
+	logger.Info("[GRPC] Finished", zap.Stringer("id", id), zap.String("address", connectedTo))
 }
 
-func Recv(id uuid.UUID, stream indexer.IndexerService_TaskRPCClient, internalStream *structs.StreamAccess, pingCh chan<- structs.TaskResponse, finishCh chan error) {
+// Recv listener for stream messages
+func Recv(id uuid.UUID, logger *zap.Logger, stream indexer.IndexerService_TaskRPCClient, internalStream *structs.StreamAccess, pingCh chan<- structs.TaskResponse, finishCh chan error) {
 
-	log.Printf("Started receive %s", id.String())
+	//	log.Printf("Started receive %s", id.String())
 	defer close(finishCh)
 	for {
 		in, err := stream.Recv()
-		if err == io.EOF { // (lukanus): Done reading/end of stream
-			log.Printf("Finished receive %s", id.String())
-			return
-		}
 		if err != nil {
-			log.Printf("Finished receive error: %s %+v ", id.String(), err.Error())
-			finishCh <- err
+			if err == io.EOF { // (lukanus): Done reading/end of stream
+				logger.Debug("[GRPC] Receive: Finished - io.EOF", zap.Stringer("id", id))
+				return
+			}
+			logger.Error("[GRPC] Receive: error", zap.Stringer("id", id), zap.Error(err))
+			finishCh <- fmt.Errorf("Receive error %w", err)
 			return
 		}
 
-		id, err := uuid.Parse(in.Id)
+		msgID, err := uuid.Parse(in.Id)
 		if err != nil {
-			log.Printf("Cannot parseid %+v %s", in, err.Error())
+			logger.Error("[GRPC] Receive: cannot parse incomming uuid", zap.Stringer("id", id), zap.String("uuid", in.Id), zap.Error(err))
 			continue
 		}
 
 		if in.Type == "PONG" {
 			//	log.Printf("Received PONG %+v ", in)
 			select { // (lukanus): Never stuck
-			case pingCh <- structs.TaskResponse{ID: id, Type: in.Type}:
+			case pingCh <- structs.TaskResponse{ID: msgID, Type: in.Type}:
 			default:
-				log.Printf("Cannot send response %+v ", in)
+				logger.Error("[GRPC] Receive: PONG cannot send response", zap.Stringer("id", id), zap.Any("request", in))
 			}
 			continue
 		}
 
 		resp := &structs.TaskResponse{
-			ID:      id,
+			ID:      msgID,
 			Order:   in.Order,
 			Final:   in.Final,
 			Type:    in.Type,
@@ -202,8 +207,8 @@ func Recv(id uuid.UUID, stream indexer.IndexerService_TaskRPCClient, internalStr
 			}
 		}
 
-		if err = internalStream.Recv(resp); err != nil { // (lukanus): This error means it Cannot pass data to output
-			log.Printf("Error in Recv %s %+v", id.String(), err.Error())
+		if err = internalStream.Recv(resp); err != nil {
+			logger.Error("[GRPC] Receive: Error passing response", zap.Stringer("id", id), zap.Any("request", in), zap.Error(err))
 		}
 	}
 

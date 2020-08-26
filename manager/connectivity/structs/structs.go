@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 )
 
 var ErrStreamNotOnline = errors.New("Stream is not Online")
@@ -26,7 +27,7 @@ const (
 )
 
 type ConnTransport interface {
-	Run(ctx context.Context, stream *StreamAccess)
+	Run(ctx context.Context, logger *zap.Logger, stream *StreamAccess)
 	Type() string
 }
 
@@ -203,7 +204,7 @@ func NewStreamAccess(transport ConnTransport, managerID string, conn *WorkerInfo
 	}
 }
 
-func (sa *StreamAccess) Run() error {
+func (sa *StreamAccess) Run(ctx context.Context, logger *zap.Logger) error {
 	sa.mapLock.Lock()
 	if sa.State == StreamReconnecting {
 		return errors.New("Already Reconnecting")
@@ -217,8 +218,8 @@ func (sa *StreamAccess) Run() error {
 	}
 
 	var nCtx context.Context
-	nCtx, sa.CancelConnection = context.WithCancel(context.Background())
-	go sa.Transport.Run(nCtx, sa)
+	nCtx, sa.CancelConnection = context.WithCancel(ctx)
+	go sa.Transport.Run(nCtx, logger, sa)
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
@@ -227,8 +228,8 @@ func (sa *StreamAccess) Run() error {
 	return err
 }
 
-func (sa *StreamAccess) Reconnect() error {
-	return sa.Run()
+func (sa *StreamAccess) Reconnect(ctx context.Context, logger *zap.Logger) error {
+	return sa.Run(ctx, logger)
 }
 
 func (sa *StreamAccess) Recv(tr *TaskResponse) error {

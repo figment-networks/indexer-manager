@@ -10,6 +10,7 @@ import (
 
 	"github.com/figment-networks/cosmos-indexer/manager/connectivity/structs"
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 )
 
 var (
@@ -189,7 +190,7 @@ func (rrw *RoundRobinWorkers) SendToWoker(id string, tr structs.TaskRequest, aw 
 	return nil
 }
 
-func (rrw *RoundRobinWorkers) Reconnect(id string) error {
+func (rrw *RoundRobinWorkers) Reconnect(ctx context.Context, logger *zap.Logger, id string) error {
 	rrw.lock.RLock()
 	t, ok := rrw.trws[id]
 	rrw.lock.RUnlock()
@@ -197,7 +198,7 @@ func (rrw *RoundRobinWorkers) Reconnect(id string) error {
 		log.Println("RoundRobinWorkers Reconnecting NO SUCH WORKER  ")
 		return errors.New("No Such Worker")
 	}
-	return t.stream.Reconnect()
+	return t.stream.Reconnect(ctx, logger)
 }
 
 func (rrw *RoundRobinWorkers) Close(id string) error {

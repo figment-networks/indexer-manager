@@ -6,7 +6,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"log"
 	"math"
 	"strconv"
 	"strings"
@@ -254,7 +253,7 @@ func (d *Driver) GetTransactions(ctx context.Context, tsearch params.Transaction
 		qBuilder.WriteString(" LIMIT " + strconv.FormatUint(uint64(tsearch.Limit), 64))
 	}
 	a := qBuilder.String()
-	log.Printf("DEBUG QUERY: %s %+v ", a, data)
+	//log.Printf("DEBUG QUERY: %s %+v ", a, data)
 	rows, err := d.db.QueryContext(ctx, a, data...)
 	switch {
 	case err == sql.ErrNoRows:

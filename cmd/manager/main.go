@@ -11,11 +11,12 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
+	"os/signal"
 	"sync"
+	"syscall"
 	"time"
 
-	"github.com/figment-networks/cosmos-indexer/cmd/manager/config"
-	"github.com/figment-networks/cosmos-indexer/cmd/manager/logger"
 	"github.com/figment-networks/cosmos-indexer/manager/client"
 	"github.com/figment-networks/cosmos-indexer/manager/connectivity"
 	"github.com/figment-networks/cosmos-indexer/manager/connectivity/structs"
@@ -25,7 +26,12 @@ import (
 	httpTransport "github.com/figment-networks/cosmos-indexer/manager/transport/http"
 	"github.com/figment-networks/indexing-engine/metrics"
 	"github.com/figment-networks/indexing-engine/metrics/prometheusmetrics"
+
+	"github.com/figment-networks/cosmos-indexer/cmd/manager/config"
+	"github.com/figment-networks/cosmos-indexer/cmd/manager/logger"
+
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 )
 
 type flags struct {
@@ -49,6 +55,14 @@ func main() {
 		log.Fatal(fmt.Errorf("error initializing config [ERR: %+v]", err))
 	}
 
+	if cfg.AppEnv == "development" {
+		logger.Init("console", "debug", []string{"stderr"})
+	} else {
+		logger.Init("json", "info", []string{"stderr"})
+	}
+
+	defer logger.Sync()
+
 	prom := prometheusmetrics.New()
 	err = metrics.AddEngine(prom)
 	if err != nil {
@@ -59,15 +73,18 @@ func main() {
 		logger.Error(err)
 	}
 
-	log.Println("Connecting to ", cfg.DatabaseURL)
+	logger.Info("[DB] Connecting to database...")
 	db, err := sql.Open("postgres", cfg.DatabaseURL)
 	if err != nil {
-		log.Fatal(err)
+		logger.Error(err)
+		return
 	}
-	err = db.PingContext(ctx)
-	if err != nil {
-		log.Fatal(err)
+
+	if err := db.PingContext(ctx); err != nil {
+		logger.Error(err)
+		return
 	}
+	logger.Info("[DB] Ping successfull...")
 	defer db.Close()
 
 	pgsqlDriver := postgres.New(ctx, db)
@@ -75,20 +92,20 @@ func main() {
 	go managerStore.Run(ctx, time.Second*5)
 
 	mID, _ := uuid.NewRandom()
-	connManager := connectivity.NewManager(mID.String())
+	connManager := connectivity.NewManager(mID.String(), logger.GetLogger())
 
 	grpcCli := grpcTransport.NewClient()
 	connManager.AddTransport(grpcCli)
 
-	hubbleClient := client.NewHubbleClient(managerStore)
-	hubbleClient.LinkSender(connManager)
-	hubbleHTTPTransport := httpTransport.NewHubbleConnector(hubbleClient)
+	client.InitMetrics()
+	hClient := client.NewClient(managerStore, logger.GetLogger())
+	hClient.LinkSender(connManager)
+	hubbleHTTPTransport := httpTransport.NewHubbleConnector(hClient)
 
 	mux := http.NewServeMux()
 	hubbleHTTPTransport.AttachToHandler(mux)
 
-	attachChecks(managerStore, mux)
-	attachConnectionManager(connManager, mux)
+	attachConnectionManager(connManager, logger.GetLogger(), mux)
 
 	mux.Handle("/metrics", metrics.Handler())
 
@@ -99,8 +116,24 @@ func main() {
 			InsecureSkipVerify: true,
 		},
 	}
-	log.Printf("Running server on %s", cfg.Address)
-	log.Fatal(s.ListenAndServe())
+
+	osSig := make(chan os.Signal)
+	exit := make(chan string, 2)
+	signal.Notify(osSig, syscall.SIGTERM)
+	signal.Notify(osSig, syscall.SIGINT)
+
+	go runHTTP(s, cfg.Address, logger.GetLogger(), exit)
+
+RUN_LOOP:
+	for {
+		select {
+		case <-osSig:
+			s.Shutdown(ctx)
+			break RUN_LOOP
+		case <-exit:
+			break RUN_LOOP
+		}
+	}
 }
 
 func initConfig(path string) (config.Config, error) {
@@ -119,8 +152,15 @@ func initConfig(path string) (config.Config, error) {
 	return *cfg, nil
 }
 
-func attachChecks(db *store.Store, mux *http.ServeMux) {
+func runHTTP(s *http.Server, port string, logger *zap.Logger, exit chan<- string) {
+	defer logger.Sync()
 
+	logger.Info(fmt.Sprintf("[HTTP] Listening on 0.0.0.0:%s", port))
+
+	if err := s.ListenAndServe(); err != nil {
+		logger.Error("[HTTP] failed to listen", zap.Error(err))
+	}
+	exit <- "http"
 }
 
 // PingInfo contract is defined here
@@ -135,7 +175,7 @@ type ConnectivityInfo struct {
 	Type    string `json:"type"`
 }
 
-func attachConnectionManager(mgr *connectivity.Manager, mux *http.ServeMux) {
+func attachConnectionManager(mgr *connectivity.Manager, logger *zap.Logger, mux *http.ServeMux) {
 	b := &bytes.Buffer{}
 	block := &sync.Mutex{}
 	dec := json.NewDecoder(b)
@@ -148,7 +188,7 @@ func attachConnectionManager(mgr *connectivity.Manager, mux *http.ServeMux) {
 		defer r.Body.Close()
 		if err != nil {
 			block.Unlock()
-			log.Println(err)
+			logger.Error("Error getting request body in /client_ping", zap.Error(err))
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -156,13 +196,13 @@ func attachConnectionManager(mgr *connectivity.Manager, mux *http.ServeMux) {
 		err = dec.Decode(pi)
 		if err != nil {
 			block.Unlock()
-			log.Println(err)
+			logger.Error("Error decoding request body in /client_ping", zap.Error(err))
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
 		block.Unlock()
 
-		log.Printf("Received poke from %s:%s (%s) ", pi.Kind, pi.Connectivity.Version, pi.Connectivity.Type)
+		receivedSyncMetric.WithLabels(pi.Kind, pi.Connectivity.Version, pi.Connectivity.Address)
 		ipTo := net.ParseIP(r.RemoteAddr)
 		fwd := r.Header.Get("X-FORWARDED-FOR")
 		if fwd != "" {

@@ -10,6 +10,7 @@ import (
 
 	"github.com/figment-networks/cosmos-indexer/manager/connectivity/structs"
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 )
 
 type WorkersPool interface {
@@ -18,10 +19,9 @@ type WorkersPool interface {
 	Ping(ctx context.Context, id string) (time.Duration, error)
 	Close(id string) error
 	BringOnline(id string) error
-	Reconnect(id string) error
+	Reconnect(ctx context.Context, logger *zap.Logger, id string) error
 	GetWorker(id string) (twi TaskWorkerInfo, ok bool)
 	GetWorkers() TaskWorkerRecordInfo
-
 	SendToWoker(id string, tr structs.TaskRequest, aw *structs.Await) error
 }
 
@@ -52,11 +52,14 @@ type Manager struct {
 	nextWorkersLock sync.RWMutex
 
 	removeWorkerCh chan string
+
+	logger *zap.Logger
 }
 
-func NewManager(id string) *Manager {
+func NewManager(id string, logger *zap.Logger) *Manager {
 	return &Manager{
 		ID:             id,
+		logger:         logger,
 		networks:       make(map[string]*Network),
 		transports:     make(map[string]structs.ConnTransport),
 		nextWorkers:    make(map[structs.WorkerCompositeKey]WorkersPool),
@@ -64,6 +67,7 @@ func NewManager(id string) *Manager {
 	}
 }
 
+// Register
 func (m *Manager) Register(id, kind string, connInfo structs.WorkerConnection) error {
 	m.networkLock.Lock()
 	n, ok := m.networks[kind]
@@ -83,8 +87,10 @@ func (m *Manager) Register(id, kind string, connInfo structs.WorkerConnection) e
 						if (newAddr.Address != "" && newAddr.Address == oldAddr.Address) ||
 							(!newAddr.IP.IsUnspecified() && newAddr.IP.Equal(oldAddr.IP)) {
 							// Same Address!
-							log.Printf("Node under the same address previously registered. Removing.")
-							m.Unregister(work.NodeSelfID, work.Type, work.ConnectionInfo.Version)
+							m.logger.Info("[Manager] Node under the same address previously registered. Removing.", zap.Any("connection_info", oldAddr))
+							if err := m.Unregister(work.NodeSelfID, work.Type, work.ConnectionInfo.Version); err != nil {
+								m.logger.Error("[Manager] Error unregistring node.", zap.Error(err), zap.Any("connection_info", oldAddr))
+							}
 						}
 					}
 				}
@@ -102,13 +108,13 @@ func (m *Manager) Register(id, kind string, connInfo structs.WorkerConnection) e
 
 	w.LastCheck = time.Now()
 
-	log.Printf("STATE -  %+v, %+v  %+v ", w.State, w.LastCheck, w)
+	// log.Printf("STATE -  %+v, %+v  %+v ", w.State, w.LastCheck, w)
 
 	if ok && w.State != structs.StreamOffline { // (lukanus): node already registered
 		return nil
 	}
 
-	log.Printf("Registering %s %+v", connInfo.Type, connInfo)
+	m.logger.Info("[Manager] Registering ", zap.String("type", connInfo.Type), zap.Any("connection_info", connInfo))
 	m.transportsLock.RLock()
 	c, ok := m.transports[connInfo.Type]
 	m.transportsLock.RUnlock()
@@ -116,23 +122,23 @@ func (m *Manager) Register(id, kind string, connInfo structs.WorkerConnection) e
 		return fmt.Errorf("Transport %s cannot be found", connInfo.Type)
 	}
 	m.nextWorkersLock.RLock()
-	g, ok := m.nextWorkers[structs.WorkerCompositeKey{kind, connInfo.Version}]
+	g, ok := m.nextWorkers[structs.WorkerCompositeKey{Network: kind, Version: connInfo.Version}]
 	m.nextWorkersLock.RUnlock()
 
 	if !ok {
 		g = NewRoundRobinWorkers()
 		m.nextWorkersLock.Lock()
-		m.nextWorkers[structs.WorkerCompositeKey{kind, connInfo.Version}] = g
+		m.nextWorkers[structs.WorkerCompositeKey{Network: kind, Version: connInfo.Version}] = g
 		m.nextWorkersLock.Unlock()
 	}
 
-	if !ok {
+	if !ok { // Ading new worker
 		m.networkLock.Lock()
 		w.State = structs.StreamReconnecting
 		m.networkLock.Unlock()
 
 		sa := structs.NewStreamAccess(c, m.ID, w)
-		err := sa.Run()
+		err := sa.Run(context.Background(), m.logger)
 		m.networkLock.Lock()
 		if err != nil {
 			w.State = structs.StreamOffline
@@ -144,17 +150,16 @@ func (m *Manager) Register(id, kind string, connInfo structs.WorkerConnection) e
 		return g.AddWorker(id, sa)
 	}
 
-	log.Printf("Reconn %s %+v", connInfo.Type, connInfo)
-	err := g.Reconnect(id)
-
-	log.Printf("Reconnecting Error", err)
+	m.logger.Info("Reconnecting ", zap.String("type", connInfo.Type), zap.Any("connection_info", connInfo))
+	err := g.Reconnect(context.Background(), m.logger, id)
 	if err != nil {
+		m.logger.Error("Reconnecting Error ", zap.Error(err), zap.Any("connection_info", connInfo))
 		m.networkLock.Lock()
 		w.State = structs.StreamReconnecting
 		m.networkLock.Unlock()
 
 		sa := structs.NewStreamAccess(c, m.ID, w)
-		err := sa.Run()
+		err = sa.Run(context.Background(), m.logger)
 		m.networkLock.Lock()
 		if err != nil {
 			w.State = structs.StreamOffline
@@ -201,7 +206,7 @@ func (m *Manager) GetAllWorkers() map[string]WorkerNetworkStatic {
 func (m *Manager) Unregister(id, kind, version string) error {
 	m.nextWorkersLock.Lock()
 	defer m.nextWorkersLock.Unlock()
-	nw := m.nextWorkers[structs.WorkerCompositeKey{kind, version}]
+	nw := m.nextWorkers[structs.WorkerCompositeKey{Network: kind, Version: version}]
 	return nw.Close(id)
 }
 
@@ -242,7 +247,7 @@ func (m *Manager) Send(trs []structs.TaskRequest) (*structs.Await, error) {
 
 	first := trs[0]
 	m.nextWorkersLock.RLock()
-	w, ok := m.nextWorkers[structs.WorkerCompositeKey{first.Network, first.Version}]
+	w, ok := m.nextWorkers[structs.WorkerCompositeKey{Network: first.Network, Version: first.Version}]
 	m.nextWorkersLock.RUnlock()
 	if !ok {
 		return nil, fmt.Errorf("No such worker for %s - %s", first.Network, first.Version)
@@ -276,7 +281,7 @@ func (m *Manager) Send(trs []structs.TaskRequest) (*structs.Await, error) {
 					log.Printf("Error Pinging: %s %+v ", failedID, err)
 					//m.removeWorker(t.Network, failedID)
 					log.Printf("Reconnecting: %s  ", failedID)
-					err = w.Reconnect(failedID)
+					err = w.Reconnect(context.Background(), m.logger, failedID)
 				}
 				if err == nil {
 					log.Printf("PINGED %s SUCCESSFULLY  %s", failedID, duration.String())

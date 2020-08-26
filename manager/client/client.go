@@ -7,13 +7,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"math"
+
+	"github.com/figment-networks/indexing-engine/metrics"
+	"go.uber.org/zap"
 
 	"github.com/figment-networks/cosmos-indexer/manager/connectivity/structs"
 	"github.com/figment-networks/cosmos-indexer/manager/store"
 	"github.com/figment-networks/cosmos-indexer/manager/store/params"
-
 	shared "github.com/figment-networks/cosmos-indexer/structs"
 )
 
@@ -27,96 +28,126 @@ type NetworkVersion struct {
 
 // HubbleContractor a format agnostic
 type HubbleContractor interface {
+	GetAccounts(ctx context.Context, nv NetworkVersion)
+	GetAccount(ctx context.Context, nv NetworkVersion)
 	GetCurrentHeight(ctx context.Context, nv NetworkVersion)
 	GetCurrentBlock(ctx context.Context, nv NetworkVersion)
 	GetBlock(ctx context.Context, nv NetworkVersion, id string)
 	GetBlocks(ctx context.Context, nv NetworkVersion)
 	GetBlockTimes(ctx context.Context, nv NetworkVersion)
 	GetBlockTimesInterval(ctx context.Context, nv NetworkVersion)
-	GetTransaction(ctx context.Context, nv NetworkVersion) error
-	GetTransactions(ctx context.Context, nv NetworkVersion, startHeight int) error
-	GetAccounts(ctx context.Context, nv NetworkVersion)
-	GetAccount(ctx context.Context, nv NetworkVersion)
 
+	SearchTransactions(ctx context.Context, nv NetworkVersion, ts shared.TransactionSearch) ([]shared.Transaction, error)
+	GetTransaction(ctx context.Context, nv NetworkVersion, id string) ([]shared.Transaction, error)
+	GetTransactions(ctx context.Context, nv NetworkVersion, heightRange shared.HeightRange) ([]shared.Transaction, error)
 	InsertTransactions(ctx context.Context, nv NetworkVersion, read io.ReadCloser) error
+	ScrapeLatest(ctx context.Context, ldr shared.LatestDataRequest) (ldResp shared.LatestDataResponse, er error)
 }
 
 type TaskSender interface {
 	Send([]structs.TaskRequest) (*structs.Await, error)
 }
 
-type HubbleClient struct {
+type Client struct {
 	sender   TaskSender
 	storeEng store.DataStore
+	logger   *zap.Logger
 }
 
-func NewHubbleClient(storeEng store.DataStore) *HubbleClient {
-	return &HubbleClient{storeEng: storeEng}
+func NewClient(storeEng store.DataStore, logger *zap.Logger) *Client {
+	return &Client{storeEng: storeEng, logger: logger}
 }
 
-func (hc *HubbleClient) LinkSender(sender TaskSender) {
+func (hc *Client) LinkSender(sender TaskSender) {
 	hc.sender = sender
 }
 
-func (hc *HubbleClient) GetCurrentHeight(ctx context.Context, nv NetworkVersion) {
+func (hc *Client) GetAccounts(ctx context.Context, nv NetworkVersion) {
 
 }
 
-func (hc *HubbleClient) GetCurrentBlock(ctx context.Context, nv NetworkVersion) {
+func (hc *Client) GetAccount(ctx context.Context, nv NetworkVersion) {
+
+}
+func (hc *Client) GetCurrentHeight(ctx context.Context, nv NetworkVersion) {
 
 }
 
-func (hc *HubbleClient) GetBlock(ctx context.Context, nv NetworkVersion, id string) {
+func (hc *Client) GetCurrentBlock(ctx context.Context, nv NetworkVersion) {
 
 }
 
-func (hc *HubbleClient) GetBlocks(ctx context.Context, nv NetworkVersion) {
+func (hc *Client) GetBlock(ctx context.Context, nv NetworkVersion, id string) {
 
 }
 
-func (hc *HubbleClient) GetBlockTimes(ctx context.Context, nv NetworkVersion) {
+func (hc *Client) GetBlocks(ctx context.Context, nv NetworkVersion) {
 
 }
 
-func (hc *HubbleClient) GetBlockTimesInterval(ctx context.Context, nv NetworkVersion) {
+func (hc *Client) GetBlockTimes(ctx context.Context, nv NetworkVersion) {
 
 }
 
-func (hc *HubbleClient) GetTransaction(ctx context.Context, nv NetworkVersion, id string) ([]shared.Transaction, error) {
-	return hc.GetTransactions(ctx, nv, shared.HeightRange{"", "", 0, 0})
+func (hc *Client) GetBlockTimesInterval(ctx context.Context, nv NetworkVersion) {
+
 }
 
-func (hc *HubbleClient) GetTransactions(ctx context.Context, nv NetworkVersion, heightRange shared.HeightRange) ([]shared.Transaction, error) {
+func (hc *Client) GetTransaction(ctx context.Context, nv NetworkVersion, id string) ([]shared.Transaction, error) {
+	return hc.GetTransactions(ctx, nv, shared.HeightRange{Hash: id})
+}
 
-	log.Println("waiting for transactions")
-
-	req := []structs.TaskRequest{}
+func (hc *Client) GetTransactions(ctx context.Context, nv NetworkVersion, heightRange shared.HeightRange) ([]shared.Transaction, error) {
+	timer := metrics.NewTimer(callDurationGetTransactions)
+	defer timer.ObserveDuration()
 
 	times := 1
-	diff := float64(heightRange.EndHeight - heightRange.StartHeight)
-	if diff > 0 {
-		times = int(math.Ceil(diff / 1000))
-	}
+	req := []structs.TaskRequest{}
 
-	for i := 0; i < times; i++ {
-		b, _ := json.Marshal(shared.HeightRange{
-			StartHeight: heightRange.StartHeight + uint64(i*100),
-			EndHeight:   heightRange.StartHeight + uint64((i+1)*100),
-			Hash:        heightRange.Hash,
-		})
-
+	if heightRange.Hash != "" {
+		b, _ := json.Marshal(shared.HeightRange{Hash: heightRange.Hash})
 		req = append(req, structs.TaskRequest{
 			Network: nv.Network,
 			Version: nv.Version,
 			Type:    "GetTransactions",
 			Payload: b,
 		})
+	} else {
+		diff := float64(heightRange.EndHeight - heightRange.StartHeight)
+		if diff == 0 && heightRange.Hash == "" {
+			return nil, errors.New("No transaction to get, bad request")
+		}
+		requestsToGetMetric.Observe(diff)
+
+		if diff > 0 {
+			times = int(math.Ceil(diff / 100))
+		}
+
+		for i := 0; i < times; i++ {
+			endH := heightRange.StartHeight + uint64((i+1)*100)
+			if heightRange.EndHeight > 0 && endH > heightRange.EndHeight {
+				endH = heightRange.EndHeight
+			}
+
+			b, _ := json.Marshal(shared.HeightRange{
+				StartHeight: heightRange.StartHeight + uint64(i*100),
+				EndHeight:   endH,
+				Hash:        heightRange.Hash,
+			})
+
+			req = append(req, structs.TaskRequest{
+				Network: nv.Network,
+				Version: nv.Version,
+				Type:    "GetTransactions",
+				Payload: b,
+			})
+		}
 	}
 
 	respAwait, err := hc.sender.Send(req)
 	if err != nil {
-		log.Println("Error Sending data")
-		return nil, err
+		hc.logger.Error("[Client] Error sending data", zap.Error(err))
+		return nil, fmt.Errorf("error sending data in getTransaction: %w", err)
 	}
 
 	defer respAwait.Close()
@@ -153,15 +184,8 @@ WAIT_FOR_ALL_TRANSACTIONS:
 				return nil, fmt.Errorf("Error getting response: %w", err)
 			}
 
-			err = hc.storeEng.StoreTransaction(
-				shared.TransactionExtra{
-					Network:     nv.Network,
-					ChainID:     nv.Version,
-					Transaction: *m,
-				})
-
-			if err != nil {
-				log.Printf("Error storing transaction : %+v", err)
+			if err := hc.storeEng.StoreTransaction(shared.TransactionExtra{Network: nv.Network, ChainID: nv.Version, Transaction: *m}); err != nil {
+				hc.logger.Error("[Client] Error storing transaction", zap.Error(err))
 			}
 
 			trs = append(trs, *m)
@@ -175,12 +199,12 @@ WAIT_FOR_ALL_TRANSACTIONS:
 		}
 	}
 
-	log.Println("finished waiting for transactions")
 	return trs, nil
 }
 
-func (hc *HubbleClient) SearchTransactions(ctx context.Context, nv NetworkVersion, ts shared.TransactionSearch) ([]shared.Transaction, error) {
-
+func (hc *Client) SearchTransactions(ctx context.Context, nv NetworkVersion, ts shared.TransactionSearch) ([]shared.Transaction, error) {
+	timer := metrics.NewTimer(callDurationSearchTransactions)
+	defer timer.ObserveDuration()
 	return hc.storeEng.GetTransactions(ctx, params.TransactionSearch{
 		Network:   nv.Network,
 		Height:    ts.Height,
@@ -196,28 +220,25 @@ func (hc *HubbleClient) SearchTransactions(ctx context.Context, nv NetworkVersio
 	})
 }
 
-func (hc *HubbleClient) GetAccounts(ctx context.Context, nv NetworkVersion) {
+func (hc *Client) InsertTransactions(ctx context.Context, nv NetworkVersion, readr io.ReadCloser) error {
+	timer := metrics.NewTimer(callDurationInsertTransactions)
+	defer timer.ObserveDuration()
 
-}
-
-func (hc *HubbleClient) GetAccount(ctx context.Context, nv NetworkVersion) {
-
-}
-
-func (hc *HubbleClient) InsertTransactions(ctx context.Context, nv NetworkVersion, readr io.ReadCloser) error {
 	defer readr.Close()
 	dec := json.NewDecoder(readr)
 
 	_, err := dec.Token()
 	if err != nil {
-		return err
+		return fmt.Errorf("error decoding json - wrong format: %w", err)
+
 	}
 
+	inserted := 0
 	for dec.More() {
 		req := shared.Transaction{}
 
 		if err := dec.Decode(&req); err != nil {
-			return err
+			return fmt.Errorf("error decoding transaction %w", err)
 		}
 
 		err = hc.storeEng.StoreTransaction(
@@ -228,22 +249,21 @@ func (hc *HubbleClient) InsertTransactions(ctx context.Context, nv NetworkVersio
 			})
 
 		if err != nil {
-			return err
+			return fmt.Errorf("error storing transaction: %w", err)
 		}
+
+		inserted++
 
 	}
 
 	_, err = dec.Token()
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return err
 
 }
 
-func (hc *HubbleClient) ScrapeLatest(ctx context.Context, ldr shared.LatestDataRequest) (ldResp shared.LatestDataResponse, er error) {
-	log.Println("waiting for transactions")
+func (hc *Client) ScrapeLatest(ctx context.Context, ldr shared.LatestDataRequest) (ldResp shared.LatestDataResponse, er error) {
+	timer := metrics.NewTimer(callDurationScrapeLatest)
+	defer timer.ObserveDuration()
 
 	times := 1
 
@@ -273,11 +293,11 @@ func (hc *HubbleClient) ScrapeLatest(ctx context.Context, ldr shared.LatestDataR
 		Type:    "GetLatest",
 		Payload: taskReq,
 	}})
-	if err != nil {
-		log.Println("Error Sending data")
-		return ldResp, err
-	}
 
+	if err != nil {
+		hc.logger.Error("[Client] Error sending data", zap.Error(err))
+		return ldResp, fmt.Errorf("error sending data in getTransaction: %w", err)
+	}
 	defer respAwait.Close()
 
 	trs := []shared.Transaction{}
@@ -290,7 +310,7 @@ WAIT_FOR_ALL_TRANSACTIONS:
 	for {
 		select {
 		case <-ctx.Done():
-			return ldResp, errors.New("Request timed out")
+			return ldResp, errors.New("request timed out")
 		case response := <-respAwait.Resp:
 			if response.Error.Msg != "" {
 				return ldResp, fmt.Errorf("Error getting response: %s", response.Error.Msg)
@@ -320,7 +340,7 @@ WAIT_FOR_ALL_TRANSACTIONS:
 				})
 
 			if err != nil {
-				log.Printf("Error storing transaction : %+v", err)
+				hc.logger.Error("[Client] Error storing transaction", zap.Error(err))
 			}
 
 			trs = append(trs, *m)

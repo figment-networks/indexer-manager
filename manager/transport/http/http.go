@@ -13,35 +13,67 @@ import (
 	shared "github.com/figment-networks/cosmos-indexer/structs"
 )
 
-type HubbleConnector struct {
-	cli *client.HubbleClient
+// TransactionSearch - A set of fields used as params for search
+type TransactionSearch struct {
+	Network string `json:"network"`
+	//	AfterID   uint     `form:"after_id"`
+	//	BeforeID  uint     `form:"before_id"`
+	Height    uint64   `json:"height"`
+	Type      []string `json:"type"`
+	BlockHash string   `json:"block_hash"`
+	Account   string   `json:"account"`
+	Sender    string   `json:"sender"`
+	Receiver  string   `json:"receiver"`
+	Memo      string   `json:"memo"`
+	StartTime string   `json:"start_time"`
+	EndTime   string   `json:"end_time"`
+	Limit     uint     `json:"limit"`
 }
 
-func NewHubbleConnector(cli *client.HubbleClient) *HubbleConnector {
+// HubbleConnector is main HTTP connector for manager
+type HubbleConnector struct {
+	cli client.HubbleContractor
+}
+
+// NewHubbleConnector is HubbleConnector constructor
+func NewHubbleConnector(cli client.HubbleContractor) *HubbleConnector {
 	return &HubbleConnector{cli}
 }
 
+// GetAccounts is http handler for GetAccounts method
+func (hc *HubbleConnector) GetAccounts(w http.ResponseWriter, req *http.Request) {
+	// nv := client.NetworkVersion{Network: "cosmos", Version: "0.0.1"}
+	// hc.cli.GetAccounts(req.Context(), nv)
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAccount is http handler for GetAccount method
+func (hc *HubbleConnector) GetAccount(w http.ResponseWriter, req *http.Request) {
+	// nv := client.NetworkVersion{Network: "cosmos", Version: "0.0.1"}
+	// hc.cli.GetAccount(req.Context(), nv)
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetCurrentHeight is http handler for GetCurrentHeight method
 func (hc *HubbleConnector) GetCurrentHeight(w http.ResponseWriter, req *http.Request) {
 
-	nv := client.NetworkVersion{"cosmos", "0.0.1"}
-
 	// (lukanus): Current == no params :)
-	hc.cli.GetCurrentHeight(req.Context(), nv)
-
+	// nv := client.NetworkVersion{Network: "cosmos", Version: "0.0.1"}
+	// hc.cli.GetCurrentHeight(req.Context(), nv)
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// GetCurrentBlock is http handler for GetCurrentBlock method
 func (hc *HubbleConnector) GetCurrentBlock(w http.ResponseWriter, req *http.Request) {
-
-	nv := client.NetworkVersion{"cosmos", "0.0.1"}
-
 	// (lukanus): Current == no params :)
-	hc.cli.GetCurrentBlock(req.Context(), nv)
+	// nv := client.NetworkVersion{Network: "cosmos", Version: "0.0.1"}
+	// hc.cli.GetCurrentBlock(req.Context(), nv)
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// GetBlock is http handler for GetBlock method
 func (hc *HubbleConnector) GetBlock(w http.ResponseWriter, req *http.Request) {
-	nv := client.NetworkVersion{"cosmos", "0.0.1"}
+	nv := client.NetworkVersion{Network: "cosmos", Version: "0.0.1"}
 
 	keys := req.URL.Query()
 	id := keys.Get("id")
@@ -50,38 +82,41 @@ func (hc *HubbleConnector) GetBlock(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	hc.cli.GetBlock(req.Context(), nv, id)
-
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// GetBlocks is http handler for GetBlocks method
 func (hc *HubbleConnector) GetBlocks(w http.ResponseWriter, req *http.Request) {
-	nv := client.NetworkVersion{"cosmos", "0.0.1"}
-	hc.cli.GetBlocks(req.Context(), nv)
+	// nv := client.NetworkVersion{Network: "cosmos", Version: "0.0.1"}
+	// hc.cli.GetBlocks(req.Context(), nv)
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// GetBlockTimes is http handler for GetBlockTimes method
 func (hc *HubbleConnector) GetBlockTimes(w http.ResponseWriter, req *http.Request) {
-	nv := client.NetworkVersion{"cosmos", "0.0.1"}
-	hc.cli.GetBlockTimes(req.Context(), nv)
+	// nv := client.NetworkVersion{Network: "cosmos", Version: "0.0.1"}
+	// hc.cli.GetBlockTimes(req.Context(), nv)
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// GetBlockTimesInterval is http handler for GetBlockTimesInterval method
 func (hc *HubbleConnector) GetBlockTimesInterval(w http.ResponseWriter, req *http.Request) {
-	nv := client.NetworkVersion{"cosmos", "0.0.1"}
-	hc.cli.GetBlockTimesInterval(req.Context(), nv)
+	// nv := client.NetworkVersion{Network: "cosmos", Version: "0.0.1"}
+	// hc.cli.GetBlockTimesInterval(req.Context(), nv)
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// GetTransaction is http handler for GetTransaction method
 func (hc *HubbleConnector) GetTransaction(w http.ResponseWriter, req *http.Request) {
-	nv := client.NetworkVersion{"cosmos", "0.0.1"}
+	nv := client.NetworkVersion{Network: "cosmos", Version: "0.0.1"}
 	hc.cli.GetTransaction(req.Context(), nv, "")
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// InsertTransactions is http handler for InsertTransactions method
 func (hc *HubbleConnector) InsertTransactions(w http.ResponseWriter, req *http.Request) {
-
+	nv := client.NetworkVersion{Network: "cosmos", Version: "0.0.1"}
 	s := strings.Split(req.URL.Path, "/")
-	nv := client.NetworkVersion{"cosmos", "0.0.1"}
 
 	if len(s) > 0 {
 		nv.Network = s[2]
@@ -89,7 +124,6 @@ func (hc *HubbleConnector) InsertTransactions(w http.ResponseWriter, req *http.R
 		nv.Network = req.URL.Path
 	}
 
-	log.Println("nv", nv)
 	err := hc.cli.InsertTransactions(req.Context(), nv, req.Body)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -100,6 +134,7 @@ func (hc *HubbleConnector) InsertTransactions(w http.ResponseWriter, req *http.R
 	w.WriteHeader(http.StatusOK)
 }
 
+// GetTransactions is http handler for GetTransactions method
 func (hc *HubbleConnector) GetTransactions(w http.ResponseWriter, req *http.Request) {
 
 	strHeight := req.URL.Query().Get("height")
@@ -115,7 +150,7 @@ func (hc *HubbleConnector) GetTransactions(w http.ResponseWriter, req *http.Requ
 		network = "cosmos"
 	}
 
-	nv := client.NetworkVersion{network, "0.0.1"}
+	nv := client.NetworkVersion{Network: network, Version: "0.0.1"}
 
 	ctx, cancel := context.WithTimeout(req.Context(), 1*time.Minute)
 	defer cancel()
@@ -143,6 +178,7 @@ func (hc *HubbleConnector) GetTransactions(w http.ResponseWriter, req *http.Requ
 	enc.Encode(transactions)
 }
 
+// SearchTransactions is http handler for SearchTransactions method
 func (hc *HubbleConnector) SearchTransactions(w http.ResponseWriter, req *http.Request) {
 
 	ct := req.Header.Get("Content-Type")
@@ -179,7 +215,6 @@ func (hc *HubbleConnector) SearchTransactions(w http.ResponseWriter, req *http.R
 		ts.Receiver = req.Form.Get("receiver")
 
 		network = req.Form.Get("network")
-
 	}
 
 	if network == "" {
@@ -189,48 +224,20 @@ func (hc *HubbleConnector) SearchTransactions(w http.ResponseWriter, req *http.R
 	ctx, cancel := context.WithTimeout(req.Context(), 1*time.Minute)
 	defer cancel()
 
-	transactions, err := hc.cli.SearchTransactions(ctx, client.NetworkVersion{network, "0.0.1"}, *ts)
+	transactions, err := hc.cli.SearchTransactions(ctx, client.NetworkVersion{Network: network, Version: "0.0.1"}, *ts)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(err.Error()))
 		return
 	}
 
-	//	log.Printf("Returning %d transactions", len(transactions))
 	w.Header().Add("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	enc := json.NewEncoder(w)
 	enc.Encode(transactions)
 }
 
-type TransactionSearch struct {
-	Network string `json:"network"`
-	//	AfterID   uint     `form:"after_id"`
-	//	BeforeID  uint     `form:"before_id"`
-	Height    uint64   `json:"height"`
-	Type      []string `json:"type"`
-	BlockHash string   `json:"block_hash"`
-	Account   string   `json:"account"`
-	Sender    string   `json:"sender"`
-	Receiver  string   `json:"receiver"`
-	Memo      string   `json:"memo"`
-	StartTime string   `json:"start_time"`
-	EndTime   string   `json:"end_time"`
-	Limit     uint     `json:"limit"`
-}
-
-func (hc *HubbleConnector) GetAccounts(w http.ResponseWriter, req *http.Request) {
-	nv := client.NetworkVersion{"cosmos", "0.0.1"}
-	hc.cli.GetAccounts(req.Context(), nv)
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-func (hc *HubbleConnector) GetAccount(w http.ResponseWriter, req *http.Request) {
-	nv := client.NetworkVersion{"cosmos", "0.0.1"}
-	hc.cli.GetAccount(req.Context(), nv)
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
+// ScrapeLatest is http handler for ScrapeLatest method
 func (hc *HubbleConnector) ScrapeLatest(w http.ResponseWriter, req *http.Request) {
 
 	ct := req.Header.Get("Content-Type")
@@ -259,6 +266,7 @@ func (hc *HubbleConnector) ScrapeLatest(w http.ResponseWriter, req *http.Request
 
 }
 
+// AttachToHandler attaches handlers to http server's mux
 func (hc *HubbleConnector) AttachToHandler(mux *http.ServeMux) {
 	mux.HandleFunc("/height", hc.GetCurrentHeight)
 	mux.HandleFunc("/block", hc.GetCurrentBlock)
