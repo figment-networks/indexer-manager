@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"sync"
 	"time"
 
@@ -14,8 +13,9 @@ import (
 )
 
 var (
-	ErrStreamOffline      = errors.New("stream is Offline")
-	ErrNoWorkersAvailable = errors.New("no workers available")
+	ErrStreamOffline       = errors.New("stream is Offline")
+	ErrNoWorkersAvailable  = errors.New("no workers available")
+	ErrWorkerDoesNotExists = errors.New("workers does not exists")
 )
 
 type TaskWorkerInfo struct {
@@ -63,6 +63,7 @@ func NewRoundRobinWorkers() *RoundRobinWorkers {
 func (rrw *RoundRobinWorkers) AddWorker(id string, stream *structs.StreamAccess) error {
 	rrw.lock.Lock()
 	defer rrw.lock.Unlock()
+
 	trw := &TaskWorkerRecord{workerID: id, stream: stream}
 	select {
 	case rrw.next <- trw:
@@ -83,6 +84,7 @@ func (rrw *RoundRobinWorkers) SendNext(tr structs.TaskRequest, aw *structs.Await
 		if err := twr.stream.Req(tr, aw); err != nil {
 			return twr.workerID, fmt.Errorf("Cannot send to worker channel: %w", err)
 		}
+
 		twr.lastSend = time.Now()
 		rrw.next <- twr
 	default:
@@ -92,6 +94,7 @@ func (rrw *RoundRobinWorkers) SendNext(tr structs.TaskRequest, aw *structs.Await
 	return "", nil
 }
 
+// GetWorkers returns current workers information
 func (rrw *RoundRobinWorkers) GetWorkers() TaskWorkerRecordInfo {
 	rrw.lock.RLock()
 	defer rrw.lock.RUnlock()
@@ -151,19 +154,21 @@ func (rrw *RoundRobinWorkers) Ping(ctx context.Context, id string) (time.Duratio
 	t, ok := rrw.trws[id]
 	rrw.lock.RUnlock()
 	if !ok {
-		return 0, errors.New("No Such Worker")
+		return 0, ErrWorkerDoesNotExists
 	}
 
 	return t.stream.Ping(ctx)
 }
 
+// BringOnline Brings worker Online, removing duplicates
 func (rrw *RoundRobinWorkers) BringOnline(id string) error {
 	rrw.lock.Lock()
-	t, ok := rrw.trws[id]
 	defer rrw.lock.Unlock()
+	t, ok := rrw.trws[id]
 	if !ok {
-		return errors.New("No Such Worker")
+		return ErrWorkerDoesNotExists
 	}
+	// (lukanus): Remove duplicates
 	removeFromChannel(rrw.next, id)
 
 	select {
@@ -175,12 +180,13 @@ func (rrw *RoundRobinWorkers) BringOnline(id string) error {
 	return nil
 }
 
+// SendToWoker sends task to worker
 func (rrw *RoundRobinWorkers) SendToWoker(id string, tr structs.TaskRequest, aw *structs.Await) error {
 	rrw.lock.RLock()
 	twr, ok := rrw.trws[id]
 	rrw.lock.RUnlock()
 	if !ok {
-		return errors.New("No Such Worker")
+		return ErrWorkerDoesNotExists
 	}
 
 	if err := twr.stream.Req(tr, aw); err != nil {
@@ -190,28 +196,29 @@ func (rrw *RoundRobinWorkers) SendToWoker(id string, tr structs.TaskRequest, aw 
 	return nil
 }
 
+// Reconnect reconnects stream if exists
 func (rrw *RoundRobinWorkers) Reconnect(ctx context.Context, logger *zap.Logger, id string) error {
 	rrw.lock.RLock()
 	t, ok := rrw.trws[id]
 	rrw.lock.RUnlock()
 	if !ok {
-		log.Println("RoundRobinWorkers Reconnecting NO SUCH WORKER  ")
-		return errors.New("No Such Worker")
+		return ErrWorkerDoesNotExists
 	}
 	return t.stream.Reconnect(ctx, logger)
 }
 
+// Close closes worker of given id
 func (rrw *RoundRobinWorkers) Close(id string) error {
 	rrw.lock.Lock()
 	defer rrw.lock.Unlock()
 
 	t, ok := rrw.trws[id]
 	if !ok {
-		return errors.New("No Such Worker")
+		return ErrWorkerDoesNotExists
 	}
 
 	removeFromChannel(rrw.next, id)
-	t.stream.State = structs.StreamOffline
+	// t.stream.State = structs.StreamOffline
 
 	return t.stream.Close()
 }

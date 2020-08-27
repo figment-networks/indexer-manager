@@ -8,6 +8,7 @@ import (
 
 	"github.com/figment-networks/cosmos-indexer/scheduler/persistence/params"
 	"github.com/figment-networks/cosmos-indexer/scheduler/structures"
+
 	"github.com/google/uuid"
 )
 

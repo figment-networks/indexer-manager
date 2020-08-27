@@ -31,6 +31,7 @@ import (
 	"github.com/figment-networks/cosmos-indexer/cmd/manager/logger"
 
 	"github.com/google/uuid"
+	_ "github.com/lib/pq"
 	"go.uber.org/zap"
 )
 
@@ -152,10 +153,10 @@ func initConfig(path string) (config.Config, error) {
 	return *cfg, nil
 }
 
-func runHTTP(s *http.Server, port string, logger *zap.Logger, exit chan<- string) {
+func runHTTP(s *http.Server, address string, logger *zap.Logger, exit chan<- string) {
 	defer logger.Sync()
 
-	logger.Info(fmt.Sprintf("[HTTP] Listening on 0.0.0.0:%s", port))
+	logger.Info(fmt.Sprintf("[HTTP] Listening on %s", address))
 
 	if err := s.ListenAndServe(); err != nil {
 		logger.Error("[HTTP] failed to listen", zap.Error(err))

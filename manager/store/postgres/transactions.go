@@ -78,6 +78,10 @@ READ_ALL:
 						parties = uniqueEntries(sub.Feeder, parties)
 					}
 
+					if sub.Error != nil {
+						types = uniqueEntry("error", types)
+					}
+
 					types = uniqueEntry(sub.Type, types)
 				}
 			}
@@ -138,8 +142,10 @@ READ_ALL:
 }
 
 func uniqueEntries(in, out []string) []string {
-
 	for _, r := range in { // (lukanus): faster than a map :)
+		if r == "" {
+			continue
+		}
 		var exists bool
 	INNER:
 		for _, re := range out {
@@ -156,6 +162,9 @@ func uniqueEntries(in, out []string) []string {
 }
 
 func uniqueEntry(in string, out []string) []string {
+	if in == "" {
+		return out
+	}
 	for _, re := range out {
 		if in == re {
 			return out

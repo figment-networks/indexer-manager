@@ -16,7 +16,7 @@ var (
 		Subsystem: "manager_client",
 		Name:      "requests_to_get",
 		Desc:      "Number of how many heights we're requesting in one call",
-		Tags:      []string{""},
+		Tags:      []string{"type"},
 	})
 
 	callDurationGetTransaction     *metrics.GroupObserver
@@ -32,5 +32,5 @@ func InitMetrics() {
 	callDurationSearchTransactions = callDuration.WithLabels("SearchTransactions")
 	callDurationScrapeLatest = callDuration.WithLabels("ScrapeLatest")
 	callDurationInsertTransactions = callDuration.WithLabels("InsertTransactions")
-	requestsToGetMetric = requestsToGet.WithLabels("")
+	requestsToGetMetric = requestsToGet.WithLabels("get")
 }

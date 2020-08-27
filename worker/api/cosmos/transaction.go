@@ -33,6 +33,7 @@ var curencyRegex = regexp.MustCompile("([0-9\\.\\,\\-\\s]+)([^0-9\\s]+)$")
 
 // SearchTx is making search api call
 func (c *Client) SearchTx(ctx context.Context, taskID, runUUID uuid.UUID, r structs.HeightRange, page, perPage int, fin chan string) (count int64, err error) {
+	defer c.logger.Sync()
 
 	req, err := http.NewRequest(http.MethodGet, c.baseURL+"/tx_search", nil)
 	if err != nil {
@@ -102,6 +103,7 @@ func (c *Client) SearchTx(ctx context.Context, taskID, runUUID uuid.UUID, r stru
 	numberOfItemsTransactions.Observe(float64(totalCount))
 
 	for _, tx := range result.Result.Txs {
+
 		select {
 		case <-ctx.Done():
 			return totalCount, nil
@@ -255,6 +257,7 @@ func rawToTransaction(ctx context.Context, c *Client, in chan TxResponse, out ch
 			Type:       "Block",
 			Payload:    block,
 		}
+
 		timer.ObserveDuration()
 	}
 }

@@ -10,10 +10,14 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/figment-networks/cosmos-indexer/cmd/scheduler/config"
+	"github.com/figment-networks/cosmos-indexer/cmd/scheduler/logger"
+	"go.uber.org/zap"
 
 	"github.com/figment-networks/cosmos-indexer/scheduler/core"
 	"github.com/figment-networks/cosmos-indexer/scheduler/destination"
@@ -22,6 +26,8 @@ import (
 	"github.com/figment-networks/cosmos-indexer/scheduler/process"
 	"github.com/figment-networks/cosmos-indexer/scheduler/runner/lastdata"
 	"github.com/figment-networks/cosmos-indexer/scheduler/structures"
+
+	_ "github.com/lib/pq"
 )
 
 type flags struct {
@@ -45,16 +51,26 @@ func main() {
 		log.Fatal(fmt.Errorf("error initializing config [ERR: %+v]", err))
 	}
 
-	log.Println("Connecting to ", cfg.DatabaseURL)
+	if cfg.AppEnv == "development" {
+		logger.Init("console", "debug", []string{"stderr"})
+	} else {
+		logger.Init("json", "info", []string{"stderr"})
+	}
+
+	defer logger.Sync()
+
+	logger.Info("[DB] Connecting to database...")
 	db, err := sql.Open("postgres", cfg.DatabaseURL)
 	if err != nil {
-		log.Fatal(err)
+		logger.Error(err)
 		return
 	}
-	err = db.PingContext(ctx)
-	if err != nil {
-		log.Fatal(err)
+
+	if err := db.PingContext(ctx); err != nil {
+		logger.Error(err)
+		return
 	}
+	logger.Info("[DB] Ping successfull...")
 	defer db.Close()
 
 	mux := http.NewServeMux()
@@ -62,20 +78,21 @@ func main() {
 
 	sch := process.NewScheduler()
 
-	c := core.NewCore(persistence.CoreStorage{d}, sch)
+	c := core.NewCore(persistence.CoreStorage{Driver: d}, sch, logger.GetLogger())
 
-	scheme := destination.NewScheme()
+	scheme := destination.NewScheme(logger.GetLogger())
+	scheme.RegisterHandles(mux)
 
 	managers := strings.Split(cfg.Managers, ",")
 	if len(managers) == 0 {
-		log.Fatal("There is no manager to connect to")
+		logger.GetLogger().Error("There is no manager to connect to")
 		return
 	}
 
-	go recheck(scheme, managers, time.Second*20)
+	go recheck(ctx, logger.GetLogger(), scheme, managers, time.Second*20)
 
 	// (lukanus): this might be loaded as plugins ;)
-	lh := lastdata.NewClient(persistence.Storage{d}, scheme)
+	lh := lastdata.NewClient(persistence.Storage{Driver: d}, scheme)
 	c.LoadRunner("lasthash", lh)
 
 	if cfg.InitialConfig != "" {
@@ -101,9 +118,24 @@ func main() {
 			InsecureSkipVerify: true,
 		},
 	}
-	log.Printf("Running server on %s", cfg.Address)
-	log.Fatal(s.ListenAndServe())
 
+	osSig := make(chan os.Signal)
+	exit := make(chan string, 2)
+	signal.Notify(osSig, syscall.SIGTERM)
+	signal.Notify(osSig, syscall.SIGINT)
+
+	go runHTTP(s, cfg.Address, logger.GetLogger(), exit)
+
+RUN_LOOP:
+	for {
+		select {
+		case <-osSig:
+			s.Shutdown(ctx)
+			break RUN_LOOP
+		case <-exit:
+			break RUN_LOOP
+		}
+	}
 }
 
 func initConfig(path string) (config.Config, error) {
@@ -122,7 +154,7 @@ func initConfig(path string) (config.Config, error) {
 	return *cfg, nil
 }
 
-func recheck(scheme *destination.Scheme, addresses []string, dur time.Duration) (config.Config, error) {
+func recheck(ctx context.Context, logger *zap.Logger, scheme *destination.Scheme, addresses []string, dur time.Duration) (config.Config, error) {
 	for _, a := range addresses {
 		scheme.AddManager(a)
 	}
@@ -130,9 +162,25 @@ func recheck(scheme *destination.Scheme, addresses []string, dur time.Duration) 
 	tckr := time.NewTicker(dur)
 	for {
 		select {
+		case <-ctx.Done():
+			break
 		case <-tckr.C:
-			scheme.Refresh()
+			ctx, cancel := context.WithTimeout(ctx, time.Second*5)
+			if err := scheme.Refresh(ctx); err != nil {
+				logger.Error("Error on schema refresh", zap.Error(err))
+			}
+			cancel()
 		}
 	}
+}
 
+func runHTTP(s *http.Server, address string, logger *zap.Logger, exit chan<- string) {
+	defer logger.Sync()
+
+	logger.Info(fmt.Sprintf("[HTTP] Listening on %s", address))
+
+	if err := s.ListenAndServe(); err != nil {
+		logger.Error("[HTTP] failed to listen", zap.Error(err))
+	}
+	exit <- "http"
 }

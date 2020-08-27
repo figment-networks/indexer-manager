@@ -185,6 +185,7 @@ github.com/fatih/color v1.7.0/go.mod h1:Zm6kSWBoL9eyXnKyktHP6abPY2pDugNf5Kwzbycv
 github.com/figment-networks/indexing-engine v0.1.10 h1:XeBazbdkS2cUZ1qEGtuJeeEVTtvW5w2EYPQyOAjk33M=
 github.com/figment-networks/indexing-engine v0.1.10/go.mod h1:DkM0fJKhvXx9yYS/oIJg6Z4YAc924Rol/F4S7mpNARo=
 github.com/figment-networks/indexing-engine v0.1.11-0.20200825121608-ca5e16291f84/go.mod h1:qNrfV0A+kpAprbHS/aK1CZU2OgmVr1xkug26DO2QbY8=
+github.com/figment-networks/indexing-engine v0.1.11-0.20200826013651-e5caf7503ddf h1:VwNzD/f9QJiFi4E45zSNRiYG641DWU+gBB86zkiSnuI=
 github.com/figment-networks/indexing-engine v0.1.11-0.20200826013651-e5caf7503ddf/go.mod h1:qNrfV0A+kpAprbHS/aK1CZU2OgmVr1xkug26DO2QbY8=
 github.com/fortytw2/leaktest v1.3.0 h1:u8491cBMTQ8ft8aeV+adlcytMZylmA5nnwwkRZjI8vw=
 github.com/fortytw2/leaktest v1.3.0/go.mod h1:jDsjWgpAGjm2CA7WthBh/CdZYEPF31XHquHwclZch5g=

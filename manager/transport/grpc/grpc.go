@@ -119,7 +119,7 @@ CONTROLRPC:
 				continue
 			}
 			if p.resp != nil {
-				logger.Debug("[GRPC] Sending ClientResponse PONG", zap.Duration("duration", time.Since(p.t)))
+				logger.Debug("[GRPC] Sending ClientResponse PONG", zap.Duration("pong_duration", time.Since(p.t)))
 				p.resp <- structs.ClientResponse{OK: true, Time: time.Since(p.t)}
 			}
 			delete(pings, resp.ID)

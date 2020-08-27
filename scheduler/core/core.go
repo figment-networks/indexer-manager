@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"sync"
@@ -10,6 +11,7 @@ import (
 	"github.com/figment-networks/cosmos-indexer/scheduler/persistence"
 	"github.com/figment-networks/cosmos-indexer/scheduler/process"
 	"github.com/figment-networks/cosmos-indexer/scheduler/structures"
+	"go.uber.org/zap"
 
 	"github.com/google/uuid"
 )
@@ -32,21 +34,24 @@ type RunInfo struct {
 type Core struct {
 	ID      uuid.UUID
 	run     map[uuid.UUID]*RunInfo
-	runLock *sync.RWMutex
+	runLock sync.RWMutex
 
 	runners map[string]process.Runner
+
+	logger *zap.Logger
 
 	store persistence.CoreStorage
 
 	scheduler *process.Scheduler
 }
 
-func NewCore(store persistence.CoreStorage, scheduler *process.Scheduler) *Core {
+func NewCore(store persistence.CoreStorage, scheduler *process.Scheduler, logger *zap.Logger) *Core {
 	u, _ := uuid.NewRandom()
 	return &Core{
 		ID:        u,
 		store:     store,
 		scheduler: scheduler,
+		logger:    logger,
 		runners:   map[string]process.Runner{},
 	}
 }
@@ -83,7 +88,7 @@ func (c *Core) LoadScheduler(ctx context.Context) ([]structures.RunConfig, error
 	for _, s := range rcs {
 		runner, ok := c.runners[s.Kind]
 		if !ok {
-			log.Printf("There is no such type as %s", s.Kind)
+			c.logger.Error(fmt.Sprintf("[Core] There is no such type as %s", s.Kind))
 			continue
 		}
 		r, ok := c.run[s.ID]
@@ -95,14 +100,16 @@ func (c *Core) LoadScheduler(ctx context.Context) ([]structures.RunConfig, error
 		}
 
 		if r.Status == StatusEnabled {
-			log.Printf("%w", ErrAlreadyEnabled.Error())
+			c.logger.Error("[Core] Schedule already enabled")
 			continue
 		}
 
 		// In fact run scheduler
 		go c.scheduler.Run(ctx, s.ID.String(), r.Duration, r.Network, r.Version, runner)
 		err := c.store.MarkRunning(ctx, s.RunID, s.ID)
-		log.Printf("%w", err.Error())
+		if err != nil {
+			c.logger.Error("[Core] Error setting state running", zap.Error(err))
+		}
 	}
 
 	return nil, nil
@@ -154,6 +161,6 @@ func (c *Core) handlerAddSchedule(w http.ResponseWriter, r *http.Request) {
 }
 
 func (c *Core) RegisterHandles(smux *http.ServeMux) {
-	smux.HandleFunc("/scheduler/add", c.handlerAddSchedule)
-	smux.HandleFunc("/scheduler/list", c.handlerListSchedule)
+	smux.HandleFunc("/scheduler/core/add", c.handlerAddSchedule)
+	smux.HandleFunc("/scheduler/core/list", c.handlerListSchedule)
 }

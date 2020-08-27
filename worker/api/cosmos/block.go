@@ -64,7 +64,7 @@ func (c Client) GetBlock(ctx context.Context, params structs.HeightHash) (b stru
 	bTime, err := time.Parse(time.RFC3339Nano, result.Result.Block.Header.Time)
 	uHeight, err := strconv.ParseUint(result.Result.Block.Header.Height, 10, 64)
 
-	b = structs.Block{
+	block = structs.Block{
 		Hash:   result.Result.BlockMeta.BlockID.Hash,
 		Height: uHeight,
 		Time:   bTime,

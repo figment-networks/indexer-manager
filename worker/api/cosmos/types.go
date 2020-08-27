@@ -119,7 +119,7 @@ type LogEventsAttributes struct {
 
 type kvHolder struct {
 	Key   string `json:"key"`
-	Value string `json:value`
+	Value string `json:"value"`
 }
 
 func (lea *LogEventsAttributes) UnmarshalJSON(b []byte) error {

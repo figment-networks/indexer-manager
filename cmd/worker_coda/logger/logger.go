@@ -25,12 +25,13 @@ func Init(encoding, logLevel string, logOutputs []string) error {
 		Encoding:    "json",
 		Level:       zap.NewAtomicLevelAt(getLevel(logLevel)),
 		EncoderConfig: zapcore.EncoderConfig{
-			MessageKey:   "msg",
-			LevelKey:     "level",
-			TimeKey:      "time",
-			EncodeLevel:  zapcore.LowercaseLevelEncoder,
-			EncodeTime:   zapcore.ISO8601TimeEncoder,
-			EncodeCaller: zapcore.ShortCallerEncoder,
+			MessageKey:     "msg",
+			LevelKey:       "level",
+			TimeKey:        "time",
+			EncodeLevel:    zapcore.LowercaseLevelEncoder,
+			EncodeTime:     zapcore.ISO8601TimeEncoder,
+			EncodeCaller:   zapcore.ShortCallerEncoder,
+			EncodeDuration: zapcore.SecondsDurationEncoder,
 		},
 	}
 

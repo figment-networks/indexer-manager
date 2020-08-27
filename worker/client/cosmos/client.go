@@ -356,9 +356,9 @@ SEND_LOOP:
 					delete(opened, [2]uuid.UUID{t.ID, t.RunID})
 				}
 				n.Order++
-				sendResponseMetric.WithLabels(t.Type, "yes")
+				sendResponseMetric.WithLabels(t.Type, "yes").Inc()
 			} else {
-				sendResponseMetric.WithLabels(t.Type, "no")
+				sendResponseMetric.WithLabels(t.Type, "no").Inc()
 			}
 		}
 	}

@@ -152,7 +152,7 @@ func (hc *HubbleConnector) GetTransactions(w http.ResponseWriter, req *http.Requ
 
 	nv := client.NetworkVersion{Network: network, Version: "0.0.1"}
 
-	ctx, cancel := context.WithTimeout(req.Context(), 1*time.Minute)
+	ctx, cancel := context.WithTimeout(req.Context(), 5*time.Minute)
 	defer cancel()
 
 	hr := shared.HeightRange{

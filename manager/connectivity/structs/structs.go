@@ -304,6 +304,8 @@ func (sa *StreamAccess) Ping(ctx context.Context) (time.Duration, error) {
 			sa.respLock.Lock()
 			defer sa.respLock.Unlock()
 			defer sa.reqLock.Unlock()
+
+			sa.WorkerInfo.State = StreamOffline
 			sa.State = StreamOffline
 			return 0, errors.New("Ping TIMEOUT")
 		case a := <-resp:
@@ -311,6 +313,7 @@ func (sa *StreamAccess) Ping(ctx context.Context) (time.Duration, error) {
 			sa.respLock.Lock()
 			defer sa.respLock.Unlock()
 			defer sa.reqLock.Unlock()
+			sa.WorkerInfo.State = StreamOnline
 			sa.State = StreamOnline
 			return a.Time, nil
 		}
@@ -329,7 +332,9 @@ func (sa *StreamAccess) Close() error {
 	sa.State = StreamOffline
 	sa.CancelConnection()
 
-	sa.WorkerInfo.State = StreamOffline
+	if sa.WorkerInfo != nil {
+		sa.WorkerInfo.State = StreamOffline
+	}
 
 	for id, aw := range sa.ResponseMap {
 		// (lukanus): Close all awaits, they won't get full response anyway.

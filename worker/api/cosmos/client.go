@@ -47,6 +47,7 @@ func NewClient(url, key string, logger *zap.Logger, c *http.Client) *Client {
 	*/
 
 	cli := &Client{
+		logger:     logger,
 		baseURL:    url, //tendermint rpc url
 		key:        key,
 		httpClient: c,

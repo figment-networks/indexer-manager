@@ -56,6 +56,7 @@ type Manager struct {
 	logger *zap.Logger
 }
 
+// NewManager is Manager constructor
 func NewManager(id string, logger *zap.Logger) *Manager {
 	return &Manager{
 		ID:             id,
@@ -67,7 +68,7 @@ func NewManager(id string, logger *zap.Logger) *Manager {
 	}
 }
 
-// Register
+// Register new worker in Manager
 func (m *Manager) Register(id, kind string, connInfo structs.WorkerConnection) error {
 	m.networkLock.Lock()
 	n, ok := m.networks[kind]
@@ -151,15 +152,15 @@ func (m *Manager) Register(id, kind string, connInfo structs.WorkerConnection) e
 	}
 
 	m.logger.Info("Reconnecting ", zap.String("type", connInfo.Type), zap.Any("connection_info", connInfo))
-	err := g.Reconnect(context.Background(), m.logger, id)
-	if err != nil {
+	if err := g.Reconnect(context.Background(), m.logger, id); err != nil {
 		m.logger.Error("Reconnecting Error ", zap.Error(err), zap.Any("connection_info", connInfo))
+
 		m.networkLock.Lock()
 		w.State = structs.StreamReconnecting
 		m.networkLock.Unlock()
 
 		sa := structs.NewStreamAccess(c, m.ID, w)
-		err = sa.Run(context.Background(), m.logger)
+		err := sa.Run(context.Background(), m.logger)
 		m.networkLock.Lock()
 		if err != nil {
 			w.State = structs.StreamOffline
@@ -173,6 +174,7 @@ func (m *Manager) Register(id, kind string, connInfo structs.WorkerConnection) e
 	return g.BringOnline(id)
 }
 
+// GetAllWorkers returns static list of workers
 func (m *Manager) GetAllWorkers() map[string]WorkerNetworkStatic {
 	m.networkLock.RLock()
 	defer m.networkLock.RUnlock()
@@ -203,6 +205,7 @@ func (m *Manager) GetAllWorkers() map[string]WorkerNetworkStatic {
 	return winfos
 }
 
+// Unregister unregistring worker
 func (m *Manager) Unregister(id, kind, version string) error {
 	m.nextWorkersLock.Lock()
 	defer m.nextWorkersLock.Unlock()
@@ -210,6 +213,7 @@ func (m *Manager) Unregister(id, kind, version string) error {
 	return nw.Close(id)
 }
 
+// GetWorkers gets workers of kind
 func (m *Manager) GetWorkers(kind string) []structs.WorkerInfo {
 	m.networkLock.RLock()
 	defer m.networkLock.RUnlock()
@@ -228,6 +232,7 @@ func (m *Manager) GetWorkers(kind string) []structs.WorkerInfo {
 	return workers
 }
 
+// AddTransport for connectivity
 func (m *Manager) AddTransport(c structs.ConnTransport) error {
 	m.transportsLock.Lock()
 	defer m.transportsLock.Unlock()
@@ -240,6 +245,7 @@ func (m *Manager) AddTransport(c structs.ConnTransport) error {
 	return nil
 }
 
+// Send sends a set of requests
 func (m *Manager) Send(trs []structs.TaskRequest) (*structs.Await, error) {
 	if len(trs) == 0 {
 		return nil, errors.New("there is no transaction to be send")

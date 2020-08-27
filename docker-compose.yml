@@ -85,8 +85,6 @@ services:
       dockerfile: ./Dockerfile.worker.coda
     networks:
       - internal
-    ports:
-      - "8087:8087"
     environment:
       MANAGERS: cosmos-indexer_managerone_1:8085,cosmos-indexer_managertwo_1:8085
       CODA_ENDPOINT: http://cosmos-indexer_artificialsource_1:3334/coda
@@ -95,8 +93,6 @@ services:
     build:
       context: .
       dockerfile: ./Dockerfile.worker.cosmos
-    ports:
-      - "8088:8087"
     networks:
       - internal
     env_file:
@@ -110,8 +106,6 @@ services:
       dockerfile: ./Dockerfile.worker.terra
     networks:
       - internal
-    ports:
-      - "8089:8087"
     env_file:
       - .terra.env
     environment:
@@ -126,22 +120,12 @@ services:
     ports:
       - "8090:8085"
     environment:
+      MANAGERS: cosmos-indexer_managerone_1:8085,cosmos-indexer_managertwo_1:8085
       ADDRESS: 0.0.0.0:8085
       DATABASE_URL: postgres://cosmos:cosmos@cosmos-indexer_postgresdatabase_1/cosmos?sslmode=disable
     depends_on:
       - postgresdatabase
-      - schedulermigrate
-
-  schedulermigrate:
-    build:
-      context: .
-      dockerfile: ./Dockerfile.scheduler.migration
-    networks:
-      - internal
-    environment:
-      DATABASE_URL: postgres://cosmos:cosmos@cosmos-indexer_postgresdatabase_1/cosmos?sslmode=disable
-    depends_on:
-      - postgresdatabase
+      - managermigrate
 
   grafana:
     image: stefanprodan/swarmprom-grafana:5.3.4

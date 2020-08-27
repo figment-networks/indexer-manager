@@ -16,4 +16,4 @@ CREATE TABLE IF NOT EXISTS schedule
 );
 
 
-CREATE INDEX idx_sch_runID on schedule (runID);
+CREATE INDEX idx_sch_runID on schedule(runID);
