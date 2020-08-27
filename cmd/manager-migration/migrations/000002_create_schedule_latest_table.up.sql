@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS schedule_latest
 
 	hash        TEXT,
 	height      BIGSERIAL,
+    epoch       TEXT,
     nonce       BYTEA,
 
     PRIMARY KEY (id)

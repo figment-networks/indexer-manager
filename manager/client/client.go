@@ -158,15 +158,46 @@ func (hc *Client) GetTransactions(ctx context.Context, nv NetworkVersion, height
 	dec := json.NewDecoder(buff)
 
 	var receivedTransactions int
-WAIT_FOR_ALL_TRANSACTIONS:
+WAIT_FOR_ALL_DATA:
 	for {
 		select {
 		case <-ctx.Done():
 			return nil, errors.New("Request timed out")
 		case response := <-respAwait.Resp:
 			if response.Error.Msg != "" {
-				return nil, fmt.Errorf("Error getting response: %s", response.Error.Msg)
+				return trs, fmt.Errorf("error getting response: %s", response.Error.Msg)
 			}
+
+			if response.Type == "Transaction" || response.Type == "Block" {
+				buff.Reset()
+				buff.ReadFrom(bytes.NewReader(response.Payload))
+				switch response.Type {
+				case "Transaction":
+					t := &shared.Transaction{}
+					if err := hc.storeTransaction(dec, nv.Network, nv.Version, t); err != nil {
+						return trs, fmt.Errorf("error storing transaction: %w", err)
+					}
+					trs = append(trs, *t)
+				case "Block":
+					b := &shared.Block{}
+					if err := hc.storeBlock(dec, nv.Network, nv.Version, b); err != nil {
+						return trs, fmt.Errorf("error storing block: %w", err)
+					}
+				}
+			}
+
+			if response.Final {
+				receivedTransactions++
+			}
+
+			if receivedTransactions == times {
+				break WAIT_FOR_ALL_DATA
+			}
+		}
+	}
+	/*
+
+
 
 			if response.Type != "Transaction" {
 				continue
@@ -197,7 +228,8 @@ WAIT_FOR_ALL_TRANSACTIONS:
 				break WAIT_FOR_ALL_TRANSACTIONS
 			}
 		}
-	}
+	*/
+	//}
 
 	return trs, nil
 }
@@ -265,27 +297,29 @@ func (hc *Client) ScrapeLatest(ctx context.Context, ldr shared.LatestDataRequest
 	timer := metrics.NewTimer(callDurationScrapeLatest)
 	defer timer.ObserveDuration()
 
-	times := 1
-
-	// (lukanus): self consistency check (optional)
-	if SelfCheck {
-		lastTransaction, err := hc.storeEng.GetLatestTransaction(ctx, shared.TransactionExtra{ChainID: ldr.Version, Network: ldr.Network})
+	// (lukanus): self consistency check (optional), so we don;t care about an error
+	if ldr.SelfCheck {
+		//	lastTransaction, err := hc.storeEng.GetLatestTransaction(ctx, shared.TransactionExtra{ChainID: ldr.Version, Network: ldr.Network})
+		lastBlock, err := hc.storeEng.GetLatestBlock(ctx, shared.BlockExtra{ChainID: ldr.Version, Network: ldr.Network})
 		if err == nil {
-			if lastTransaction.Hash != "" {
-				ldr.LastHash = lastTransaction.Hash
+			if lastBlock.Hash != "" {
+				ldr.LastHash = lastBlock.Hash
 			}
 
-			if lastTransaction.Height > 0 {
-				ldr.LastHeight = lastTransaction.Height
+			if lastBlock.Height > 0 {
+				ldr.LastHeight = lastBlock.Height
 			}
 
-			if !lastTransaction.Time.IsZero() {
-				ldr.LastTime = lastTransaction.Time
+			if !lastBlock.Time.IsZero() {
+				ldr.LastTime = lastBlock.Time
 			}
 		}
 	}
 
-	taskReq, _ := json.Marshal(ldr)
+	taskReq, err := json.Marshal(ldr)
+	if err != nil {
+		return ldResp, fmt.Errorf("error marshaling data : %w", err)
+	}
 
 	respAwait, err := hc.sender.Send([]structs.TaskRequest{{
 		Network: ldr.Network,
@@ -295,64 +329,90 @@ func (hc *Client) ScrapeLatest(ctx context.Context, ldr shared.LatestDataRequest
 	}})
 
 	if err != nil {
-		hc.logger.Error("[Client] Error sending data", zap.Error(err))
 		return ldResp, fmt.Errorf("error sending data in getTransaction: %w", err)
 	}
 	defer respAwait.Close()
 
-	trs := []shared.Transaction{}
-
 	buff := &bytes.Buffer{}
 	dec := json.NewDecoder(buff)
 
-	var receivedTransactions int
-WAIT_FOR_ALL_TRANSACTIONS:
+	ldResp = shared.LatestDataResponse{}
+WAIT_FOR_ALL_DATA:
 	for {
 		select {
 		case <-ctx.Done():
 			return ldResp, errors.New("request timed out")
 		case response := <-respAwait.Resp:
 			if response.Error.Msg != "" {
-				return ldResp, fmt.Errorf("Error getting response: %s", response.Error.Msg)
+				return ldResp, fmt.Errorf("error getting response: %s", response.Error.Msg)
 			}
 
-			if response.Type != "Transaction" {
-				continue
+			if response.Type == "Transaction" || response.Type == "Block" {
+				buff.Reset()
+				buff.ReadFrom(bytes.NewReader(response.Payload))
+				switch response.Type {
+				case "Transaction":
+					t := &shared.Transaction{}
+					if err := hc.storeTransaction(dec, ldr.Network, ldr.Version, t); err != nil {
+						return ldResp, fmt.Errorf("error storing transaction: %w", err)
+					}
+				case "Block":
+					b := &shared.Block{}
+					if err := hc.storeBlock(dec, ldr.Network, ldr.Version, b); err != nil {
+						return ldResp, fmt.Errorf("error storing block: %w", err)
+					}
+					if ldResp.LastTime.IsZero() || !ldResp.LastTime.After(b.Time) {
+						ldResp.LastEpoch = b.Epoch
+						ldResp.LastHash = b.Hash
+						ldResp.LastHeight = b.Height
+						ldResp.LastTime = b.Time
+					}
+				}
 			}
 
-			//	if !ok {
-			//		return nil, errors.New("Response closed.")
-			//	}
-			//log.Printf("Got Response !!! %s ", string(response.Payload))
-			buff.Reset()
-			buff.ReadFrom(bytes.NewReader(response.Payload))
-			m := &shared.Transaction{}
-			err := dec.Decode(m)
-			if err != nil {
-				return ldResp, fmt.Errorf("Error getting response: %w", err)
-			}
-
-			err = hc.storeEng.StoreTransaction(
-				shared.TransactionExtra{
-					Network:     ldr.Network,
-					ChainID:     ldr.Version,
-					Transaction: *m,
-				})
-
-			if err != nil {
-				hc.logger.Error("[Client] Error storing transaction", zap.Error(err))
-			}
-
-			trs = append(trs, *m)
 			if response.Final {
-				receivedTransactions++
-			}
-
-			if receivedTransactions == times {
-				break WAIT_FOR_ALL_TRANSACTIONS
+				break WAIT_FOR_ALL_DATA
 			}
 		}
 	}
 
 	return ldResp, nil
+}
+
+func (hc *Client) storeTransaction(dec *json.Decoder, network string, version string, m *shared.Transaction) error {
+	err := dec.Decode(m)
+	if err != nil {
+		return fmt.Errorf("error decoding transaction: %w", err)
+	}
+
+	err = hc.storeEng.StoreTransaction(
+		shared.TransactionExtra{
+			Network:     network,
+			ChainID:     version,
+			Transaction: *m,
+		})
+
+	if err != nil {
+		return fmt.Errorf("error storing transaction: %w", err)
+	}
+	return nil
+}
+
+func (hc *Client) storeBlock(dec *json.Decoder, network string, version string, m *shared.Block) error {
+	err := dec.Decode(m)
+	if err != nil {
+		return fmt.Errorf("error decoding block: %w", err)
+	}
+
+	err = hc.storeEng.StoreBlock(
+		shared.BlockExtra{
+			Network: network,
+			ChainID: version,
+			Block:   *m,
+		})
+
+	if err != nil {
+		return fmt.Errorf("error storing block: %w", err)
+	}
+	return nil
 }

@@ -16,6 +16,7 @@ type HeightRange struct {
 }
 
 type HeightHash struct {
+	Epoch  string
 	Height uint64
 	Hash   string
 }
@@ -25,15 +26,19 @@ type LatestDataRequest struct {
 	Version string `json:"version"`
 
 	LastHash   string    `json:"lastHash"`
+	LastEpoch  string    `json:"lastEpoch"`
 	LastHeight uint64    `json:"lastheight"`
 	LastTime   time.Time `json:"lastTime"`
 	Nonce      []byte    `json:"nonce"`
+
+	SelfCheck bool `json:"selfCheck"`
 }
 
 type LatestDataResponse struct {
 	LastHash   string    `json:"lastHash"`
 	LastHeight uint64    `json:"lastheight"`
 	LastTime   time.Time `json:"lastTime"`
+	LastEpoch  string    `json:"lastEpoch"`
 	Nonce      []byte    `json:"nonce"`
 }
 
@@ -53,6 +58,7 @@ type Transaction struct {
 	BlockHash string `json:"block_hash,omitempty"`
 
 	Height uint64    `json:"height,omitempty"`
+	Epoch  string    `json:"epoch,omitempty"`
 	Time   time.Time `json:"time,omitempty"`
 
 	Fee       []TransactionFee `json:"transaction_fee,omitempty"`
@@ -117,6 +123,13 @@ type SubsetEventError struct {
 	Message string `json:"message,omitempty"`
 }
 
+type BlockExtra struct {
+	Network string `json:"network,omitempty"`
+	ChainID string `json:"chain_id,omitempty"`
+	Version string `json:"version"`
+	Block   Block  `json:"block,omitempty"`
+}
+
 // Block
 type Block struct {
 	ID        int64      `json:"id,omitempty"`
@@ -126,12 +139,14 @@ type Block struct {
 	Hash   string    `json:"hash,omitempty"`
 	Height uint64    `json:"height,omitempty"`
 	Time   time.Time `json:"time,omitempty"`
+	Epoch  string    `json:"epoch,omitempty"`
 }
 
 type TransactionSearch struct {
 	//	AfterID   uint     `form:"after_id"`
 	//	BeforeID  uint     `form:"before_id"`
 	Height    uint64    `json:"height"`
+	Epoch     string    `json:"epoch"`
 	Type      []string  `json:"type"`
 	BlockHash string    `json:"block_hash"`
 	Account   string    `json:"account"`

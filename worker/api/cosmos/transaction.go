@@ -19,7 +19,6 @@ import (
 
 	"github.com/cosmos/cosmos-sdk/codec"
 	"github.com/cosmos/cosmos-sdk/x/auth"
-	"github.com/google/uuid"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -32,7 +31,7 @@ type TxLogError struct {
 var curencyRegex = regexp.MustCompile("([0-9\\.\\,\\-\\s]+)([^0-9\\s]+)$")
 
 // SearchTx is making search api call
-func (c *Client) SearchTx(ctx context.Context, taskID, runUUID uuid.UUID, r structs.HeightRange, page, perPage int, fin chan string) (count int64, err error) {
+func (c *Client) SearchTx(ctx context.Context, r structs.HeightRange, out chan cStruct.OutResp, page, perPage int, fin chan string) (count int64, err error) {
 	defer c.logger.Sync()
 
 	req, err := http.NewRequest(http.MethodGet, c.baseURL+"/tx_search", nil)
@@ -102,23 +101,171 @@ func (c *Client) SearchTx(ctx context.Context, taskID, runUUID uuid.UUID, r stru
 
 	numberOfItemsTransactions.Observe(float64(totalCount))
 
-	for _, tx := range result.Result.Txs {
+	rawToTransaction(ctx, c, result.Result.Txs, out, c.logger, c.cdc)
+	/*
+		for _, tx := range result.Result.Txs {
 
-		select {
-		case <-ctx.Done():
-			return totalCount, nil
-		default:
+
+			select {
+			case <-ctx.Done():
+				return totalCount, nil
+			default:
+			}
+
+			tx.All = totalCount
+			tx.TaskID.TaskID = taskID
+			tx.TaskID.RunID = runUUID
+			c.inTx <- tx
 		}
-
-		tx.All = totalCount
-		tx.TaskID.TaskID = taskID
-		tx.TaskID.RunID = runUUID
-		c.inTx <- tx
-	}
+	*/
 	fin <- ""
 	return totalCount, nil
 }
 
+func rawToTransaction(ctx context.Context, c *Client, in []TxResponse, out chan cStruct.OutResp, logger *zap.Logger, cdc *codec.Codec) {
+	readr := strings.NewReader("")
+	dec := json.NewDecoder(readr)
+	for _, txRaw := range in {
+		timer := metrics.NewTimer(transactionConversionDuration)
+
+		tx := &auth.StdTx{}
+
+		readr.Reset(txRaw.TxResult.Log)
+		lf := []LogFormat{}
+		txErr := TxLogError{}
+		err := dec.Decode(&lf)
+		if err != nil {
+			// (lukanus): Try to fallback to known error format
+			readr.Reset(txRaw.TxResult.Log)
+			errin := dec.Decode(&txErr)
+			if errin != nil {
+				logger.Error("[COSMOS-API] Problem decoding raw transaction (json)", zap.Error(err), zap.String("content_log", txRaw.TxResult.Log), zap.Any("content", txRaw))
+
+				out <- cStruct.OutResp{
+					ID:    txRaw.TaskID.TaskID,
+					RunID: txRaw.TaskID.RunID,
+					Error: fmt.Errorf("[COSMOS-API] Problem decoding raw transaction (json) %w", err),
+				}
+				continue
+			}
+		}
+
+		base64Dec := base64.NewDecoder(base64.StdEncoding, strings.NewReader(txRaw.TxData))
+		_, err = cdc.UnmarshalBinaryLengthPrefixedReader(base64Dec, tx, 0)
+		if err != nil {
+			logger.Error("[COSMOS-API] Problem decoding raw transaction (cdc) ", zap.Error(err))
+		}
+		hInt, err := strconv.ParseUint(txRaw.Height, 10, 64)
+		if err != nil {
+			logger.Error("[COSMOS-API] Problem parsing height", zap.Error(err))
+		}
+
+		// (lukanus): it has embedded cache in int
+		block, err := c.GetBlock(ctx, shared.HeightHash{Height: hInt})
+		if err != nil {
+			logger.Error("[COSMOS-API] Problem getting block at height", zap.Uint64("height", hInt), zap.Error(err))
+		}
+
+		outTX := cStruct.OutResp{
+			//			ID:    txRaw.TaskID.TaskID,
+			//			RunID: txRaw.TaskID.RunID,
+			//			All:   uint64(txRaw.All),
+			Type: "Transaction",
+		}
+
+		trans := shared.Transaction{
+			Hash:      txRaw.Hash,
+			Memo:      tx.GetMemo(),
+			Time:      block.Time,
+			BlockHash: block.Hash,
+		}
+
+		trans.Height, err = strconv.ParseUint(txRaw.Height, 10, 64)
+		if err != nil {
+			outTX.Error = err
+		}
+		trans.GasWanted, err = strconv.ParseUint(txRaw.TxResult.GasWanted, 10, 64)
+		if err != nil {
+			outTX.Error = err
+		}
+		trans.GasUsed, err = strconv.ParseUint(txRaw.TxResult.GasUsed, 10, 64)
+		if err != nil {
+			outTX.Error = err
+		}
+
+		for _, logf := range lf {
+			tev := shared.TransactionEvent{
+				ID: strconv.FormatFloat(logf.MsgIndex, 'f', -1, 64),
+			}
+			for _, ev := range logf.Events {
+				sub := shared.SubsetEvent{
+					Type: ev.Type,
+				}
+				for _, attr := range ev.Attributes {
+					sub.Module = attr.Module
+					sub.Action = attr.Action
+
+					if len(attr.Sender) > 0 {
+						sub.Sender = attr.Sender
+					}
+
+					if len(attr.Recipient) > 0 {
+						sub.Recipient = attr.Recipient
+					}
+
+					if len(attr.Validator) > 0 {
+						sub.Validator = attr.Validator
+					}
+					if attr.CompletionTime != "" {
+						cTime, _ := time.Parse(time.RFC3339Nano, attr.CompletionTime)
+						sub.Completion = &cTime
+					}
+
+					if attr.Amount != "" {
+						sliced := getCurrency(attr.Amount)
+
+						sub.Amount = &shared.TransactionAmount{
+							Text: attr.Amount,
+						}
+
+						if len(sliced) == 2 {
+							sub.Amount.Currency = sliced[1]
+							sub.Amount.Numeric, _ = strconv.ParseFloat(sliced[0], 64)
+						} else {
+							sub.Amount.Numeric, _ = strconv.ParseFloat(attr.Amount, 64)
+						}
+					}
+				}
+				tev.Sub = append(tev.Sub, sub)
+			}
+			trans.Events = append(trans.Events, tev)
+		}
+
+		if txErr.Message != "" {
+			tev := shared.TransactionEvent{
+				Sub: []shared.SubsetEvent{{
+					Module: txErr.Codespace,
+					Error:  &shared.SubsetEventError{Message: txErr.Message},
+				}},
+			}
+			trans.Events = append(trans.Events, tev)
+		}
+
+		outTX.Payload = trans
+		out <- outTX
+		out <- cStruct.OutResp{
+			ID:         txRaw.TaskID.TaskID,
+			RunID:      txRaw.TaskID.RunID,
+			Additional: true,
+			Type:       "Block",
+			Payload:    block,
+		}
+
+		timer.ObserveDuration()
+	}
+}
+
+/*
 func rawToTransaction(ctx context.Context, c *Client, in chan TxResponse, out chan cStruct.OutResp, logger *zap.Logger, cdc *codec.Codec) {
 	readr := strings.NewReader("")
 	dec := json.NewDecoder(readr)
@@ -261,7 +408,7 @@ func rawToTransaction(ctx context.Context, c *Client, in chan TxResponse, out ch
 		timer.ObserveDuration()
 	}
 }
-
+*/
 func getCurrency(in string) []string {
 	return curencyRegex.FindAllString(in, 2)
 }

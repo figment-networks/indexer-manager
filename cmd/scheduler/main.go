@@ -25,6 +25,8 @@ import (
 	"github.com/figment-networks/cosmos-indexer/scheduler/persistence/postgresstore"
 	"github.com/figment-networks/cosmos-indexer/scheduler/process"
 	"github.com/figment-networks/cosmos-indexer/scheduler/runner/lastdata"
+
+	runnerHTTP "github.com/figment-networks/cosmos-indexer/scheduler/runner/transport/http"
 	"github.com/figment-networks/cosmos-indexer/scheduler/structures"
 
 	_ "github.com/lib/pq"
@@ -91,8 +93,9 @@ func main() {
 
 	go recheck(ctx, logger.GetLogger(), scheme, managers, time.Second*20)
 
+	rHTTP := runnerHTTP.NewLastDataHTTPTransport(scheme)
 	// (lukanus): this might be loaded as plugins ;)
-	lh := lastdata.NewClient(persistence.Storage{Driver: d}, scheme)
+	lh := lastdata.NewClient(persistence.Storage{Driver: d}, rHTTP)
 	c.LoadRunner("lasthash", lh)
 
 	if cfg.InitialConfig != "" {

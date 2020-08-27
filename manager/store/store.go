@@ -33,7 +33,9 @@ type TransactionStore interface {
 }
 
 type BlockStore interface {
-	StoreBlock(structs.Block) error
+	StoreBlock(structs.BlockExtra) error
+
+	GetLatestBlock(ctx context.Context, blx structs.BlockExtra) (structs.Block, error)
 }
 
 type Store struct {
@@ -65,14 +67,18 @@ func (s *Store) StoreTransactions(txs []structs.TransactionExtra) error {
 	return s.driver.StoreTransactions(txs)
 }
 
-func (s *Store) StoreBlock(bl structs.Block) error {
-	return s.driver.StoreBlock(bl)
-}
-
 func (s *Store) GetTransactions(ctx context.Context, tsearch params.TransactionSearch) ([]structs.Transaction, error) {
 	return s.driver.GetTransactions(ctx, tsearch)
 }
 
 func (s *Store) GetLatestTransaction(ctx context.Context, in structs.TransactionExtra) (out structs.Transaction, err error) {
 	return s.driver.GetLatestTransaction(ctx, in)
+}
+
+func (s *Store) StoreBlock(bl structs.BlockExtra) error {
+	return s.driver.StoreBlock(bl)
+}
+
+func (s *Store) GetLatestBlock(ctx context.Context, blx structs.BlockExtra) (structs.Block, error) {
+	return s.driver.GetLatestBlock(ctx, blx)
 }

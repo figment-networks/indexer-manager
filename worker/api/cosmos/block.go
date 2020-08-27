@@ -18,18 +18,21 @@ type GetBlockParams struct {
 }
 
 // GetBlock fetches most recent block from chain
-func (c Client) GetBlock(ctx context.Context, params structs.HeightHash) (b structs.Block, er error) {
+func (c Client) GetBlock(ctx context.Context, params structs.HeightHash) (block structs.Block, er error) {
 
-	block, ok := c.Sbc.Get(params.Height)
-	if ok {
-		blockCacheEfficiencyHit.Inc()
-		return block, nil
+	var ok bool
+	if params.Height != 0 {
+		block, ok = c.Sbc.Get(params.Height)
+		if ok {
+			blockCacheEfficiencyHit.Inc()
+			return block, nil
+		}
+		blockCacheEfficiencyMissed.Inc()
 	}
-	blockCacheEfficiencyMissed.Inc()
 
 	req, err := http.NewRequest(http.MethodGet, c.baseURL+"/block", nil)
 	if err != nil {
-		return b, err
+		return block, err
 	}
 
 	req.Header.Add("Content-Type", "application/json")
@@ -46,7 +49,7 @@ func (c Client) GetBlock(ctx context.Context, params structs.HeightHash) (b stru
 	n := time.Now()
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return b, err
+		return block, err
 	}
 	rawRequestDuration.WithLabels("/block", resp.Status).Observe(time.Since(n).Seconds())
 	defer resp.Body.Close()
@@ -55,11 +58,11 @@ func (c Client) GetBlock(ctx context.Context, params structs.HeightHash) (b stru
 
 	var result *GetBlockResponse
 	if err = decoder.Decode(&result); err != nil {
-		return b, err
+		return block, err
 	}
 
 	if result.Error.Message != "" {
-		return b, fmt.Errorf("error fetching block: %s ", result.Error.Message)
+		return block, fmt.Errorf("error fetching block: %s ", result.Error.Message)
 	}
 	bTime, err := time.Parse(time.RFC3339Nano, result.Result.Block.Header.Time)
 	uHeight, err := strconv.ParseUint(result.Result.Block.Header.Height, 10, 64)

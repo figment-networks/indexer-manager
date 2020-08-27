@@ -43,7 +43,7 @@ func flushTx(ctx context.Context, d *Driver) error {
 
 	qBuilder := strings.Builder{}
 	//	qBuilder.WriteString(`INSERT INTO public.transaction_events("network", "chain_id",  "height", "hash", "block_hash", "time", "type", "senders", "recipients", "amount", "fee", "gas_wanted", "gas_used", "memo", "data") VALUES `)
-	qBuilder.WriteString(`INSERT INTO public.transaction_events("network", "chain_id", "version", "height", "hash", "block_hash", "time", "type", "parties", "amount", "fee", "gas_wanted", "gas_used", "memo", "data") VALUES `)
+	qBuilder.WriteString(`INSERT INTO public.transaction_events("network", "chain_id", "version", "epoch", "height", "hash", "block_hash", "time", "type", "parties", "amount", "fee", "gas_wanted", "gas_used", "memo", "data") VALUES `)
 
 	var i = 0
 	valueArgs := []interface{}{}
@@ -92,11 +92,11 @@ READ_ALL:
 				qBuilder.WriteString(`,`)
 			}
 			qBuilder.WriteString(`(`)
-			for j := 1; j < 16; j++ {
+			for j := 1; j < 17; j++ {
 				qBuilder.WriteString(`$`)
-				current := i*15 + j
+				current := i*16 + j
 				qBuilder.WriteString(strconv.Itoa(current))
-				if current == 1 || math.Mod(float64(current), 15) != 0 {
+				if current == 1 || math.Mod(float64(current), 16) != 0 {
 					qBuilder.WriteString(`,`)
 				}
 			}
@@ -105,6 +105,7 @@ READ_ALL:
 			valueArgs = append(valueArgs, transaction.Network)
 			valueArgs = append(valueArgs, transaction.ChainID)
 			valueArgs = append(valueArgs, "0.0.1")
+			valueArgs = append(valueArgs, t.Epoch)
 			valueArgs = append(valueArgs, t.Height)
 			valueArgs = append(valueArgs, t.Hash)
 			valueArgs = append(valueArgs, t.BlockHash)
@@ -126,7 +127,7 @@ READ_ALL:
 		}
 	}
 
-	qBuilder.WriteString(` ON CONFLICT (network, chain_id, hash ) DO NOTHING`)
+	qBuilder.WriteString(` ON CONFLICT (network, chain_id, epoch, hash) DO NOTHING`)
 
 	tx, err := d.db.Begin()
 	if err != nil {
@@ -248,7 +249,7 @@ func (d *Driver) GetTransactions(ctx context.Context, tsearch params.Transaction
 	}
 
 	qBuilder := strings.Builder{}
-	qBuilder.WriteString("SELECT id, version, height, hash, block_hash, time, gas_wanted, gas_used, memo, data FROM public.transaction_events WHERE ")
+	qBuilder.WriteString("SELECT id, version, epoch, height, hash, block_hash, time, gas_wanted, gas_used, memo, data FROM public.transaction_events WHERE ")
 	for i, par := range parts {
 		if i != 0 {
 			qBuilder.WriteString(" AND ")
@@ -275,7 +276,7 @@ func (d *Driver) GetTransactions(ctx context.Context, tsearch params.Transaction
 	defer rows.Close()
 	for rows.Next() {
 		tx := structs.Transaction{}
-		if err := rows.Scan(&tx.ID, &tx.Version, &tx.Height, &tx.Hash, &tx.BlockHash, &tx.Time, &tx.GasWanted, &tx.GasUsed, &tx.Memo, &tx.Events); err != nil {
+		if err := rows.Scan(&tx.ID, &tx.Version, &tx.Epoch, &tx.Height, &tx.Hash, &tx.BlockHash, &tx.Time, &tx.GasWanted, &tx.GasUsed, &tx.Memo, &tx.Events); err != nil {
 			return nil, err
 		}
 		txs = append(txs, tx)
@@ -287,12 +288,12 @@ func (d *Driver) GetTransactions(ctx context.Context, tsearch params.Transaction
 func (d *Driver) GetLatestTransaction(ctx context.Context, in structs.TransactionExtra) (out structs.Transaction, err error) {
 	tx := structs.Transaction{}
 
-	row := d.db.QueryRowContext(ctx, "SELECT id, version, height, hash, block_hash, time FROM public.transaction_events WHERE version = $1 AND network = $2 ORDER BY time DESC LIMIT 1", in.ChainID, in.Network)
+	row := d.db.QueryRowContext(ctx, "SELECT id, version, epoch, height, hash, block_hash, time FROM public.transaction_events WHERE version = $1 AND network = $2 ORDER BY time DESC LIMIT 1", in.ChainID, in.Network)
 	if row == nil {
 		return out, params.ErrNotFound
 	}
 
-	err = row.Scan(&tx.ID, &tx.Version, &tx.Height, &tx.Hash, &tx.BlockHash, &tx.Time, &tx.GasWanted, &tx.GasUsed, &tx.Memo, &tx.Events)
+	err = row.Scan(&tx.ID, &tx.Version, &tx.Epoch, &tx.Height, &tx.Hash, &tx.BlockHash, &tx.Time, &tx.GasWanted, &tx.GasUsed, &tx.Memo, &tx.Events)
 
 	return out, err
 }

@@ -1,7 +1,6 @@
 package cosmos
 
 import (
-	"context"
 	"net/http"
 	"time"
 
@@ -15,8 +14,6 @@ import (
 	"github.com/cosmos/cosmos-sdk/x/slashing"
 	"github.com/cosmos/cosmos-sdk/x/staking"
 	"go.uber.org/zap"
-
-	cStruct "github.com/figment-networks/cosmos-indexer/worker/connectivity/structs"
 )
 
 // Client is a Tendermint RPC client for cosmos using figmentnetworks datahub
@@ -28,7 +25,6 @@ type Client struct {
 	logger     *zap.Logger
 
 	inTx chan TxResponse
-	out  chan cStruct.OutResp
 
 	Sbc *SimpleBlockCache
 }
@@ -52,22 +48,22 @@ func NewClient(url, key string, logger *zap.Logger, c *http.Client) *Client {
 		key:        key,
 		httpClient: c,
 		cdc:        makeCodec(),
-		inTx:       make(chan TxResponse, 20),
-		out:        make(chan cStruct.OutResp, 20),
-		Sbc:        NewSimpleBlockCache(400),
+		// 	inTx:       make(chan TxResponse, 20),
+		//	out:        make(chan cStruct.OutResp, 20),
+		Sbc: NewSimpleBlockCache(400),
 	}
-	ctx := context.Background()
-
-	for i := 0; i < 5; i++ {
-		go rawToTransaction(ctx, cli, cli.inTx, cli.out, logger, cli.cdc)
-	}
-
+	//	ctx := context.Background()
+	/*
+		for i := 0; i < 5; i++ {
+			go rawToTransaction(ctx, cli, cli.inTx, cli.out, logger, cli.cdc)
+		}
+	*/
 	return cli
 }
 
-func (c *Client) Out() chan cStruct.OutResp {
-	return c.out
-}
+//func (c *Client) Out() chan cStruct.OutResp {
+//	return c.out
+//}
 
 func makeCodec() *codec.Codec {
 	var cdc = codec.New()
