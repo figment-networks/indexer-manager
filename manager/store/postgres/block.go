@@ -89,7 +89,9 @@ func (d *Driver) GetLatestBlock(ctx context.Context, blx structs.BlockExtra) (ou
 	}
 
 	err = row.Scan(&returnBlx.ID, &returnBlx.Epoch, &returnBlx.Height, &returnBlx.Hash, &returnBlx.Time)
-
+	if err == sql.ErrNoRows {
+		return returnBlx, params.ErrNotFound
+	}
 	return returnBlx, err
 }
 
@@ -99,6 +101,8 @@ type orderPair struct {
 }
 
 func (d *Driver) BlockContinuityCheck(ctx context.Context, blx structs.BlockExtra, startHeight uint64) ([][2]uint64, error) {
+
+	d.Flush()
 
 	rows, err := d.db.QueryContext(ctx, "SELECT height, pre_height FROM (SELECT height, lag(height) over (order by height) as pre_height FROM blocks WHERE version = $1 AND network = $2 AND height > $3 ORDER BY height) as ss WHERE height != pre_height+1;", blx.ChainID, blx.Network, startHeight)
 	switch {

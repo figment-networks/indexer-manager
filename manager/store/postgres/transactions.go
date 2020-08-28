@@ -197,6 +197,18 @@ func (d *Driver) GetTransactions(ctx context.Context, tsearch params.Transaction
 		parts = append(parts, "height = $"+strconv.Itoa(i))
 		data = append(data, tsearch.Height)
 		i++
+	} else {
+		if tsearch.AfterHeight > 0 {
+			parts = append(parts, "height > $"+strconv.Itoa(i))
+			data = append(data, tsearch.AfterHeight)
+			i++
+		}
+
+		if tsearch.BeforeHeight > 0 {
+			parts = append(parts, "height > $"+strconv.Itoa(i))
+			data = append(data, tsearch.BeforeHeight)
+			i++
+		}
 	}
 
 	if len(tsearch.Type) > 0 {
@@ -288,12 +300,16 @@ func (d *Driver) GetTransactions(ctx context.Context, tsearch params.Transaction
 func (d *Driver) GetLatestTransaction(ctx context.Context, in structs.TransactionExtra) (out structs.Transaction, err error) {
 	tx := structs.Transaction{}
 
+	d.Flush()
+
 	row := d.db.QueryRowContext(ctx, "SELECT id, version, epoch, height, hash, block_hash, time FROM public.transaction_events WHERE version = $1 AND network = $2 ORDER BY time DESC LIMIT 1", in.ChainID, in.Network)
 	if row == nil {
 		return out, params.ErrNotFound
 	}
 
 	err = row.Scan(&tx.ID, &tx.Version, &tx.Epoch, &tx.Height, &tx.Hash, &tx.BlockHash, &tx.Time, &tx.GasWanted, &tx.GasUsed, &tx.Memo, &tx.Events)
-
+	if err == sql.ErrNoRows {
+		return out, params.ErrNotFound
+	}
 	return out, err
 }

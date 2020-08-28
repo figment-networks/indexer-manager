@@ -74,7 +74,6 @@ func (wc *WorkerConnections) Run(ctx context.Context, logger *zap.Logger, dur ti
 			for _, ad := range wc.managerAddresses {
 				readr.Seek(0, 0)
 				timer := metrics.NewTimer(ad.Observer)
-
 				req, err := http.NewRequestWithContext(ctx, http.MethodPost, "http://"+ad.Address, readr)
 				if err != nil {
 					workerStatus.WithLabels(ad.Address, "600", "err_creating_request").Inc()

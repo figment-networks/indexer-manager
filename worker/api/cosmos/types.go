@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 
 	"github.com/google/uuid"
-	log "github.com/sirupsen/logrus"
 )
 
 // TxResponse is result of querying for a tx
@@ -111,6 +110,7 @@ type LogEventsAttributes struct {
 	Amount         string
 	Sender         []string
 	Validator      map[string][]string
+	Withdraw       map[string][]string
 	Recipient      []string
 	CompletionTime string
 	Commission     []string
@@ -143,6 +143,18 @@ func (lea *LogEventsAttributes) UnmarshalJSON(b []byte) error {
 			}
 			v = append(v, kc.Value)
 			lea.Validator[kc.Key] = v
+
+		case "withdraw_address":
+			if lea.Withdraw == nil {
+				lea.Withdraw = make(map[string][]string)
+			}
+			// for now it's only address
+			v, ok := lea.Withdraw["address"]
+			if !ok {
+				v = []string{}
+			}
+			v = append(v, kc.Value)
+			lea.Withdraw[kc.Key] = v
 		case "sender":
 			lea.Sender = append(lea.Sender, kc.Value)
 		case "recipient":
@@ -156,7 +168,6 @@ func (lea *LogEventsAttributes) UnmarshalJSON(b []byte) error {
 		case "amount":
 			lea.Amount = kc.Value
 		default:
-			log.Println("FOUND UNKNOWN EVENT ATTRIBUTE, ", kc.Key, kc.Value)
 			k, ok := lea.Others[kc.Key]
 			if !ok {
 				k = []string{}

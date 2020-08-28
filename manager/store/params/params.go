@@ -10,9 +10,7 @@ var (
 )
 
 type TransactionSearch struct {
-	Network string `json:"network"`
-	//	AfterID   uint     `form:"after_id"`
-	//	BeforeID  uint     `form:"before_id"`
+	Network   string    `json:"network"`
 	Height    uint64    `json:"height"`
 	Type      []string  `json:"type"`
 	BlockHash string    `json:"block_hash"`
@@ -22,5 +20,8 @@ type TransactionSearch struct {
 	Memo      string    `json:"memo"`
 	StartTime time.Time `json:"start_time"`
 	EndTime   time.Time `json:"end_time"`
-	Limit     uint64    `json:"limit"`
+
+	AfterHeight  uint64 `form:"after_height"`
+	BeforeHeight uint64 `form:"before_height"`
+	Limit        uint64 `json:"limit"`
 }

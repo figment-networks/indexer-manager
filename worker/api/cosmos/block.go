@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"sync"
@@ -75,6 +76,81 @@ func (c Client) GetBlock(ctx context.Context, params structs.HeightHash) (block 
 
 	c.Sbc.Add(block)
 	return block, nil
+}
+
+type BlockErrorPair struct {
+	Height uint64
+	Block  structs.Block
+	Err    error
+}
+
+func (c Client) GetBlockAsync(ctx context.Context, in chan uint64, out chan<- BlockErrorPair) {
+
+	for height := range in {
+		req, err := http.NewRequest(http.MethodGet, c.baseURL+"/block", nil)
+		if err != nil {
+			out <- BlockErrorPair{
+				Height: height,
+				Err:    err,
+			}
+			continue
+		}
+
+		req.Header.Add("Content-Type", "application/json")
+		if c.key != "" {
+			req.Header.Add("Authorization", c.key)
+		}
+
+		q := req.URL.Query()
+		q.Add("height", strconv.FormatUint(height, 10))
+		req.URL.RawQuery = q.Encode()
+
+		n := time.Now()
+		resp, err := c.httpClient.Do(req)
+		if err != nil {
+			out <- BlockErrorPair{
+				Height: height,
+				Err:    err,
+			}
+			continue
+		}
+		rawRequestDuration.WithLabels("/block", resp.Status).Observe(time.Since(n).Seconds())
+
+		decoder := json.NewDecoder(resp.Body)
+
+		var result *GetBlockResponse
+		err = decoder.Decode(&result)
+
+		resp.Body.Close()
+		if err != nil {
+			out <- BlockErrorPair{
+				Height: height,
+				Err:    err,
+			}
+			continue
+		}
+
+		if result.Error.Message != "" {
+			log.Printf("err %+v", result)
+			out <- BlockErrorPair{
+				Height: height,
+				Err:    fmt.Errorf("error fetching block: %s ", result.Error.Message),
+			}
+			continue
+		}
+
+		bTime, err := time.Parse(time.RFC3339Nano, result.Result.Block.Header.Time)
+		uHeight, err := strconv.ParseUint(result.Result.Block.Header.Height, 10, 64)
+
+		out <- BlockErrorPair{
+			Height: uHeight,
+			Block: structs.Block{
+				Hash:   result.Result.BlockMeta.BlockID.Hash,
+				Height: uHeight,
+				Time:   bTime,
+			},
+		}
+	}
 }
 
 type SimpleBlockCache struct {

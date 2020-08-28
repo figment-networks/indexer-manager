@@ -21,6 +21,8 @@ import (
 // SelfCheck Flag describing should manager check anyway the latest version for network it has
 var SelfCheck = true
 
+var ErrIntegrityCheckFailed = errors.New("integrity check failed")
+
 type NetworkVersion struct {
 	Network string
 	Version string
@@ -265,7 +267,6 @@ func (hc *Client) ScrapeLatest(ctx context.Context, ldr shared.LatestDataRequest
 
 	// (lukanus): self consistency check (optional), so we don;t care about an error
 	if ldr.SelfCheck {
-		//	lastTransaction, err := hc.storeEng.GetLatestTransaction(ctx, shared.TransactionExtra{ChainID: ldr.Version, Network: ldr.Network})
 		lastBlock, err := hc.storeEng.GetLatestBlock(ctx, shared.BlockExtra{ChainID: ldr.Version, Network: ldr.Network})
 		if err == nil {
 			if lastBlock.Hash != "" {
@@ -279,7 +280,7 @@ func (hc *Client) ScrapeLatest(ctx context.Context, ldr shared.LatestDataRequest
 			if !lastBlock.Time.IsZero() {
 				ldr.LastTime = lastBlock.Time
 			}
-		} else {
+		} else if err != params.ErrNotFound {
 			return ldResp, fmt.Errorf("error getting latest transaction data : %w", err)
 		}
 		hc.logger.Debug("[Client] ScrapeLatest - ", zap.Any("last block", lastBlock))
@@ -330,7 +331,7 @@ WAIT_FOR_ALL_DATA:
 					if err := hc.storeBlock(dec, ldr.Network, ldr.Version, b); err != nil {
 						return ldResp, fmt.Errorf("error storing block: %w", err)
 					}
-					if ldResp.LastTime.IsZero() || !ldResp.LastTime.After(b.Time) {
+					if ldResp.LastTime.IsZero() || ldResp.LastHeight <= b.Height {
 						ldResp.LastEpoch = b.Epoch
 						ldResp.LastHash = b.Hash
 						ldResp.LastHeight = b.Height
@@ -343,6 +344,16 @@ WAIT_FOR_ALL_DATA:
 				break WAIT_FOR_ALL_DATA
 			}
 		}
+	}
+
+	missing, err := hc.storeEng.BlockContinuityCheck(ctx, shared.BlockExtra{ChainID: ldr.Version, Network: ldr.Network}, ldr.LastHeight)
+	if err != nil {
+		return ldResp, err
+	}
+
+	if len(missing) > 0 {
+		hc.logger.Debug("[Client] ScrapeLatest - ", zap.Any("missing", missing))
+		return ldResp, ErrIntegrityCheckFailed
 	}
 
 	return ldResp, nil
@@ -368,12 +379,12 @@ func (hc *Client) storeTransaction(dec *json.Decoder, network string, version st
 }
 
 func (hc *Client) storeBlock(dec *json.Decoder, network string, version string, m *shared.Block) error {
-	err := dec.Decode(m)
-	if err != nil {
+
+	if err := dec.Decode(m); err != nil {
 		return fmt.Errorf("error decoding block: %w", err)
 	}
 
-	err = hc.storeEng.StoreBlock(
+	err := hc.storeEng.StoreBlock(
 		shared.BlockExtra{
 			Network: network,
 			ChainID: version,

@@ -110,6 +110,7 @@ type SubsetEvent struct {
 	Recipient []string            `json:"recipient,omitempty"`
 	Validator map[string][]string `json:"validator,omitempty"`
 	Feeder    []string            `json:"feeder,omitempty"`
+	Withdraw  map[string][]string `json:"withdraw,omitempty"`
 
 	Nonce      int        `json:"nonce,omitempty"`
 	Completion *time.Time `json:"completion,omitempty"`
@@ -143,8 +144,6 @@ type Block struct {
 }
 
 type TransactionSearch struct {
-	//	AfterID   uint     `form:"after_id"`
-	//	BeforeID  uint     `form:"before_id"`
 	Height    uint64    `json:"height"`
 	Epoch     string    `json:"epoch"`
 	Type      []string  `json:"type"`
@@ -156,6 +155,9 @@ type TransactionSearch struct {
 	StartTime time.Time `json:"start_time"`
 	EndTime   time.Time `json:"end_time"`
 	Limit     uint64    `json:"limit"`
+
+	AfterHeight  uint64 `form:"after_id"`
+	BeforeHeight uint64 `form:"before_id"`
 
 	Network string `json:"network"`
 }

@@ -32,8 +32,10 @@ type TxLogError struct {
 var curencyRegex = regexp.MustCompile("([0-9\\.\\,\\-\\s]+)([^0-9\\s]+)$")
 
 // SearchTx is making search api call
-func (c *Client) SearchTx(ctx context.Context, wg *sync.WaitGroup, r structs.HeightRange, out chan cStruct.OutResp, page, perPage int, fin chan string) (count int64, err error) {
-	defer wg.Done()
+func (c *Client) SearchTx(ctx context.Context, wg *sync.WaitGroup, r structs.HeightRange, blocks map[uint64]shared.Block, out chan cStruct.OutResp, page, perPage int, fin chan string) (count int64, err error) {
+	if wg != nil {
+		defer wg.Done()
+	}
 	defer c.logger.Sync()
 
 	req, err := http.NewRequest(http.MethodGet, c.baseURL+"/tx_search", nil)
@@ -87,7 +89,6 @@ func (c *Client) SearchTx(ctx context.Context, wg *sync.WaitGroup, r structs.Hei
 	}
 
 	if result.Error.Message != "" {
-		//err := fmt.Sprintf("Error getting search: %s", result.Error.Message)
 		err := fmt.Errorf("Error getting search: %s", result.Error.Message)
 		c.logger.Error("[COSMOS-API] Error getting search", zap.Error(err))
 		fin <- err.Error()
@@ -103,32 +104,13 @@ func (c *Client) SearchTx(ctx context.Context, wg *sync.WaitGroup, r structs.Hei
 
 	numberOfItemsTransactions.Observe(float64(totalCount))
 
-	blocks := map[uint64]shared.Block{}
-
-	to := r.StartHeight + uint64(totalCount)
-	if r.EndHeight > 0 {
-		to = r.EndHeight
-	}
-
-	for i := 0; i < int(r.StartHeight-to+1); i++ {
-		// (lukanus): it has embedded cache in int
-		block, err := c.GetBlock(ctx, shared.HeightHash{Height: r.StartHeight + uint64(i)})
-		if err != nil {
-			c.logger.Error("[COSMOS-API] Problem getting block at height", zap.Uint64("height", r.StartHeight+uint64(i)), zap.Error(err))
-		}
-		blocks[block.Height] = block
-	}
-
+	c.logger.Debug("[COSMOS-API] Converting requests ", zap.Int("number", len(result.Result.Txs)), zap.Int("blocks", len(blocks)))
 	err = rawToTransaction(ctx, c, result.Result.Txs, blocks, out, c.logger, c.cdc)
+	if err != nil {
+		c.logger.Error("[COSMOS-API] Error getting rawToTransaction", zap.Error(err))
 
-	// send blocks after all the transaction were sent
-	for _, block := range blocks {
-		out <- cStruct.OutResp{
-			Type:    "Block",
-			Payload: block,
-		}
 	}
-
+	c.logger.Debug("[COSMOS-API] Converted all requests ")
 	return totalCount, nil
 }
 
@@ -207,9 +189,20 @@ func rawToTransaction(ctx context.Context, c *Client, in []TxResponse, blocks ma
 						sub.Recipient = attr.Recipient
 					}
 
+					if len(attr.Withdraw) > 0 {
+						sub.Withdraw = attr.Withdraw
+					}
+
 					if len(attr.Validator) > 0 {
 						sub.Validator = attr.Validator
 					}
+
+					if len(attr.Validator) > 0 {
+						for k, v := range attr.Others {
+							logger.Info("[COSMOS-API] Found unknown event attribute ", zap.String("key", k), zap.Strings("values", v))
+						}
+					}
+
 					if attr.CompletionTime != "" {
 						cTime, _ := time.Parse(time.RFC3339Nano, attr.CompletionTime)
 						sub.Completion = &cTime

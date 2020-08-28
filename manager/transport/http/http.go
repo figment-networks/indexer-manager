@@ -205,7 +205,6 @@ func (hc *HubbleConnector) SearchTransactions(w http.ResponseWriter, req *http.R
 			return
 		}
 		ts.Height, _ = strconv.ParseUint(req.Form.Get("height"), 10, 64)
-		ts.Limit, _ = strconv.ParseUint(req.Form.Get("limit"), 10, 64)
 		ts.Account = req.Form.Get("account")
 		ts.Sender = req.Form.Get("sender")
 		ts.Receiver = req.Form.Get("receiver")
@@ -213,6 +212,10 @@ func (hc *HubbleConnector) SearchTransactions(w http.ResponseWriter, req *http.R
 		ts.Memo = req.Form.Get("memo")
 		ts.Sender = req.Form.Get("sender")
 		ts.Receiver = req.Form.Get("receiver")
+
+		ts.AfterHeight, _ = strconv.ParseUint(req.Form.Get("after_height"), 10, 64)
+		ts.BeforeHeight, _ = strconv.ParseUint(req.Form.Get("before_height"), 10, 64)
+		ts.Limit, _ = strconv.ParseUint(req.Form.Get("limit"), 10, 64)
 
 		network = req.Form.Get("network")
 	}
