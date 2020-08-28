@@ -9,23 +9,28 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
-
-	"github.com/google/uuid"
 
 	"github.com/figment-networks/cosmos-indexer/structs"
 	shared "github.com/figment-networks/cosmos-indexer/structs"
 	cStruct "github.com/figment-networks/cosmos-indexer/worker/connectivity/structs"
+	"go.uber.org/zap"
 
 	log "github.com/sirupsen/logrus"
 )
 
 var curencyRegex = regexp.MustCompile("([0-9\\.\\,\\-\\s]+)([^0-9\\s]+)$")
 
-// SearchTx is making search api call
-func (c *Client) SearchTx(ctx context.Context, taskID, runUUID uuid.UUID, r structs.HeightRange, page, perPage int, fin chan string) (count int64, err error) {
+/*
 
-	req, err := http.NewRequest(http.MethodGet, c.baseURL+"/txs", nil)
+
+// SearchTx is making search api call
+func (c *Client) SearchTx(ctx context.Context, wg *sync.WaitGroup, r structs.HeightRange, out chan cStruct.OutResp, page, perPage int, fin chan string) (count int64, err error) {
+	defer wg.Done()
+	defer c.logger.Sync()
+
+	req, err := http.NewRequest(http.MethodGet, c.baseURL+"/tx_search", nil)
 	if err != nil {
 		fin <- err.Error()
 	}
@@ -35,7 +40,83 @@ func (c *Client) SearchTx(ctx context.Context, taskID, runUUID uuid.UUID, r stru
 		req.Header.Add("Authorization", c.key)
 	}
 
-	//log.Printf("GOT %+v", r)
+	q := req.URL.Query()
+
+	s := strings.Builder{}
+
+	s.WriteString(`"`)
+	s.WriteString("tx.height>= ")
+	s.WriteString(strconv.Itoa(int(r.StartHeight)))
+
+	if r.EndHeight > 0 && r.EndHeight != r.StartHeight {
+		s.WriteString(" AND ")
+		s.WriteString("tx.height<=")
+		s.WriteString(strconv.Itoa(int(r.EndHeight)))
+	}
+	s.WriteString(`"`)
+
+	q.Add("query", s.String())
+	q.Add("page", strconv.Itoa(page))
+	q.Add("per_page", strconv.Itoa(perPage))
+	req.URL.RawQuery = q.Encode()
+
+	now := time.Now()
+	resp, err := c.httpClient.Do(req)
+
+	log.Debug("[COSMOS-API] Request Time (/tx_search)", zap.Duration("duration", time.Now().Sub(now)))
+	if err != nil {
+		fin <- err.Error()
+		return 0, err
+	}
+	rawRequestDuration.WithLabels("/tx_search", resp.Status).Observe(time.Since(now).Seconds())
+
+	decoder := json.NewDecoder(resp.Body)
+
+	result := &GetTxSearchResponse{}
+	if err = decoder.Decode(result); err != nil {
+		c.logger.Error("[COSMOS-API] unable to decode result body", zap.Error(err))
+		err := fmt.Errorf("unable to decode result body %w", err)
+		fin <- err.Error()
+		return 0, err
+	}
+
+	if result.Error.Message != "" {
+		//err := fmt.Sprintf("Error getting search: %s", result.Error.Message)
+		err := fmt.Errorf("Error getting search: %s", result.Error.Message)
+		c.logger.Error("[COSMOS-API] Error getting search", zap.Error(err))
+		fin <- err.Error()
+		return 0, err
+	}
+
+	totalCount, err := strconv.ParseInt(result.Result.TotalCount, 10, 64)
+	if err != nil {
+		c.logger.Error("[COSMOS-API] Error getting totalCount", zap.Error(err))
+		fin <- err.Error()
+		return 0, err
+	}
+
+	numberOfItemsTransactions.Observe(float64(totalCount))
+
+	rawToTransaction(ctx, c, result.Result.Txs, out, c.logger, c.cdc)
+	return totalCount, nil
+}
+*/
+
+// SearchTx is making search api call
+func (c *Client) SearchTx(ctx context.Context, wg *sync.WaitGroup, r structs.HeightRange, out chan cStruct.OutResp, page, perPage int, fin chan string) (count int64, err error) {
+	defer wg.Done()
+	defer c.logger.Sync()
+
+	req, err := http.NewRequest(http.MethodGet, c.baseURL+"/txs", nil)
+	if err != nil {
+		fin <- err.Error()
+		return 0, err
+	}
+
+	req.Header.Add("Content-Type", "application/json")
+	if c.key != "" {
+		req.Header.Add("Authorization", c.key)
+	}
 	q := req.URL.Query()
 
 	s := strings.Builder{}
@@ -54,10 +135,10 @@ func (c *Client) SearchTx(ctx context.Context, taskID, runUUID uuid.UUID, r stru
 	q.Add("limit", strconv.Itoa(perPage))
 	req.URL.RawQuery = q.Encode()
 
-	now := time.Now()
+	//now := time.Now()
 	resp, err := c.httpClient.Do(req)
-	log.Printf("Request Time: %s", time.Now().Sub(now).String())
-	log.Printf("asd %+v", err)
+	//log.Printf("Request Time: %s", time.Now().Sub(now).String())
+	//log.Printf("asd %+v", err)
 	if err != nil {
 		fin <- err.Error()
 		return 0, err
@@ -68,7 +149,6 @@ func (c *Client) SearchTx(ctx context.Context, taskID, runUUID uuid.UUID, r stru
 	result := &ResultTxSearch{}
 	if err = decoder.Decode(result); err != nil {
 		err := fmt.Sprintf("unable to decode result body: %s", err.Error())
-		log.Printf("asd1 %+v", err)
 		fin <- err
 		return 0, errors.New(err)
 	}
@@ -89,36 +169,18 @@ func (c *Client) SearchTx(ctx context.Context, taskID, runUUID uuid.UUID, r stru
 	}
 
 	log.Printf("result.Result.Txs %+v", result.Txs)
-	for _, tx := range result.Txs {
-		select {
-		case <-ctx.Done():
-			return totalCount, nil
-		default:
-		}
 
-		tx.All = totalCount
-		tx.TaskID.TaskID = taskID
-		tx.TaskID.RunID = runUUID
-		c.inTx <- tx
-	}
-	fin <- ""
+	rawToTransaction(ctx, c, result.Txs, out, c.logger)
 	return totalCount, nil
 }
 
-func rawToTransaction(ctx context.Context, c *Client, in chan TxResponse, out chan cStruct.OutResp) {
+func rawToTransaction(ctx context.Context, c *Client, in []TxResponse, out chan cStruct.OutResp, logger *zap.Logger) {
+	for _, txRaw := range in {
 
-	for txRaw := range in {
-
-		outTX := cStruct.OutResp{
-			ID:    txRaw.TaskID.TaskID,
-			RunID: txRaw.TaskID.RunID,
-			All:   uint64(txRaw.All),
-			Type:  "Transaction",
-		}
+		outTX := cStruct.OutResp{Type: "Transaction"}
 
 		var err error
 
-		//"2020-05-03T06:52:40Z",
 		tTime, err := time.Parse(time.RFC3339, txRaw.Timestamp)
 		trans := shared.Transaction{
 			Hash: txRaw.Hash,

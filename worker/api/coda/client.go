@@ -13,8 +13,6 @@ import (
 	"strconv"
 
 	log "github.com/sirupsen/logrus"
-
-	cStruct "github.com/figment-networks/cosmos-indexer/worker/connectivity/structs"
 )
 
 var (
@@ -27,8 +25,6 @@ type Client struct {
 	endpoint string
 	client   *http.Client
 	debug    bool
-
-	out chan cStruct.OutResp
 }
 
 // NewClient returns a new client for a given endpoint
@@ -42,13 +38,8 @@ func NewClient(url string, c *http.Client) *Client {
 	cli := &Client{
 		endpoint: url, //tendermint rpc url
 		client:   c,
-		out:      make(chan cStruct.OutResp, 20),
 	}
 	return cli
-}
-
-func (c *Client) Out() chan cStruct.OutResp {
-	return c.out
 }
 
 func (c *Client) SetDebug(enabled bool) {

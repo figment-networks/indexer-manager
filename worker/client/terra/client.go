@@ -7,26 +7,43 @@ import (
 	"log"
 	"math"
 	"sync"
-	"time"
+
+	"github.com/google/uuid"
+	"go.uber.org/zap"
+
+	"github.com/figment-networks/indexing-engine/metrics"
 
 	"github.com/figment-networks/cosmos-indexer/structs"
-	"github.com/google/uuid"
-
 	api "github.com/figment-networks/cosmos-indexer/worker/api/terra"
 	cStructs "github.com/figment-networks/cosmos-indexer/worker/connectivity/structs"
 )
 
 const page = 100
 
+var (
+	getTransactionDuration *metrics.GroupObserver
+	getLatestDuration      *metrics.GroupObserver
+	getBlockDuration       *metrics.GroupObserver
+)
+
 type IndexerClient struct {
 	terraAddress string
 
+	logger  *zap.Logger
 	streams map[uuid.UUID]*cStructs.StreamAccess
 	sLock   sync.Mutex
 }
 
-func NewIndexerClient(ctx context.Context, terraAddress string) *IndexerClient {
-	return &IndexerClient{terraAddress: terraAddress, streams: make(map[uuid.UUID]*cStructs.StreamAccess)}
+func NewIndexerClient(ctx context.Context, logger *zap.Logger, terraAddress string) *IndexerClient {
+	getTransactionDuration = endpointDuration.WithLabels("getTransactions")
+	getLatestDuration = endpointDuration.WithLabels("getLatest")
+	getBlockDuration = endpointDuration.WithLabels("getBlock")
+
+	return &IndexerClient{
+		terraAddress: terraAddress,
+		logger:       logger,
+		streams:      make(map[uuid.UUID]*cStructs.StreamAccess),
+	}
 }
 
 func (ic *IndexerClient) CloseStream(ctx context.Context, streamID uuid.UUID) error {
@@ -40,8 +57,8 @@ func (ic *IndexerClient) RegisterStream(ctx context.Context, stream *cStructs.St
 	log.Println("REGISTER STREAM")
 	ic.sLock.Lock()
 	ic.streams[stream.StreamID] = stream
-	client := api.NewClient(ic.terraAddress, "", nil)
-	go sendResp(ctx, client, stream)
+	client := api.NewClient(ic.terraAddress, "", ic.logger, nil)
+
 	// Limit workers not to create new goroutines over and over again
 	for i := 0; i < 20; i++ {
 		go ic.Run(ctx, client, stream)
@@ -77,6 +94,68 @@ func (ic *IndexerClient) Run(ctx context.Context, client *api.Client, stream *cS
 	}
 }
 
+func (ic *IndexerClient) GetTransactions(ctx context.Context, tr cStructs.TaskRequest, stream *cStructs.StreamAccess, client *api.Client) {
+
+	timer := metrics.NewTimer(getTransactionDuration)
+	defer timer.ObserveDuration()
+
+	hr := &structs.HeightRange{}
+	err := json.Unmarshal(tr.Payload, hr)
+	if err != nil {
+		stream.Send(cStructs.TaskResponse{
+			Id:    tr.Id,
+			Error: cStructs.TaskError{Msg: "cannot unmarshal payload: " + err.Error()},
+			Final: true,
+		})
+
+		ic.logger.Debug("[COSMOS-CLIENT] Register Stream", zap.Stringer("streamID", stream.StreamID))
+	}
+
+	sCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	out := make(chan cStructs.OutResp, page*2+1)
+
+	// TODO(lukanus): use Pools
+	fin := make(chan string, 2)
+	defer close(fin)
+	fin2 := make(chan bool, 2)
+	defer close(fin2)
+
+	wg := &sync.WaitGroup{}
+	go sendResp(ctx, tr.Id, out, ic.logger, stream, fin2)
+
+	count, err := client.SearchTx(sCtx, wg, *hr, out, 1, page, fin)
+	wg.Add(1)
+	if err != nil {
+		stream.Send(cStructs.TaskResponse{
+			Id:    tr.Id,
+			Error: cStructs.TaskError{Msg: "Error Getting Transactions"},
+			Final: true,
+		})
+		return
+	}
+
+	toBeDone := int(math.Ceil(float64(count-page) / page))
+	if count > page {
+		wg.Add(toBeDone)
+		for i := 2; i < toBeDone+2; i++ {
+			go client.SearchTx(sCtx, wg, *hr, out, i, page, fin)
+		}
+	}
+
+	wg.Wait()
+	ic.logger.Debug("[COSMOS-CLIENT] Received all", zap.Stringer("taskID", tr.Id))
+	close(out)
+	for {
+		select {
+		case <-fin2:
+			return
+		}
+	}
+}
+
+/*
 func (ic *IndexerClient) GetTransactions(ctx context.Context, tr cStructs.TaskRequest, stream *cStructs.StreamAccess, client *api.Client) {
 	log.Printf("Received: %+v ", tr)
 	now := time.Now()
@@ -130,74 +209,60 @@ func (ic *IndexerClient) GetTransactions(ctx context.Context, tr cStructs.TaskRe
 			}
 		}
 	}
-
 }
-
-type TData struct {
-	Order uint64
-	All   uint64
-}
-
-func sendResp(ctx context.Context, client *api.Client, stream *cStructs.StreamAccess) {
-
-	opened := make(map[[2]uuid.UUID]*TData)
-
+*/
+func sendResp(ctx context.Context, id uuid.UUID, out chan cStructs.OutResp, logger *zap.Logger, stream *cStructs.StreamAccess, fin chan bool) {
 	b := &bytes.Buffer{}
 	enc := json.NewEncoder(b)
+	order := uint64(0)
 
-	resp := client.Out()
 SEND_LOOP:
 	for {
 		select {
 		case <-ctx.Done():
 			break SEND_LOOP
-		case t := <-resp:
-
-			n, ok := opened[[2]uuid.UUID{t.ID, t.RunID}]
-			if !ok {
-				n = &TData{0, t.All}
-				if !t.Additional {
-					opened[[2]uuid.UUID{t.ID, t.RunID}] = n
-				}
+		case t, ok := <-out:
+			if !ok && t.Type == "" {
+				break SEND_LOOP
 			}
 			b.Reset()
-
-			log.Printf("Task to send: %s, %d - %d , new(%d)", t.ID.String(), n.Order, t.All, ok)
-
-			if !t.Additional && n.All == 0 {
-				n.All = t.All
-			}
+			//logger.Debug("Task to send", zap.Stringer("taskID", t.ID), zap.Uint64("order", n.Order), zap.Uint64("order", t.All))
 
 			err := enc.Encode(t.Payload)
 			if err != nil {
-				log.Printf("%s", err.Error())
+				logger.Error("[COSMOS-CLIENT] Error encoding payload data", zap.Error(err))
 			}
-
-			var final = (n.Order == n.All-1)
 
 			tr := cStructs.TaskResponse{
-				Id:      t.ID,
+				Id:      id,
 				Type:    t.Type,
+				Order:   order,
 				Payload: make([]byte, b.Len()),
 			}
-			if !t.Additional {
-				tr.Order = n.Order
-				tr.Final = final
-			}
+
 			b.Read(tr.Payload)
-
-			//	log.Printf("Task out: %d,  %+v %s", n.Order, tr, string(tr.Payload))
-			stream.Send(tr)
+			order++
+			err = stream.Send(tr)
 			if err != nil {
-				log.Printf("%s", err.Error())
+				logger.Error("[COSMOS-CLIENT] Error sending data", zap.Error(err))
 			}
 
-			if !t.Additional {
-				if final {
-					delete(opened, [2]uuid.UUID{t.ID, t.RunID})
-				}
-				n.Order++
-			}
+			sendResponseMetric.WithLabels(t.Type, "yes").Inc()
 		}
+	}
+
+	err := stream.Send(cStructs.TaskResponse{
+		Id:    id,
+		Type:  "END",
+		Order: order,
+		Final: true,
+	})
+
+	if err != nil {
+		logger.Error("[COSMOS-CLIENT] Error sending end", zap.Error(err))
+	}
+
+	if fin != nil {
+		fin <- true
 	}
 }

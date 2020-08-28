@@ -166,7 +166,7 @@ func MapTransactions(taskID uuid.UUID, block *Block, resp chan cStruct.OutResp) 
 		return nil
 	}
 
-	countAll := getTransactionCount(block)
+	//countAll := getTransactionCount(block)
 
 	// Add the block reward transaction
 	if block.Transactions.Coinbase != "0" && block.Transactions.CoinbaseReceiver != nil {
@@ -177,7 +177,6 @@ func MapTransactions(taskID uuid.UUID, block *Block, resp chan cStruct.OutResp) 
 		resp <- cStruct.OutResp{
 			ID:      taskID,
 			Type:    "Transaction",
-			All:     countAll,
 			Payload: t,
 		}
 	}
@@ -193,7 +192,6 @@ func MapTransactions(taskID uuid.UUID, block *Block, resp chan cStruct.OutResp) 
 		resp <- cStruct.OutResp{
 			ID:      taskID,
 			Type:    "Transaction",
-			All:     countAll,
 			Payload: t,
 		}
 	}
@@ -218,7 +216,6 @@ func MapTransactions(taskID uuid.UUID, block *Block, resp chan cStruct.OutResp) 
 		resp <- cStruct.OutResp{
 			ID:      taskID,
 			Type:    "Transaction",
-			All:     countAll,
 			Payload: feeTx,
 		}
 	}
@@ -226,6 +223,7 @@ func MapTransactions(taskID uuid.UUID, block *Block, resp chan cStruct.OutResp) 
 	return nil
 }
 
+/*
 func getTransactionCount(block *Block) uint64 {
 	var count = 0
 	// Add the block reward transaction
@@ -233,7 +231,7 @@ func getTransactionCount(block *Block) uint64 {
 		count++
 	}
 	return uint64(count + len(block.Transactions.UserCommands) + len(block.Transactions.FeeTransfer))
-}
+}*/
 
 func FeeTransfers(block *Block) ([]TransactionFeeTransfer, error) {
 	if block.Transactions == nil {

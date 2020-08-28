@@ -195,42 +195,6 @@ WAIT_FOR_ALL_DATA:
 			}
 		}
 	}
-	/*
-
-
-
-			if response.Type != "Transaction" {
-				continue
-			}
-
-			//	if !ok {
-			//		return nil, errors.New("Response closed.")
-			//	}
-			//log.Printf("Got Response !!! %s ", string(response.Payload))
-			buff.Reset()
-			buff.ReadFrom(bytes.NewReader(response.Payload))
-			m := &shared.Transaction{}
-			err := dec.Decode(m)
-			if err != nil {
-				return nil, fmt.Errorf("Error getting response: %w", err)
-			}
-
-			if err := hc.storeEng.StoreTransaction(shared.TransactionExtra{Network: nv.Network, ChainID: nv.Version, Transaction: *m}); err != nil {
-				hc.logger.Error("[Client] Error storing transaction", zap.Error(err))
-			}
-
-			trs = append(trs, *m)
-			if response.Final {
-				receivedTransactions++
-			}
-
-			if receivedTransactions == times {
-				break WAIT_FOR_ALL_TRANSACTIONS
-			}
-		}
-	*/
-	//}
-
 	return trs, nil
 }
 
@@ -297,6 +261,8 @@ func (hc *Client) ScrapeLatest(ctx context.Context, ldr shared.LatestDataRequest
 	timer := metrics.NewTimer(callDurationScrapeLatest)
 	defer timer.ObserveDuration()
 
+	hc.logger.Debug("[Client] ScrapeLatest - ", zap.Any("received", ldr))
+
 	// (lukanus): self consistency check (optional), so we don;t care about an error
 	if ldr.SelfCheck {
 		//	lastTransaction, err := hc.storeEng.GetLatestTransaction(ctx, shared.TransactionExtra{ChainID: ldr.Version, Network: ldr.Network})
@@ -313,7 +279,10 @@ func (hc *Client) ScrapeLatest(ctx context.Context, ldr shared.LatestDataRequest
 			if !lastBlock.Time.IsZero() {
 				ldr.LastTime = lastBlock.Time
 			}
+		} else {
+			return ldResp, fmt.Errorf("error getting latest transaction data : %w", err)
 		}
+		hc.logger.Debug("[Client] ScrapeLatest - ", zap.Any("last block", lastBlock))
 	}
 
 	taskReq, err := json.Marshal(ldr)

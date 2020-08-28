@@ -91,7 +91,7 @@ func main() {
 
 	grpcServer := grpc.NewServer()
 
-	workerClient := cli.NewIndexerClient(context.Background(), cfg.TerraRPCAddr)
+	workerClient := cli.NewIndexerClient(context.Background(), logger.GetLogger(), cfg.TerraRPCAddr)
 	worker := grpcIndexer.NewIndexerServer(workerClient, logger.GetLogger())
 	grpcProtoIndexer.RegisterIndexerServiceServer(grpcServer, worker)
 

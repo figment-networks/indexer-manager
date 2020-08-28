@@ -19,14 +19,6 @@ var (
 		Tags:      []string{"endpoint", "status"},
 	})
 
-	numberOfPages = metrics.MustNewHistogramWithTags(metrics.HistogramOptions{
-		Namespace: "indexers",
-		Subsystem: "worker_api_cosmos",
-		Name:      "number_of_pages",
-		Desc:      "Number of pages returned from api",
-		Tags:      []string{"type"},
-	})
-
 	numberOfItems = metrics.MustNewHistogramWithTags(metrics.HistogramOptions{
 		Namespace: "indexers",
 		Subsystem: "worker_api_cosmos",
@@ -46,7 +38,6 @@ var (
 	blockCacheEfficiencyHit       *metrics.GroupCounter
 	blockCacheEfficiencyMissed    *metrics.GroupCounter
 	numberOfItemsTransactions     *metrics.GroupObserver
-	numberOfPagesTransactions     *metrics.GroupObserver
 	transactionConversionDuration *metrics.GroupObserver
 	convertionDurationObserver    *metrics.GroupObserver
 )

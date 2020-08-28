@@ -10,6 +10,7 @@ import (
 
 	"github.com/figment-networks/cosmos-indexer/structs"
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 
 	"github.com/figment-networks/cosmos-indexer/worker/api/coda"
 	api "github.com/figment-networks/cosmos-indexer/worker/api/coda"
@@ -21,11 +22,16 @@ const page = 100
 type IndexerClient struct {
 	streams      map[uuid.UUID]*cStructs.StreamAccess
 	sLock        sync.Mutex
+	logger       *zap.Logger
 	codaEndpoint string
 }
 
-func NewIndexerClient(ctx context.Context, codaEndpoint string) *IndexerClient {
-	return &IndexerClient{streams: make(map[uuid.UUID]*cStructs.StreamAccess), codaEndpoint: codaEndpoint}
+func NewIndexerClient(ctx context.Context, logger *zap.Logger, codaEndpoint string) *IndexerClient {
+	return &IndexerClient{
+		streams:      make(map[uuid.UUID]*cStructs.StreamAccess),
+		logger:       logger,
+		codaEndpoint: codaEndpoint,
+	}
 }
 
 func (ic *IndexerClient) CloseStream(ctx context.Context, streamID uuid.UUID) error {
@@ -43,7 +49,6 @@ func (ic *IndexerClient) RegisterStream(ctx context.Context, stream *cStructs.St
 
 	codaClient := coda.NewClient(ic.codaEndpoint, nil)
 
-	go sendResp(ctx, codaClient, stream)
 	// Limit workers not to create new goroutines over and over again
 	for i := 0; i < 20; i++ {
 		go ic.Run(ctx, codaClient, stream)
@@ -63,6 +68,7 @@ func (ic *IndexerClient) Run(ctx context.Context, client *api.Client, stream *cS
 		case taskRequest := <-stream.RequestListener:
 			switch taskRequest.Type {
 			case "GetTransactions":
+
 				block, err := ic.GetBlock(ctx, client, taskRequest)
 				if err != nil {
 					stream.Send(cStructs.TaskResponse{
@@ -73,7 +79,11 @@ func (ic *IndexerClient) Run(ctx context.Context, client *api.Client, stream *cS
 					continue
 				}
 
-				if err := api.MapTransactions(taskRequest.Id, block, client.Out()); err != nil {
+				out := make(chan cStructs.OutResp, 20)
+				fin := make(chan bool, 1)
+
+				go sendResp(ctx, taskRequest.Id, out, ic.logger, stream, fin)
+				if err := api.MapTransactions(taskRequest.Id, block, out); err != nil {
 					stream.Send(cStructs.TaskResponse{
 						Id:    taskRequest.Id,
 						Error: cStructs.TaskError{Msg: "Error getting transactions: " + err.Error()},
@@ -81,6 +91,8 @@ func (ic *IndexerClient) Run(ctx context.Context, client *api.Client, stream *cS
 					})
 
 				}
+				<-fin
+				close(out)
 			default:
 				stream.Send(cStructs.TaskResponse{
 					Id:    taskRequest.Id,
@@ -92,71 +104,58 @@ func (ic *IndexerClient) Run(ctx context.Context, client *api.Client, stream *cS
 	}
 }
 
-type TData struct {
-	Order uint64
-	All   uint64
-}
-
-func sendResp(ctx context.Context, client *api.Client, stream *cStructs.StreamAccess) {
-
-	opened := make(map[[2]uuid.UUID]*TData)
-
+func sendResp(ctx context.Context, id uuid.UUID, out chan cStructs.OutResp, logger *zap.Logger, stream *cStructs.StreamAccess, fin chan bool) {
 	b := &bytes.Buffer{}
 	enc := json.NewEncoder(b)
+	order := uint64(0)
 
-	resp := client.Out()
 SEND_LOOP:
 	for {
 		select {
 		case <-ctx.Done():
 			break SEND_LOOP
-		case t := <-resp:
-			n, ok := opened[[2]uuid.UUID{t.ID, t.RunID}]
-			if !ok {
-				n = &TData{0, t.All}
-				if !t.Additional {
-					opened[[2]uuid.UUID{t.ID, t.RunID}] = n
-				}
+		case t, ok := <-out:
+			if !ok && t.Type == "" {
+				break SEND_LOOP
 			}
 			b.Reset()
-
-			log.Printf("Task to send: %s, %d - %d , new(%d)", t.ID.String(), n.Order, t.All, ok)
-
-			if !t.Additional && n.All == 0 {
-				n.All = t.All
-			}
+			//logger.Debug("Task to send", zap.Stringer("taskID", t.ID), zap.Uint64("order", n.Order), zap.Uint64("order", t.All))
 
 			err := enc.Encode(t.Payload)
 			if err != nil {
-				log.Printf("%s", err.Error())
+				logger.Error("[COSMOS-CLIENT] Error encoding payload data", zap.Error(err))
 			}
-
-			var final = (n.Order == n.All-1)
 
 			tr := cStructs.TaskResponse{
-				Id:      t.ID,
+				Id:      id,
 				Type:    t.Type,
+				Order:   order,
 				Payload: make([]byte, b.Len()),
 			}
-			if !t.Additional {
-				tr.Order = n.Order
-				tr.Final = final
-			}
+
 			b.Read(tr.Payload)
-
-			//	log.Printf("Task out: %d,  %+v %s", n.Order, tr, string(tr.Payload))
-			stream.Send(tr)
+			order++
+			err = stream.Send(tr)
 			if err != nil {
-				log.Printf("%s", err.Error())
+				logger.Error("[COSMOS-CLIENT] Error sending data", zap.Error(err))
 			}
 
-			if !t.Additional {
-				if final {
-					delete(opened, [2]uuid.UUID{t.ID, t.RunID})
-				}
-				n.Order++
-			}
 		}
+	}
+
+	err := stream.Send(cStructs.TaskResponse{
+		Id:    id,
+		Type:  "END",
+		Order: order,
+		Final: true,
+	})
+
+	if err != nil {
+		logger.Error("[COSMOS-CLIENT] Error sending end", zap.Error(err))
+	}
+
+	if fin != nil {
+		fin <- true
 	}
 }
 

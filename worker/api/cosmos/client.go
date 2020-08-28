@@ -48,22 +48,10 @@ func NewClient(url, key string, logger *zap.Logger, c *http.Client) *Client {
 		key:        key,
 		httpClient: c,
 		cdc:        makeCodec(),
-		// 	inTx:       make(chan TxResponse, 20),
-		//	out:        make(chan cStruct.OutResp, 20),
-		Sbc: NewSimpleBlockCache(400),
+		Sbc:        NewSimpleBlockCache(400),
 	}
-	//	ctx := context.Background()
-	/*
-		for i := 0; i < 5; i++ {
-			go rawToTransaction(ctx, cli, cli.inTx, cli.out, logger, cli.cdc)
-		}
-	*/
 	return cli
 }
-
-//func (c *Client) Out() chan cStruct.OutResp {
-//	return c.out
-//}
 
 func makeCodec() *codec.Codec {
 	var cdc = codec.New()
@@ -86,6 +74,5 @@ func InitMetrics() {
 	blockCacheEfficiencyHit = blockCacheEfficiency.WithLabels("hit")
 	blockCacheEfficiencyMissed = blockCacheEfficiency.WithLabels("missed")
 
-	numberOfPagesTransactions = numberOfPages.WithLabels("transactions")
 	numberOfItemsTransactions = numberOfItems.WithLabels("transactions")
 }

@@ -27,7 +27,7 @@ type LatestDataRequest struct {
 
 	LastHash   string    `json:"lastHash"`
 	LastEpoch  string    `json:"lastEpoch"`
-	LastHeight uint64    `json:"lastheight"`
+	LastHeight uint64    `json:"lastHeight"`
 	LastTime   time.Time `json:"lastTime"`
 	Nonce      []byte    `json:"nonce"`
 
@@ -36,7 +36,7 @@ type LatestDataRequest struct {
 
 type LatestDataResponse struct {
 	LastHash   string    `json:"lastHash"`
-	LastHeight uint64    `json:"lastheight"`
+	LastHeight uint64    `json:"lastHeight"`
 	LastTime   time.Time `json:"lastTime"`
 	LastEpoch  string    `json:"lastEpoch"`
 	Nonce      []byte    `json:"nonce"`
@@ -132,7 +132,7 @@ type BlockExtra struct {
 
 // Block
 type Block struct {
-	ID        int64      `json:"id,omitempty"`
+	ID        uuid.UUID  `json:"id,omitempty"`
 	CreatedAt *time.Time `json:"created_at,omitempty"`
 	UpdatedAt *time.Time `json:"updated_at,omitempty"`
 

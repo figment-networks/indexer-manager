@@ -89,7 +89,7 @@ func main() {
 
 	grpcServer := grpc.NewServer()
 
-	workerClient := cli.NewIndexerClient(context.Background(), cfg.CodaEndpoint)
+	workerClient := cli.NewIndexerClient(context.Background(), logger.GetLogger(), cfg.CodaEndpoint)
 	worker := grpcIndexer.NewIndexerServer(workerClient, logger.GetLogger())
 	grpcProtoIndexer.RegisterIndexerServiceServer(grpcServer, worker)
 
