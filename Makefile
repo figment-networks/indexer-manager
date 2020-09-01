@@ -4,6 +4,10 @@ all: build-proto build-manager build-manager-migration build-cosmos build-terra 
 build-manager:
 	go build -o manager_bin ./cmd/manager
 
+.PHONY: build-manager-w-scheduler
+build-manager-w-scheduler:
+	go build -tags scheduler -o manager_bin  ./cmd/manager
+
 .PHONY: build-manager-migration
 build-manager-migration:
 	go build -o manager_migration_bin ./cmd/manager-migration

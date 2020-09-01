@@ -2,12 +2,17 @@ package process
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"time"
+
+	"github.com/figment-networks/cosmos-indexer/scheduler/structures"
+	"go.uber.org/zap"
 )
 
 type Runner interface {
 	Run(ctx context.Context, network, version string) error
+	Name() string
 }
 
 type Running struct {
@@ -19,11 +24,13 @@ type Running struct {
 type Scheduler struct {
 	running map[string]Running
 	runlock sync.Mutex
+	logger  *zap.Logger
 }
 
-func NewScheduler() *Scheduler {
+func NewScheduler(logger *zap.Logger) *Scheduler {
 	return &Scheduler{
 		running: make(map[string]Running),
+		logger:  logger,
 	}
 }
 
@@ -44,9 +51,18 @@ RUN_LOOP:
 		select {
 		case <-tckr.C:
 			if err := r.Run(cCtx, network, version); err != nil {
-				tckr.Stop()
-				break RUN_LOOP
+				var rErr *structures.RunError
+				s.logger.Error("[Scheduler - Process] Error running  "+name, zap.Error(err))
+				if errors.As(err, &rErr) {
+					if !rErr.IsRecoverable() {
+						tckr.Stop()
+						break RUN_LOOP
+					}
+				}
 			}
+		case <-cCtx.Done():
+			tckr.Stop()
+			break RUN_LOOP
 		case <-ctx.Done():
 			tckr.Stop()
 			break RUN_LOOP

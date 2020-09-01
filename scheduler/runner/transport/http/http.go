@@ -31,24 +31,24 @@ func (ld LastDataHTTPTransport) GetLastData(ctx context.Context, ldReq structs.L
 
 	t, ok := ld.dest.Get(destination.NVKey{Network: ldReq.Network, Version: ldReq.Version})
 	if !ok {
-		return ldr, structures.ErrNoWorkersAvailable
+		return ldr, &structures.RunError{Contents: fmt.Errorf("error getting response:  %w", structures.ErrNoWorkersAvailable)}
 	}
 
 	b := &bytes.Buffer{}
 	enc := json.NewEncoder(b)
 
 	if err := enc.Encode(ldReq); err != nil {
-		return ldr, fmt.Errorf("error encoding request: %w", err)
+		return ldr, &structures.RunError{Contents: fmt.Errorf("error encoding request: %w", err)}
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, t.Address+"/scrape_latest", b)
 	if err != nil {
-		return ldr, fmt.Errorf("error creating response: %w", err)
+		return ldr, &structures.RunError{Contents: fmt.Errorf("error creating response: %w", err)}
 	}
 
 	resp, err := ld.client.Do(req)
 	if err != nil {
-		return ldr, fmt.Errorf("error getting response:  %w", err)
+		return ldr, &structures.RunError{Contents: fmt.Errorf("error getting response:  %w", err)}
 	}
 
 	lhr := &structs.LatestDataResponse{}
@@ -56,5 +56,5 @@ func (ld LastDataHTTPTransport) GetLastData(ctx context.Context, ldReq structs.L
 	defer resp.Body.Close()
 
 	err = dec.Decode(lhr)
-	return *lhr, err
+	return *lhr, &structures.RunError{Contents: fmt.Errorf("error decoding response:  %w", err)}
 }

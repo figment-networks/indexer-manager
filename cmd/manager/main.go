@@ -108,6 +108,14 @@ func main() {
 
 	attachConnectionManager(connManager, logger.GetLogger(), mux)
 
+	// (lukanus): only after passing param, conditionally enable scheduler
+	// this is for the scenario when manager is *the only* instance working.
+	if cfg.EnableScheduler {
+		if err := attachScheduler(ctx, db, mux, cfg, logger.GetLogger(), hClient); err != nil {
+			log.Fatal(err)
+		}
+	}
+
 	mux.Handle("/metrics", metrics.Handler())
 
 	s := &http.Server{

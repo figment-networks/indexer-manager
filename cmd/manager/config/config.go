@@ -17,6 +17,10 @@ type Config struct {
 	AppEnv      string `json:"app_env" envconfig:"APP_ENV" default:"development"`
 	DatabaseURL string `json:"database_url" envconfig:"DATABASE_URL" required:"true"`
 	Address     string `json:"address" envconfig:"ADDRESS" default:"127.0.0.1:8085"`
+
+	// Embedded Scheduler
+	EnableScheduler        bool   `json:"enable_scheduler" envconfig:"ENABLE_SCHEDULER"`
+	SchedulerInitialConfig string `json:"scheduler_initial_config_path" envconfig:"SCHEDULER_INITIAL_CONFIG"`
 }
 
 // FromFile reads the config from a file

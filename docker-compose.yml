@@ -14,6 +14,7 @@ configs:
 
 volumes:
   postgresdatabase: {}
+  schedule: {}
   prometheus: {}
   grafana: {}
 
@@ -46,13 +47,19 @@ services:
     build:
       context: .
       dockerfile: ./Dockerfile.manager
+    volumes:
+      - .scheduler:/schedule
     networks:
       - internal
     ports:
       - "8085:8085"
+    env_file:
+      - .cosmos.env
     environment:
       ADDRESS: 0.0.0.0:8085
       DATABASE_URL: postgres://cosmos:cosmos@cosmos-indexer_postgresdatabase_1/cosmos?sslmode=disable
+      SCHEDULER_INITIAL_CONFIG: /schedule/schedule.json
+      ENABLE_SCHEDULER: "true"
     depends_on:
       - postgresdatabase
       - managermigrate

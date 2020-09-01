@@ -25,7 +25,6 @@ import (
 	"github.com/figment-networks/cosmos-indexer/scheduler/persistence/postgresstore"
 	"github.com/figment-networks/cosmos-indexer/scheduler/process"
 	"github.com/figment-networks/cosmos-indexer/scheduler/runner/lastdata"
-
 	runnerHTTP "github.com/figment-networks/cosmos-indexer/scheduler/runner/transport/http"
 	"github.com/figment-networks/cosmos-indexer/scheduler/structures"
 
@@ -78,7 +77,7 @@ func main() {
 	mux := http.NewServeMux()
 	d := postgresstore.NewDriver(db)
 
-	sch := process.NewScheduler()
+	sch := process.NewScheduler(logger.GetLogger())
 
 	c := core.NewCore(persistence.CoreStorage{Driver: d}, sch, logger.GetLogger())
 

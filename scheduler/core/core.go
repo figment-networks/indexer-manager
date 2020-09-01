@@ -2,13 +2,14 @@ package core
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"sync"
 
 	"github.com/figment-networks/cosmos-indexer/scheduler/persistence"
+	"github.com/figment-networks/cosmos-indexer/scheduler/persistence/params"
 	"github.com/figment-networks/cosmos-indexer/scheduler/process"
 	"github.com/figment-networks/cosmos-indexer/scheduler/structures"
 	"go.uber.org/zap"
@@ -22,13 +23,15 @@ var (
 	ErrAlreadyEnabled = errors.New("this schedule is already enabled")
 
 	StatusEnabled  Status = "enabled"
+	StatusChanged  Status = "changed"
 	StatusDisabled Status = "disabled"
 )
 
 type RunInfo struct {
 	structures.RunConfig
 
-	Status Status
+	Status Status             `json:"status"`
+	CFunc  context.CancelFunc `json:"-"`
 }
 
 type Core struct {
@@ -52,7 +55,9 @@ func NewCore(store persistence.CoreStorage, scheduler *process.Scheduler, logger
 		store:     store,
 		scheduler: scheduler,
 		logger:    logger,
-		runners:   map[string]process.Runner{},
+
+		run:     map[uuid.UUID]*RunInfo{},
+		runners: map[string]process.Runner{},
 	}
 }
 
@@ -68,23 +73,23 @@ func (c *Core) AddSchedules(ctx context.Context, rcs []structures.RunConfig) err
 	defer c.runLock.Unlock()
 
 	for _, r := range rcs {
-		if err := c.store.AddConfig(ctx, r); err != nil {
-			log.Printf("Add Config errored: %s", err.Error())
+		r.RunID = c.ID
+		err := c.store.AddConfig(ctx, r)
+		if err != nil && !errors.Is(err, params.ErrAlreadyRegistred) {
+			return fmt.Errorf("Add Config errored: %w", err)
 		}
 	}
 
 	return nil
 }
 
-func (c *Core) LoadScheduler(ctx context.Context) ([]structures.RunConfig, error) {
+func (c *Core) LoadScheduler(ctx context.Context) error {
 	c.runLock.Lock()
 	defer c.runLock.Unlock()
-
 	rcs, err := c.store.GetConfigs(ctx, c.ID)
 	if err != nil {
-		return nil, err
+		return err
 	}
-
 	for _, s := range rcs {
 		runner, ok := c.runners[s.Kind]
 		if !ok {
@@ -96,33 +101,48 @@ func (c *Core) LoadScheduler(ctx context.Context) ([]structures.RunConfig, error
 			r = &RunInfo{
 				RunConfig: s,
 			}
-			c.run[s.ID] = r
+
+		} else {
+			if r.Duration != s.Duration || r.RunID != s.RunID {
+				c.logger.Info(fmt.Sprintf("[Core] Record changed reloading %s (%s:%s) %s", runner.Name(), r.Network, r.Version, r.Duration.String()))
+				if r.CFunc != nil {
+					r.CFunc()
+				}
+				r.Status = StatusChanged
+			}
+
 		}
 
 		if r.Status == StatusEnabled {
-			c.logger.Error("[Core] Schedule already enabled")
+			// 	c.logger.Error("[Core] Schedule already enabled")
 			continue
 		}
 
 		// In fact run scheduler
-		go c.scheduler.Run(ctx, s.ID.String(), r.Duration, r.Network, r.Version, runner)
+		c.logger.Info(fmt.Sprintf("[Core] Running schedule %s (%s:%s) %s", runner.Name(), r.Network, r.Version, r.Duration.String()))
+		var cCtx context.Context
+		cCtx, r.CFunc = context.WithCancel(ctx)
+		go c.scheduler.Run(cCtx, s.ID.String(), r.Duration, r.Network, r.Version, runner)
 		err := c.store.MarkRunning(ctx, s.RunID, s.ID)
 		if err != nil {
 			c.logger.Error("[Core] Error setting state running", zap.Error(err))
 		}
+
+		r.Status = StatusEnabled
+		c.run[s.ID] = r
 	}
 
-	return nil, nil
+	return nil
 }
 
-func (c *Core) ListSchedule() []structures.RunConfig {
+func (c *Core) ListSchedule() []RunInfo {
 	c.runLock.RLock()
 	defer c.runLock.RUnlock()
 
-	m := make([]structures.RunConfig, len(c.run))
-	/*for k, v := range c.run {
-		m = append(m, v)
-	}*/
+	m := make([]RunInfo, len(c.run))
+	for _, v := range c.run {
+		m = append(m, *v)
+	}
 	return m
 }
 
@@ -141,6 +161,13 @@ func (c *Core) EnableSchedule(ctx context.Context, sID uuid.UUID) error {
 
 	runner, _ := c.runners[r.Kind]
 	go c.scheduler.Run(ctx, sID.String(), r.Duration, r.Network, r.Version, runner)
+	err := c.store.MarkRunning(ctx, c.ID, sID)
+	if err != nil {
+		c.logger.Error("[Core] Error setting state running", zap.Error(err))
+	}
+
+	r.Status = StatusEnabled
+	c.run[sID] = r
 
 	return nil
 }
@@ -150,10 +177,11 @@ func (c *Core) DisableSchedule(new structures.RunConfig) {
 }
 
 func (c *Core) handlerListSchedule(w http.ResponseWriter, r *http.Request) {
-	//schedule := c.ListSchedule()
-	//for _, var := range var {
-
-	//}
+	schedule := c.ListSchedule()
+	enc := json.NewEncoder(w)
+	w.Header().Add("Content-type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	enc.Encode(schedule)
 }
 
 func (c *Core) handlerAddSchedule(w http.ResponseWriter, r *http.Request) {

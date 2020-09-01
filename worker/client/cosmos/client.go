@@ -71,7 +71,7 @@ func (ic *IndexerClient) RegisterStream(ctx context.Context, stream *cStructs.St
 
 	cosmosClient := api.NewClient(ic.cosmosEndpoint, ic.cosmosKey, ic.logger, nil)
 	// Limit workers not to create new goroutines over and over again
-	for i := 0; i < 50; i++ {
+	for i := 0; i < 20; i++ {
 		go ic.Run(ctx, cosmosClient, stream)
 	}
 
@@ -124,10 +124,21 @@ func (ic *IndexerClient) GetTransactions(ctx context.Context, tr cStructs.TaskRe
 		})
 
 		ic.logger.Debug("[COSMOS-CLIENT] Register Stream", zap.Stringer("streamID", stream.StreamID))
+		return
 	}
 
-	//sCtx, cancel := context.WithCancel(ctx)
-	//defer cancel()
+	if hr.EndHeight == 0 {
+
+		stream.Send(cStructs.TaskResponse{
+			Id:    tr.Id,
+			Error: cStructs.TaskError{Msg: "end height is zero" + err.Error()},
+			Final: true,
+		})
+		return
+	}
+
+	sCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
 
 	out := make(chan cStructs.OutResp, page*2+1)
 
@@ -139,54 +150,41 @@ func (ic *IndexerClient) GetTransactions(ctx context.Context, tr cStructs.TaskRe
 
 	wg := &sync.WaitGroup{}
 	go sendResp(ctx, tr.Id, out, ic.logger, stream, fin2)
-	/*
-		count, err := client.SearchTx(sCtx, wg, *hr, out, 1, page, fin)
+
+	go func() {
+		for c := range fin {
+			if c != "" {
+				ic.logger.Error("[COSMOS-CLIENT] Error processing Search ", zap.String("error", c), zap.Stringer("taskID", tr.Id))
+			}
+		}
+	}()
+
+	diff := hr.EndHeight - hr.StartHeight
+	bigPages := int(math.Ceil(float64(diff) / float64(bigPage)))
+
+	for i := 0; i < bigPages; i++ {
+		hrInner := structs.HeightRange{
+			StartHeight: hr.StartHeight + uint64(i*bigPage),
+			EndHeight:   hr.StartHeight + uint64(i*bigPage) + bigPage,
+		}
+		if hrInner.EndHeight > hr.EndHeight {
+			hrInner.EndHeight = hr.EndHeight
+		}
+
 		wg.Add(1)
-		if err != nil {
-			stream.Send(cStructs.TaskResponse{
-				Id:    tr.Id,
-				Error: cStructs.TaskError{Msg: "Error Getting Transactions"},
-				Final: true,
-			})
-			return
-		}
+		go getRange(sCtx, ic.logger, wg, tr.Id, stream, client, hrInner, out, fin)
+	}
 
-		toBeDone := int(math.Ceil(float64(count-page) / page))
-		if count > page {
-			wg.Add(toBeDone)
-			for i := 2; i < toBeDone+2; i++ {
-				go client.SearchTx(sCtx, wg, *hr, out, i, page, fin)
-			}
-		}
-	*/
-
-	/*
-
-		diff := block.Height - startingHeight
-		bigPages := int(math.Ceil(float64(diff) / float64(bigPage)))
-
-		go sendResp(ctx, tr.Id, out, ic.logger, stream, fin2)
-		wg := &sync.WaitGroup{}
-		for i := 0; i < bigPages; i++ {
-
-			hr := structs.HeightRange{
-				StartHeight: startingHeight + uint64(i*bigPage),
-				EndHeight:   startingHeight + uint64(i*bigPage) + bigPage,
-			}
-			if hr.EndHeight > block.Height {
-				hr.EndHeight = block.Height
-			}
-
-			wg.Add(1)
-			go getRange(sCtx, ic.logger, wg, tr.Id, stream, client, hr, out, fin)
-		}
-	*/
 	wg.Wait()
 	ic.logger.Debug("[COSMOS-CLIENT] Received all", zap.Stringer("taskID", tr.Id))
 	close(out)
+
 	for {
 		select {
+		case <-sCtx.Done():
+			return
 		case <-fin2:
+			ic.logger.Debug("[COSMOS-CLIENT] Finished sending all", zap.Stringer("taskID", tr.Id))
 			return
 		}
 	}
@@ -328,15 +326,6 @@ func getRange(ctx context.Context, logger *zap.Logger, wg *sync.WaitGroup, reque
 	defer wg.Done()
 
 	blocks := map[uint64]structs.Block{}
-	/*
-		to := hr.StartHeight + uint64(totalCount)
-		if hr.EndHeight > 0 {
-			to = hr.EndHeight
-		}
-		logger.Error("[COSMOS-API] Getting blocks", zap.Any("bumber", to-r.StartHeight+1))
-
-	*/
-
 	logger.Debug("[COSMOS-CLIENT] Getting blocks for ", zap.Uint64("end", hr.EndHeight), zap.Uint64("start", hr.StartHeight))
 	in := make(chan uint64, 10)
 	go func(start, end uint64, in chan uint64) {
@@ -369,19 +358,6 @@ func getRange(ctx context.Context, logger *zap.Logger, wg *sync.WaitGroup, reque
 		i++
 	}
 	close(bepOut)
-
-	/*
-		for i := 0; i < int(hr.EndHeight-hr.StartHeight)+1; i++ {
-			logger.Error("[COSMOS-API] Getting block at height", zap.Any("height", hr.StartHeight+uint64(i)))
-			// (lukanus): it has embedded cache in int
-			block, err := client.GetBlock(ctx, structs.HeightHash{Height: hr.StartHeight + uint64(i)})
-			if err != nil {
-				logger.Error("[COSMOS-API] Problem getting block at height", zap.Uint64("height", hr.StartHeight+uint64(i)), zap.Error(err))
-			}
-
-			logger.Error("[COSMOS-API]Got block ", zap.Any("height", block))
-			blocks[block.Height] = block
-		}*/
 
 	logger.Debug("[COSMOS-CLIENT] Getting requests for ", zap.Any("range", hr), zap.Stringer("taskID", requestID))
 

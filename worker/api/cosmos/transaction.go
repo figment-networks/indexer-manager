@@ -97,7 +97,7 @@ func (c *Client) SearchTx(ctx context.Context, wg *sync.WaitGroup, r structs.Hei
 
 	totalCount, err := strconv.ParseInt(result.Result.TotalCount, 10, 64)
 	if err != nil {
-		c.logger.Error("[COSMOS-API] Error getting totalCount", zap.Error(err))
+		c.logger.Error("[COSMOS-API] Error getting totalCount", zap.Error(err), zap.Any("result", result))
 		fin <- err.Error()
 		return 0, err
 	}

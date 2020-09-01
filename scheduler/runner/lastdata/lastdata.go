@@ -2,14 +2,14 @@ package lastdata
 
 import (
 	"context"
-	"log"
+	"fmt"
 
 	"github.com/figment-networks/cosmos-indexer/scheduler/persistence"
 	"github.com/figment-networks/cosmos-indexer/scheduler/structures"
 	"github.com/figment-networks/cosmos-indexer/structs"
 )
 
-const RunnerName = "lastData"
+const RunnerName = "lastdata"
 
 type LastDataTransporter interface {
 	GetLastData(context.Context, structs.LatestDataRequest) (structs.LatestDataResponse, error)
@@ -26,28 +26,42 @@ func NewClient(store persistence.Storage, transport LastDataTransporter) *Client
 		transport: transport,
 	}
 }
+func (c *Client) Name() string {
+	return RunnerName
+}
 
 func (c *Client) Run(ctx context.Context, network, version string) error {
 
 	latest, err := c.store.GetLatest(ctx, RunnerName, network, version)
 	if err != nil && err != structures.ErrDoesNotExists {
-		log.Println("ERROR getting latest: ")
+		return &structures.RunError{Contents: fmt.Errorf("error getting data from store GetLatest [%s]:  %w", RunnerName, err)}
 	}
 
 	resp, err := c.transport.GetLastData(ctx, structs.LatestDataRequest{
+		Network: network,
+		Version: version,
+
 		LastHeight: latest.Height,
 		LastHash:   latest.Hash,
 		LastTime:   latest.Time,
 		Nonce:      latest.Nonce,
+
+		SelfCheck: true,
 	})
 	if err != nil {
-		return err
+		return &structures.RunError{Contents: fmt.Errorf("error getting data from GetLastData [%s]:  %w", RunnerName, err)}
 	}
 
-	return c.store.SetLatest(ctx, RunnerName, network, version, structures.LatestRecord{
+	err = c.store.SetLatest(ctx, RunnerName, network, version, structures.LatestRecord{
 		Hash:   resp.LastHash,
 		Height: resp.LastHeight,
 		Time:   resp.LastTime,
 		Nonce:  resp.Nonce,
 	})
+
+	if err != nil {
+		return &structures.RunError{Contents: fmt.Errorf("error writing last record SetLatest [%s]:  %w", RunnerName, err)}
+	}
+
+	return nil
 }

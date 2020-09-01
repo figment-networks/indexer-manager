@@ -30,6 +30,8 @@ type NetworkVersion struct {
 
 // HubbleContractor a format agnostic
 type HubbleContractor interface {
+	SchedulerContractor
+
 	GetAccounts(ctx context.Context, nv NetworkVersion)
 	GetAccount(ctx context.Context, nv NetworkVersion)
 	GetCurrentHeight(ctx context.Context, nv NetworkVersion)
@@ -43,6 +45,9 @@ type HubbleContractor interface {
 	GetTransaction(ctx context.Context, nv NetworkVersion, id string) ([]shared.Transaction, error)
 	GetTransactions(ctx context.Context, nv NetworkVersion, heightRange shared.HeightRange) ([]shared.Transaction, error)
 	InsertTransactions(ctx context.Context, nv NetworkVersion, read io.ReadCloser) error
+}
+
+type SchedulerContractor interface {
 	ScrapeLatest(ctx context.Context, ldr shared.LatestDataRequest) (ldResp shared.LatestDataResponse, er error)
 }
 
@@ -64,36 +69,21 @@ func (hc *Client) LinkSender(sender TaskSender) {
 	hc.sender = sender
 }
 
-func (hc *Client) GetAccounts(ctx context.Context, nv NetworkVersion) {
+func (hc *Client) GetAccounts(ctx context.Context, nv NetworkVersion) {}
 
-}
+func (hc *Client) GetAccount(ctx context.Context, nv NetworkVersion) {}
 
-func (hc *Client) GetAccount(ctx context.Context, nv NetworkVersion) {
+func (hc *Client) GetCurrentHeight(ctx context.Context, nv NetworkVersion) {}
 
-}
-func (hc *Client) GetCurrentHeight(ctx context.Context, nv NetworkVersion) {
+func (hc *Client) GetCurrentBlock(ctx context.Context, nv NetworkVersion) {}
 
-}
+func (hc *Client) GetBlock(ctx context.Context, nv NetworkVersion, id string) {}
 
-func (hc *Client) GetCurrentBlock(ctx context.Context, nv NetworkVersion) {
+func (hc *Client) GetBlocks(ctx context.Context, nv NetworkVersion) {}
 
-}
+func (hc *Client) GetBlockTimes(ctx context.Context, nv NetworkVersion) {}
 
-func (hc *Client) GetBlock(ctx context.Context, nv NetworkVersion, id string) {
-
-}
-
-func (hc *Client) GetBlocks(ctx context.Context, nv NetworkVersion) {
-
-}
-
-func (hc *Client) GetBlockTimes(ctx context.Context, nv NetworkVersion) {
-
-}
-
-func (hc *Client) GetBlockTimesInterval(ctx context.Context, nv NetworkVersion) {
-
-}
+func (hc *Client) GetBlockTimesInterval(ctx context.Context, nv NetworkVersion) {}
 
 func (hc *Client) GetTransaction(ctx context.Context, nv NetworkVersion, id string) ([]shared.Transaction, error) {
 	return hc.GetTransactions(ctx, nv, shared.HeightRange{Hash: id})
@@ -263,7 +253,7 @@ func (hc *Client) ScrapeLatest(ctx context.Context, ldr shared.LatestDataRequest
 	timer := metrics.NewTimer(callDurationScrapeLatest)
 	defer timer.ObserveDuration()
 
-	hc.logger.Debug("[Client] ScrapeLatest - ", zap.Any("received", ldr))
+	hc.logger.Debug("[Client] ScrapeLatest", zap.Any("received", ldr))
 
 	// (lukanus): self consistency check (optional), so we don;t care about an error
 	if ldr.SelfCheck {
@@ -283,7 +273,7 @@ func (hc *Client) ScrapeLatest(ctx context.Context, ldr shared.LatestDataRequest
 		} else if err != params.ErrNotFound {
 			return ldResp, fmt.Errorf("error getting latest transaction data : %w", err)
 		}
-		hc.logger.Debug("[Client] ScrapeLatest - ", zap.Any("last block", lastBlock))
+		hc.logger.Debug("[Client] ScrapeLatest", zap.Any("last block", lastBlock))
 	}
 
 	taskReq, err := json.Marshal(ldr)
@@ -352,7 +342,7 @@ WAIT_FOR_ALL_DATA:
 	}
 
 	if len(missing) > 0 {
-		hc.logger.Debug("[Client] ScrapeLatest - ", zap.Any("missing", missing))
+		hc.logger.Debug("[Client] ScrapeLatest", zap.Any("missing", missing))
 		return ldResp, ErrIntegrityCheckFailed
 	}
 
