@@ -5,7 +5,7 @@ go 1.14
 require (
 	github.com/btcsuite/btcutil v1.0.2
 	github.com/cosmos/cosmos-sdk v0.39.1
-	github.com/figment-networks/indexing-engine v0.1.11-0.20200828132349-20e89d34e35b
+	github.com/figment-networks/indexing-engine v0.1.11
 	github.com/golang-migrate/migrate/v4 v4.12.2
 	github.com/golang/protobuf v1.4.2
 	github.com/google/uuid v1.1.1
