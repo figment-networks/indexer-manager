@@ -29,7 +29,7 @@ jobs:
 
       - name: Pack messages
         run: |
-          zip --junk-paths builds.zip manager_migration_bin manager_bin
+          zip --junk-paths cosmos-indexer manager_migration_bin manager_bin worker_cosmos_bin
 
       - name: Set ref vars
         id: refs

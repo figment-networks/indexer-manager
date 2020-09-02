@@ -1,0 +1,22 @@
+global:
+  scrape_interval:     15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+  - job_name: 'manager'
+    static_configs:
+      - targets: ['cosmos-indexer_managerone_1:8085', 'cosmos-indexer_managertwo_1:8085']
+  - job_name: 'cosmos'
+    static_configs:
+      - targets: ['cosmos-indexer_workercosmos_1:8087', 'cosmos-indexer_workercosmos_2:8087']
+  - job_name: 'coda'
+    static_configs:
+      - targets: ['cosmos-indexer_workercoda_1:8087']
+  - job_name: 'terra'
+    static_configs:
+      - targets: ['cosmos-indexer_workerterra_1:8087']
+
+

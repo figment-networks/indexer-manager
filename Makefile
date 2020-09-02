@@ -32,10 +32,6 @@ build-artificial:
 build-scheduler:
 	go build -o scheduler_bin ./cmd/scheduler
 
-.PHONY: build-scheduler-migration
-build-scheduler-migration:
-	go build -o scheduler_migration_bin ./cmd/scheduler-migration
-
 .PHONY: build-proto
 build-proto:
 	@protoc -I ./ --go_opt=paths=source_relative --go_out=plugins=grpc:. ./proto/indexer.proto
