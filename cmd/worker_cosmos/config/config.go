@@ -21,7 +21,7 @@ type Config struct {
 	HTTPPort string `json:"http_port" envconfig:"HTTP_PORT" default:"8087"`
 
 	TendermintRPCAddr string `json:"tendermint_rpc_addr" envconfig:"TENDERMINT_RPC_ADDR" required:"true"`
-	DatahubKey        string `json:"datahub_key" envconfig:"DATAHUB_KEY" required:"true"`
+	DatahubKey        string `json:"datahub_key" envconfig:"DATAHUB_KEY"`
 
 	Managers        string        `json:"managers" envconfig:"MANAGERS" default:"127.0.0.1:8085"`
 	ManagerInverval time.Duration `json:"manager_interavl" envconfig:"MANAGER_INTERVAL" default:"10s"`

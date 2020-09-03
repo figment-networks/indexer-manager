@@ -64,6 +64,10 @@ func initConfig(path string) (config.Config, error) {
 		}
 	}
 
+	if cfg.DatabaseURL != "" {
+		return *cfg, nil
+	}
+
 	if err := config.FromEnv(cfg); err != nil {
 		return *cfg, err
 	}

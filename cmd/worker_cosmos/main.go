@@ -137,6 +137,10 @@ func initConfig(path string) (*config.Config, error) {
 		}
 	}
 
+	if cfg.TendermintRPCAddr != "" {
+		return cfg, nil
+	}
+
 	if err := config.FromEnv(cfg); err != nil {
 		return nil, err
 	}

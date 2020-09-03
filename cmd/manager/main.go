@@ -154,6 +154,10 @@ func initConfig(path string) (config.Config, error) {
 		}
 	}
 
+	if cfg.DatabaseURL != "" {
+		return *cfg, nil
+	}
+
 	if err := config.FromEnv(cfg); err != nil {
 		return *cfg, err
 	}
@@ -182,6 +186,10 @@ type ConnectivityInfo struct {
 	Address string `json:"address"`
 	Version string `json:"version"`
 	Type    string `json:"type"`
+}
+
+func attachHealthCheck(mgr *connectivity.Manager, logger *zap.Logger, mux *http.ServeMux) {
+
 }
 
 func attachConnectionManager(mgr *connectivity.Manager, logger *zap.Logger, mux *http.ServeMux) {
