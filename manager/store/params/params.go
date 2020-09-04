@@ -24,4 +24,5 @@ type TransactionSearch struct {
 	AfterHeight  uint64 `form:"after_height"`
 	BeforeHeight uint64 `form:"before_height"`
 	Limit        uint64 `json:"limit"`
+	Offset       uint64 `json:"offset"`
 }

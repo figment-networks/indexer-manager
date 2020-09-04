@@ -45,9 +45,17 @@ type ResultBlock struct {
 	BlockMeta BlockMeta `json:"block_meta"`
 }
 
+// ResultBlock is result of fetching block
+type ResultBlockchain struct {
+	LastHeight string      `json:"last_height"`
+	BlockMetas []BlockMeta `json:"block_metas"`
+}
+
 // BlockMeta is block metadata
 type BlockMeta struct {
-	BlockID BlockID `json:"block_id"`
+	BlockID BlockID     `json:"block_id"`
+	Header  BlockHeader `json:"header"`
+	NumTxs  string      `json:"num_txs"`
 }
 
 type BlockID struct {
@@ -89,6 +97,13 @@ type GetBlockResponse struct {
 	RPC    string      `json:"jsonrpc"`
 	Result ResultBlock `json:"result"`
 	Error  Error       `json:"error"`
+}
+
+type GetBlockchainResponse struct {
+	ID     string           `json:"id"`
+	RPC    string           `json:"jsonrpc"`
+	Result ResultBlockchain `json:"result"`
+	Error  Error            `json:"error"`
 }
 
 type LogFormat struct {

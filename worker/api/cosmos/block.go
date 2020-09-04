@@ -7,7 +7,6 @@ import (
 	"log"
 	"net/http"
 	"strconv"
-	"sync"
 	"time"
 
 	"github.com/figment-networks/cosmos-indexer/structs"
@@ -47,6 +46,11 @@ func (c Client) GetBlock(ctx context.Context, params structs.HeightHash) (block 
 	}
 	req.URL.RawQuery = q.Encode()
 
+	err = c.rateLimitter.Wait(ctx)
+	if err != nil {
+		return block, err
+	}
+
 	n := time.Now()
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -63,15 +67,18 @@ func (c Client) GetBlock(ctx context.Context, params structs.HeightHash) (block 
 	}
 
 	if result.Error.Message != "" {
-		return block, fmt.Errorf("error fetching block: %s ", result.Error.Message)
+		return block, fmt.Errorf("[COSMOS-API] Error fetching block: %s ", result.Error.Message)
 	}
 	bTime, err := time.Parse(time.RFC3339Nano, result.Result.Block.Header.Time)
 	uHeight, err := strconv.ParseUint(result.Result.Block.Header.Height, 10, 64)
+	numTxs, _ := strconv.ParseUint(result.Result.BlockMeta.NumTxs, 10, 64)
 
 	block = structs.Block{
-		Hash:   result.Result.BlockMeta.BlockID.Hash,
-		Height: uHeight,
-		Time:   bTime,
+		Hash:                 result.Result.BlockMeta.BlockID.Hash,
+		Height:               uHeight,
+		Time:                 bTime,
+		ChainID:              result.Result.Block.Header.ChainID,
+		NumberOfTransactions: numTxs,
 	}
 
 	c.Sbc.Add(block)
@@ -105,6 +112,15 @@ func (c Client) GetBlockAsync(ctx context.Context, in chan uint64, out chan<- Bl
 		q.Add("height", strconv.FormatUint(height, 10))
 		req.URL.RawQuery = q.Encode()
 
+		err = c.rateLimitter.Wait(ctx)
+		if err != nil {
+			out <- BlockErrorPair{
+				Height: height,
+				Err:    err,
+			}
+			continue
+		}
+
 		n := time.Now()
 		resp, err := c.httpClient.Do(req)
 		if err != nil {
@@ -134,64 +150,92 @@ func (c Client) GetBlockAsync(ctx context.Context, in chan uint64, out chan<- Bl
 			log.Printf("err %+v", result)
 			out <- BlockErrorPair{
 				Height: height,
-				Err:    fmt.Errorf("error fetching block: %s ", result.Error.Message),
+				Err:    fmt.Errorf("Error fetching block: %s ", result.Error.Message),
 			}
 			continue
 		}
 
 		bTime, err := time.Parse(time.RFC3339Nano, result.Result.Block.Header.Time)
 		uHeight, err := strconv.ParseUint(result.Result.Block.Header.Height, 10, 64)
+		numTxs, _ := strconv.ParseUint(result.Result.BlockMeta.NumTxs, 10, 64)
 
 		out <- BlockErrorPair{
 			Height: uHeight,
 			Block: structs.Block{
-				Hash:   result.Result.BlockMeta.BlockID.Hash,
-				Height: uHeight,
-				Time:   bTime,
+				Hash:                 result.Result.BlockMeta.BlockID.Hash,
+				Height:               uHeight,
+				Time:                 bTime,
+				ChainID:              result.Result.Block.Header.ChainID,
+				NumberOfTransactions: numTxs,
 			},
 		}
 	}
 }
 
-type SimpleBlockCache struct {
-	space  map[uint64]structs.Block
-	blocks chan *structs.Block
-	l      sync.RWMutex
-}
-
-func NewSimpleBlockCache(cap int) *SimpleBlockCache {
-	return &SimpleBlockCache{
-		space:  make(map[uint64]structs.Block),
-		blocks: make(chan *structs.Block, cap),
-	}
-}
-
-func (sbc *SimpleBlockCache) Add(bl structs.Block) {
-	sbc.l.Lock()
-	defer sbc.l.Unlock()
-
-	_, ok := sbc.space[bl.Height]
-	if ok {
-		return
+// GetBlocksMeta fetches block metadata from given range of blocks
+func (c Client) GetBlocksMeta(ctx context.Context, params structs.HeightRange) (blocks map[uint64]structs.Block, er error) {
+	req, err := http.NewRequest(http.MethodGet, c.baseURL+"/blockchain", nil)
+	if err != nil {
+		return nil, err
 	}
 
-	sbc.space[bl.Height] = bl
-	select {
-	case sbc.blocks <- &bl:
-	default:
-		oldBlock := <-sbc.blocks
-		if oldBlock != nil {
-			delete(sbc.space, oldBlock.Height)
+	req.Header.Add("Content-Type", "application/json")
+	if c.key != "" {
+		req.Header.Add("Authorization", c.key)
+	}
+
+	q := req.URL.Query()
+	if params.StartHeight > 0 {
+		q.Add("minHeight", strconv.FormatUint(params.StartHeight, 10))
+	}
+
+	if params.EndHeight > 0 {
+		q.Add("maxHeight", strconv.FormatUint(params.EndHeight, 10))
+	}
+	req.URL.RawQuery = q.Encode()
+
+	err = c.rateLimitter.Wait(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	n := time.Now()
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	rawRequestDuration.WithLabels("/blockchain", resp.Status).Observe(time.Since(n).Seconds())
+	defer resp.Body.Close()
+
+	decoder := json.NewDecoder(resp.Body)
+
+	var result *GetBlockchainResponse
+	if err = decoder.Decode(&result); err != nil {
+		return nil, err
+	}
+
+	if result.Error.Message != "" {
+		return nil, fmt.Errorf("error fetching block: %s ", result.Error.Message)
+	}
+
+	blocks = map[uint64]structs.Block{}
+	for _, meta := range result.Result.BlockMetas {
+
+		bTime, _ := time.Parse(time.RFC3339Nano, meta.Header.Time)
+		uHeight, _ := strconv.ParseUint(meta.Header.Height, 10, 64)
+		numTxs, _ := strconv.ParseUint(meta.NumTxs, 10, 64)
+
+		block := structs.Block{
+			Hash:                 meta.BlockID.Hash,
+			Height:               uHeight,
+			ChainID:              meta.Header.ChainID,
+			Time:                 bTime,
+			NumberOfTransactions: numTxs,
 		}
-		sbc.blocks <- &bl
+		blocks[block.Height] = block
+
+		c.Sbc.Add(block)
 	}
 
-}
-
-func (sbc *SimpleBlockCache) Get(height uint64) (bl structs.Block, ok bool) {
-	sbc.l.RLock()
-	defer sbc.l.RUnlock()
-
-	bl, ok = sbc.space[bl.Height]
-	return bl, ok
+	return blocks, nil
 }

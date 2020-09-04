@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -40,7 +41,10 @@ func (c *Client) SearchTx(ctx context.Context, wg *sync.WaitGroup, r structs.Hei
 
 	req, err := http.NewRequest(http.MethodGet, c.baseURL+"/tx_search", nil)
 	if err != nil {
-		fin <- err.Error()
+		if fin != nil {
+			fin <- err.Error()
+		}
+		return 0, err
 	}
 
 	req.Header.Add("Content-Type", "application/json")
@@ -68,14 +72,39 @@ func (c *Client) SearchTx(ctx context.Context, wg *sync.WaitGroup, r structs.Hei
 	q.Add("per_page", strconv.Itoa(perPage))
 	req.URL.RawQuery = q.Encode()
 
+	// (lukanus): do not block initial calls
+	if r.EndHeight != 0 && r.StartHeight != 0 {
+		err = c.rateLimitter.Wait(ctx)
+		if err != nil {
+			if fin != nil {
+				fin <- err.Error()
+			}
+			return 0, err
+		}
+	}
+
 	now := time.Now()
 	resp, err := c.httpClient.Do(req)
 
 	log.Debug("[COSMOS-API] Request Time (/tx_search)", zap.Duration("duration", time.Now().Sub(now)))
 	if err != nil {
-		fin <- err.Error()
+		if fin != nil {
+			fin <- err.Error()
+		}
 		return 0, err
 	}
+
+	if resp.StatusCode > 399 { // ERROR
+		serverError, _ := ioutil.ReadAll(resp.Body)
+
+		c.logger.Error("[COSMOS-API] error getting response from server", zap.Int("code", resp.StatusCode), zap.Any("response", string(serverError)))
+		err := fmt.Errorf("error getting response from server %d %s", resp.StatusCode, string(serverError))
+		if fin != nil {
+			fin <- err.Error()
+		}
+		return 0, err
+	}
+
 	rawRequestDuration.WithLabels("/tx_search", resp.Status).Observe(time.Since(now).Seconds())
 
 	decoder := json.NewDecoder(resp.Body)
@@ -84,21 +113,27 @@ func (c *Client) SearchTx(ctx context.Context, wg *sync.WaitGroup, r structs.Hei
 	if err = decoder.Decode(result); err != nil {
 		c.logger.Error("[COSMOS-API] unable to decode result body", zap.Error(err))
 		err := fmt.Errorf("unable to decode result body %w", err)
-		fin <- err.Error()
+		if fin != nil {
+			fin <- err.Error()
+		}
 		return 0, err
 	}
 
 	if result.Error.Message != "" {
+		c.logger.Error("[COSMOS-API] Error getting search", zap.Any("result", result.Error.Message))
 		err := fmt.Errorf("Error getting search: %s", result.Error.Message)
-		c.logger.Error("[COSMOS-API] Error getting search", zap.Error(err))
-		fin <- err.Error()
+		if fin != nil {
+			fin <- err.Error()
+		}
 		return 0, err
 	}
 
 	totalCount, err := strconv.ParseInt(result.Result.TotalCount, 10, 64)
 	if err != nil {
-		c.logger.Error("[COSMOS-API] Error getting totalCount", zap.Error(err), zap.Any("result", result))
-		fin <- err.Error()
+		c.logger.Error("[COSMOS-API] Error getting totalCount", zap.Error(err), zap.Any("result", result), zap.String("query", req.URL.RawQuery), zap.Any("request", r))
+		if fin != nil {
+			fin <- err.Error()
+		}
 		return 0, err
 	}
 

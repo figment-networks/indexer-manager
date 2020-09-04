@@ -26,6 +26,9 @@ type Config struct {
 	Managers        string        `json:"managers" envconfig:"MANAGERS" default:"127.0.0.1:8085"`
 	ManagerInverval time.Duration `json:"manager_interavl" envconfig:"MANAGER_INTERVAL" default:"10s"`
 	Hostname        string        `json:"hostname" envconfig:"HOSTNAME"`
+
+	MaximumHeightsToGet float64 `json:"maximum_heights_to_get" envconfig:"MAXIMUM_HEIGHTS_TO_GET" default:"10000"`
+	BigPage             float64 `json:"big_page" envconfig:"BIG_PAGE" default:"1000"`
 }
 
 // FromFile reads the config from a file

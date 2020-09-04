@@ -205,7 +205,7 @@ func (d *Driver) GetTransactions(ctx context.Context, tsearch params.Transaction
 		}
 
 		if tsearch.BeforeHeight > 0 {
-			parts = append(parts, "height > $"+strconv.Itoa(i))
+			parts = append(parts, "height < $"+strconv.Itoa(i))
 			data = append(data, tsearch.BeforeHeight)
 			i++
 		}
@@ -272,8 +272,13 @@ func (d *Driver) GetTransactions(ctx context.Context, tsearch params.Transaction
 	qBuilder.WriteString(" ORDER BY time DESC")
 
 	if tsearch.Limit > 0 {
-		qBuilder.WriteString(" LIMIT " + strconv.FormatUint(uint64(tsearch.Limit), 64))
+		qBuilder.WriteString(" LIMIT " + strconv.FormatUint(uint64(tsearch.Limit), 10))
+
+		if tsearch.Offset > 0 {
+			qBuilder.WriteString(" OFFSET  " + strconv.FormatUint(uint64(tsearch.Limit), 10))
+		}
 	}
+
 	a := qBuilder.String()
 	//log.Printf("DEBUG QUERY: %s %+v ", a, data)
 	rows, err := d.db.QueryContext(ctx, a, data...)

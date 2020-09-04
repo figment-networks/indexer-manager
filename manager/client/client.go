@@ -205,6 +205,7 @@ func (hc *Client) SearchTransactions(ctx context.Context, nv NetworkVersion, ts 
 		StartTime: ts.StartTime,
 		EndTime:   ts.EndTime,
 		Limit:     ts.Limit,
+		Offset:    ts.Offset,
 	})
 }
 

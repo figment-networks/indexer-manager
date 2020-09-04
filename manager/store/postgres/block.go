@@ -27,7 +27,7 @@ func (d *Driver) StoreBlock(bl structs.BlockExtra) error {
 func flushB(ctx context.Context, d *Driver) error {
 
 	qBuilder := strings.Builder{}
-	qBuilder.WriteString(`INSERT INTO public.blocks("network", "chain_id", "version", "epoch", "height", "hash",  "time" ) VALUES `)
+	qBuilder.WriteString(`INSERT INTO public.blocks("network", "chain_id", "version", "epoch", "height", "hash",  "time", "numtxs" ) VALUES `)
 
 	var i = 0
 	valueArgs := []interface{}{}
@@ -40,11 +40,11 @@ READ_ALL:
 				qBuilder.WriteString(`,`)
 			}
 			qBuilder.WriteString(`(`)
-			for j := 1; j < 8; j++ {
+			for j := 1; j < 9; j++ {
 				qBuilder.WriteString(`$`)
-				current := i*7 + j
+				current := i*8 + j
 				qBuilder.WriteString(strconv.Itoa(current))
-				if current == 1 || math.Mod(float64(current), 7) != 0 {
+				if current == 1 || math.Mod(float64(current), 8) != 0 {
 					qBuilder.WriteString(`,`)
 				}
 			}
@@ -58,6 +58,8 @@ READ_ALL:
 			valueArgs = append(valueArgs, b.Height)
 			valueArgs = append(valueArgs, b.Hash)
 			valueArgs = append(valueArgs, b.Time)
+			valueArgs = append(valueArgs, b.NumberOfTransactions)
+
 			i++
 		default:
 			break READ_ALL
@@ -83,12 +85,12 @@ READ_ALL:
 func (d *Driver) GetLatestBlock(ctx context.Context, blx structs.BlockExtra) (out structs.Block, err error) {
 	returnBlx := structs.Block{}
 
-	row := d.db.QueryRowContext(ctx, "SELECT id, epoch, height, hash, time FROM public.blocks WHERE version = $1 AND network = $2 ORDER BY time DESC LIMIT 1", blx.ChainID, blx.Network)
+	row := d.db.QueryRowContext(ctx, "SELECT id, epoch, height, hash, time, numtxs FROM public.blocks WHERE version = $1 AND network = $2 ORDER BY time DESC LIMIT 1", blx.ChainID, blx.Network)
 	if row == nil {
 		return out, params.ErrNotFound
 	}
 
-	err = row.Scan(&returnBlx.ID, &returnBlx.Epoch, &returnBlx.Height, &returnBlx.Hash, &returnBlx.Time)
+	err = row.Scan(&returnBlx.ID, &returnBlx.Epoch, &returnBlx.Height, &returnBlx.Hash, &returnBlx.Time, &returnBlx.NumberOfTransactions)
 	if err == sql.ErrNoRows {
 		return returnBlx, params.ErrNotFound
 	}

@@ -89,7 +89,8 @@ func main() {
 
 	grpcServer := grpc.NewServer()
 
-	workerClient := cli.NewIndexerClient(context.Background(), logger.GetLogger(), cfg.TendermintRPCAddr, cfg.DatahubKey)
+	// 33  per second is < 2000 minute
+	workerClient := cli.NewIndexerClient(context.Background(), logger.GetLogger(), cfg.TendermintRPCAddr, cfg.DatahubKey, uint64(cfg.BigPage), uint64(cfg.MaximumHeightsToGet), 33)
 
 	worker := grpcIndexer.NewIndexerServer(workerClient, logger.GetLogger())
 	grpcProtoIndexer.RegisterIndexerServiceServer(grpcServer, worker)

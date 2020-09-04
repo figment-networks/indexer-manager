@@ -16,6 +16,8 @@ CREATE TABLE IF NOT EXISTS blocks
     epoch           TEXT    NOT NULL,
     hash            TEXT    NOT NULL,
 
+    numtxs          DECIMAL(65, 0) NOT NULL DEFAULT 0,
+
     PRIMARY KEY (id)
 );
 

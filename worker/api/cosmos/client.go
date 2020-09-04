@@ -14,6 +14,7 @@ import (
 	"github.com/cosmos/cosmos-sdk/x/slashing"
 	"github.com/cosmos/cosmos-sdk/x/staking"
 	"go.uber.org/zap"
+	"golang.org/x/time/rate"
 )
 
 // Client is a Tendermint RPC client for cosmos using figmentnetworks datahub
@@ -24,31 +25,28 @@ type Client struct {
 	cdc        *codec.Codec
 	logger     *zap.Logger
 
-	inTx chan TxResponse
-
-	Sbc *SimpleBlockCache
+	rateLimitter *rate.Limiter
+	Sbc          *SimpleBlockCache
 }
 
 // NewClient returns a new client for a given endpoint
-func NewClient(url, key string, logger *zap.Logger, c *http.Client) *Client {
+func NewClient(url, key string, logger *zap.Logger, c *http.Client, reqPerSecLimit int) *Client {
 	if c == nil {
 		c = &http.Client{
 			Timeout: time.Second * 40,
 		}
 	}
 
-	/* (lukanus): to use  ws in future "github.com/tendermint/tendermint/rpc/jsonrpc/client"
-	conn, err := client.NewWS(addr, "/websocket")
-	err = conn.Start()
-	*/
-
+	rateLimitter := rate.NewLimiter(rate.Every(time.Second), reqPerSecLimit) // < 2000
+	rateLimitter.SetBurst(33)
 	cli := &Client{
-		logger:     logger,
-		baseURL:    url, //tendermint rpc url
-		key:        key,
-		httpClient: c,
-		cdc:        makeCodec(),
-		Sbc:        NewSimpleBlockCache(400),
+		logger:       logger,
+		baseURL:      url, //tendermint rpc url
+		key:          key,
+		httpClient:   c,
+		rateLimitter: rateLimitter,
+		cdc:          makeCodec(),
+		Sbc:          NewSimpleBlockCache(400),
 	}
 	return cli
 }
@@ -73,6 +71,5 @@ func InitMetrics() {
 	transactionConversionDuration = conversionDuration.WithLabels("transaction")
 	blockCacheEfficiencyHit = blockCacheEfficiency.WithLabels("hit")
 	blockCacheEfficiencyMissed = blockCacheEfficiency.WithLabels("missed")
-
 	numberOfItemsTransactions = numberOfItems.WithLabels("transactions")
 }

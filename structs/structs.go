@@ -137,10 +137,13 @@ type Block struct {
 	CreatedAt *time.Time `json:"created_at,omitempty"`
 	UpdatedAt *time.Time `json:"updated_at,omitempty"`
 
-	Hash   string    `json:"hash,omitempty"`
-	Height uint64    `json:"height,omitempty"`
-	Time   time.Time `json:"time,omitempty"`
-	Epoch  string    `json:"epoch,omitempty"`
+	Hash    string    `json:"hash,omitempty"`
+	Height  uint64    `json:"height,omitempty"`
+	Time    time.Time `json:"time,omitempty"`
+	Epoch   string    `json:"epoch,omitempty"`
+	ChainID string    `json:"chain_id,omitempty"`
+
+	NumberOfTransactions uint64 `json:"num_txs,omitempty"`
 }
 
 type TransactionSearch struct {
@@ -155,6 +158,7 @@ type TransactionSearch struct {
 	StartTime time.Time `json:"start_time"`
 	EndTime   time.Time `json:"end_time"`
 	Limit     uint64    `json:"limit"`
+	Offset    uint64    `json:"offset"`
 
 	AfterHeight  uint64 `form:"after_id"`
 	BeforeHeight uint64 `form:"before_id"`

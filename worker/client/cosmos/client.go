@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"math"
 	"sync"
 	"time"
@@ -19,8 +20,9 @@ import (
 )
 
 const page = 100
-const bigPage = 1000 // the separate request
-const maximumHeightsToGet = 10000
+
+//const bigPage = 1000 // the separate request
+//const maximumHeightsToGet = 10000
 
 var (
 	getTransactionDuration *metrics.GroupObserver
@@ -32,22 +34,30 @@ type IndexerClient struct {
 	cosmosEndpoint string
 	cosmosKey      string
 
+	httpClient *api.Client
+
 	logger  *zap.Logger
 	streams map[uuid.UUID]*cStructs.StreamAccess
 	sLock   sync.Mutex
+
+	bigPage             uint64
+	maximumHeightsToGet uint64
 }
 
-func NewIndexerClient(ctx context.Context, logger *zap.Logger, cosmosEndpoint string, cosmosKey string) *IndexerClient {
+func NewIndexerClient(ctx context.Context, logger *zap.Logger, cosmosEndpoint, cosmosKey string, bigPage, maximumHeightsToGet uint64, reqPerSecLimit int) *IndexerClient {
 	getTransactionDuration = endpointDuration.WithLabels("getTransactions")
 	getLatestDuration = endpointDuration.WithLabels("getLatest")
 	getBlockDuration = endpointDuration.WithLabels("getBlock")
 	api.InitMetrics()
 
 	return &IndexerClient{
-		logger:         logger,
-		cosmosEndpoint: cosmosEndpoint,
-		cosmosKey:      cosmosKey,
-		streams:        make(map[uuid.UUID]*cStructs.StreamAccess),
+		logger:              logger,
+		cosmosEndpoint:      cosmosEndpoint,
+		cosmosKey:           cosmosKey,
+		httpClient:          api.NewClient(cosmosEndpoint, cosmosKey, logger, nil, reqPerSecLimit),
+		bigPage:             bigPage,
+		maximumHeightsToGet: maximumHeightsToGet,
+		streams:             make(map[uuid.UUID]*cStructs.StreamAccess),
 	}
 }
 
@@ -69,10 +79,9 @@ func (ic *IndexerClient) RegisterStream(ctx context.Context, stream *cStructs.St
 	defer ic.sLock.Unlock()
 	ic.streams[stream.StreamID] = stream
 
-	cosmosClient := api.NewClient(ic.cosmosEndpoint, ic.cosmosKey, ic.logger, nil)
 	// Limit workers not to create new goroutines over and over again
 	for i := 0; i < 20; i++ {
-		go ic.Run(ctx, cosmosClient, stream)
+		go ic.Run(ctx, ic.httpClient, stream)
 	}
 
 	return nil
@@ -117,18 +126,16 @@ func (ic *IndexerClient) GetTransactions(ctx context.Context, tr cStructs.TaskRe
 	hr := &structs.HeightRange{}
 	err := json.Unmarshal(tr.Payload, hr)
 	if err != nil {
+		ic.logger.Debug("[COSMOS-CLIENT] Cannot umnarshal payload", zap.String("contents", string(tr.Payload)))
 		stream.Send(cStructs.TaskResponse{
 			Id:    tr.Id,
 			Error: cStructs.TaskError{Msg: "cannot unmarshal payload: " + err.Error()},
 			Final: true,
 		})
-
-		ic.logger.Debug("[COSMOS-CLIENT] Register Stream", zap.Stringer("streamID", stream.StreamID))
 		return
 	}
 
 	if hr.EndHeight == 0 {
-
 		stream.Send(cStructs.TaskResponse{
 			Id:    tr.Id,
 			Error: cStructs.TaskError{Msg: "end height is zero" + err.Error()},
@@ -141,43 +148,36 @@ func (ic *IndexerClient) GetTransactions(ctx context.Context, tr cStructs.TaskRe
 	defer cancel()
 
 	out := make(chan cStructs.OutResp, page*2+1)
-
-	// TODO(lukanus): use Pools
-	fin := make(chan string, 2)
-	defer close(fin)
+	defer close(out)
 	fin2 := make(chan bool, 2)
 	defer close(fin2)
 
-	wg := &sync.WaitGroup{}
 	go sendResp(ctx, tr.Id, out, ic.logger, stream, fin2)
 
-	go func() {
-		for c := range fin {
-			if c != "" {
-				ic.logger.Error("[COSMOS-CLIENT] Error processing Search ", zap.String("error", c), zap.Stringer("taskID", tr.Id))
-			}
-		}
-	}()
-
 	diff := hr.EndHeight - hr.StartHeight
-	bigPages := int(math.Ceil(float64(diff) / float64(bigPage)))
+	bigPages := uint64(math.Ceil(float64(diff) / float64(ic.bigPage)))
 
-	for i := 0; i < bigPages; i++ {
+	for i := uint64(0); i < bigPages; i++ {
 		hrInner := structs.HeightRange{
-			StartHeight: hr.StartHeight + uint64(i*bigPage),
-			EndHeight:   hr.StartHeight + uint64(i*bigPage) + bigPage,
+			StartHeight: hr.StartHeight + i*ic.bigPage,
+			EndHeight:   hr.StartHeight + i*ic.bigPage + ic.bigPage,
 		}
 		if hrInner.EndHeight > hr.EndHeight {
 			hrInner.EndHeight = hr.EndHeight
 		}
 
-		wg.Add(1)
-		go getRange(sCtx, ic.logger, wg, tr.Id, stream, client, hrInner, out, fin)
+		if err := getRange(sCtx, ic.logger, client, hrInner, out); err != nil {
+			stream.Send(cStructs.TaskResponse{
+				Id:    tr.Id,
+				Error: cStructs.TaskError{Msg: err.Error()},
+				Final: true,
+			})
+			ic.logger.Error("[COSMOS-CLIENT] Error processing Search ", zap.Error(err), zap.Stringer("taskID", tr.Id))
+			return
+		}
 	}
 
-	wg.Wait()
 	ic.logger.Debug("[COSMOS-CLIENT] Received all", zap.Stringer("taskID", tr.Id))
-	close(out)
 
 	for {
 		select {
@@ -260,52 +260,46 @@ func (ic *IndexerClient) GetLatest(ctx context.Context, tr cStructs.TaskRequest,
 
 	// (lukanus): When nothing is scraped we want to get only X number of last requests
 	if ldr.LastHeight == 0 {
-		lastX := block.Height - maximumHeightsToGet
+		lastX := block.Height - ic.maximumHeightsToGet
 		if lastX > 0 {
 			startingHeight = lastX
 		}
 	} else {
 		diff := block.Height - ldr.LastHeight
-		if diff > maximumHeightsToGet {
-			startingHeight = block.Height - maximumHeightsToGet
+		if diff > ic.maximumHeightsToGet {
+			startingHeight = block.Height - ic.maximumHeightsToGet
 		}
 	}
 
 	diff := block.Height - startingHeight
-	bigPages := int(math.Ceil(float64(diff) / float64(bigPage)))
+	bigPages := uint64(math.Ceil(float64(diff) / float64(ic.bigPage)))
 
 	out := make(chan cStructs.OutResp, page)
 
-	// TODO(lukanus): use Pools
-	fin := make(chan string, 2)
-	defer close(fin)
 	fin2 := make(chan bool, 2)
 	defer close(fin2)
 
-	go func() {
-		for c := range fin {
-			if c != "" {
-				ic.logger.Error("[COSMOS-CLIENT] Error processing Search ", zap.String("error", c), zap.Stringer("taskID", tr.Id))
-			}
-		}
-	}()
-
 	go sendResp(ctx, tr.Id, out, ic.logger, stream, fin2)
-	wg := &sync.WaitGroup{}
-	for i := 0; i < bigPages; i++ {
+	for i := uint64(0); i < bigPages; i++ {
 		hr := structs.HeightRange{
-			StartHeight: startingHeight + uint64(i*bigPage),
-			EndHeight:   startingHeight + uint64(i*bigPage) + bigPage,
+			StartHeight: startingHeight + i*ic.bigPage,
+			EndHeight:   startingHeight + i*ic.bigPage + ic.bigPage,
 		}
 		if hr.EndHeight > block.Height {
 			hr.EndHeight = block.Height
 		}
 
-		wg.Add(1)
-		go getRange(sCtx, ic.logger, wg, tr.Id, stream, client, hr, out, fin)
+		if err := getRange(sCtx, ic.logger, client, hr, out); err != nil {
+			stream.Send(cStructs.TaskResponse{
+				Id:    tr.Id,
+				Error: cStructs.TaskError{Msg: err.Error()},
+				Final: true,
+			})
+			ic.logger.Error("[COSMOS-CLIENT] Error processing Search ", zap.Error(err), zap.Stringer("taskID", tr.Id))
+			break
+		}
 	}
 
-	wg.Wait()
 	ic.logger.Debug("[COSMOS-CLIENT] Received all", zap.Stringer("taskID", tr.Id))
 	close(out)
 
@@ -320,72 +314,49 @@ func (ic *IndexerClient) GetLatest(ctx context.Context, tr cStructs.TaskRequest,
 	}
 }
 
-func getRange(ctx context.Context, logger *zap.Logger, wg *sync.WaitGroup, requestID uuid.UUID, stream *cStructs.StreamAccess, client *api.Client, hr structs.HeightRange, out chan cStructs.OutResp, fin chan string) {
+func getRange(ctx context.Context, logger *zap.Logger, client *api.Client, hr structs.HeightRange, out chan cStructs.OutResp) error {
 	defer logger.Sync()
 
-	defer wg.Done()
-
-	blocks := map[uint64]structs.Block{}
 	logger.Debug("[COSMOS-CLIENT] Getting blocks for ", zap.Uint64("end", hr.EndHeight), zap.Uint64("start", hr.StartHeight))
-	in := make(chan uint64, 10)
-	go func(start, end uint64, in chan uint64) {
-		for i := uint64(0); i < end-start+1; i++ {
-			in <- start + i
-		}
-		close(in)
-	}(hr.StartHeight, hr.EndHeight, in)
-
-	bepOut := make(chan api.BlockErrorPair, 20)
-
-	for i := 0; i < 10; i++ {
-		go client.GetBlockAsync(ctx, in, bepOut)
-	}
-
-	all := int(hr.EndHeight - hr.StartHeight)
-	i := 0
-
-	for BE := range bepOut {
-		if BE.Err != nil {
-			logger.Error("[COSMOS-API] Error getting block at height", zap.Any("height", BE.Height), zap.Error(BE.Err))
-
-		} else {
-			blocks[BE.Height] = BE.Block
-		}
-
-		if i == all {
-			break
-		}
-		i++
-	}
-	close(bepOut)
-
-	logger.Debug("[COSMOS-CLIENT] Getting requests for ", zap.Any("range", hr), zap.Stringer("taskID", requestID))
-
-	count, err := client.SearchTx(ctx, nil, hr, blocks, out, 1, page, fin)
-
+	blocks, err := client.GetBlocksMeta(ctx, hr)
 	if err != nil {
-		stream.Send(cStructs.TaskResponse{
-			Id:    requestID,
-			Error: cStructs.TaskError{Msg: "Error Getting Transactions - " + err.Error()},
-			Final: true,
-		})
-		return
+		return fmt.Errorf("Error Getting Blocks (%d, %d) - %w", hr.StartHeight, hr.EndHeight, err)
+	}
+
+	logger.Debug("[COSMOS-CLIENT] Getting requests for ", zap.Any("range", hr))
+	count, err := client.SearchTx(ctx, nil, hr, blocks, out, 1, page, nil)
+	if err != nil {
+		return fmt.Errorf("Error Getting Transactions (%d, %d) - %w", hr.StartHeight, hr.EndHeight, err)
 	}
 
 	leftToBeDone := int(math.Ceil(float64(count/page))) - 1
 
-	innerWg := &sync.WaitGroup{}
-	logger.Debug("[COSMOS-CLIENT] Getting initial data ", zap.Int64("all", count), zap.Int64("page", page), zap.Int("toBeDone", leftToBeDone))
-	if leftToBeDone > 0 {
-		for i := 2; i < leftToBeDone+1; i++ {
-			innerWg.Add(1)
-			//ic.logger.Error("[COSMOS-CLIENT] Getting initial data ", zap.Int("i", i))
-			go client.SearchTx(ctx, innerWg, hr, blocks, out, i, page, fin)
+	if leftToBeDone > 1 {
+
+		// TODO(lukanus): use Pools
+		fin := make(chan string, 2)
+		defer close(fin)
+
+		go func() {
+			for c := range fin {
+				if c != "" {
+					logger.Error("[COSMOS-CLIENT] Error processing Search ", zap.String("error", c))
+				}
+			}
+		}()
+
+		innerWg := &sync.WaitGroup{}
+		logger.Debug("[COSMOS-CLIENT] Getting initial data ", zap.Int64("all", count), zap.Int64("page", page), zap.Int("toBeDone", leftToBeDone))
+		if leftToBeDone > 0 {
+			for i := 2; i < leftToBeDone+1; i++ {
+				innerWg.Add(1)
+				//ic.logger.Error("[COSMOS-CLIENT] Getting initial data ", zap.Int("i", i))
+				go client.SearchTx(ctx, innerWg, hr, blocks, out, i, page, fin)
+			}
 		}
+
+		innerWg.Wait()
 	}
-
-	innerWg.Wait()
-
 	// send blocks after all the transaction were sent
 	for _, block := range blocks {
 		out <- cStructs.OutResp{
@@ -394,6 +365,7 @@ func getRange(ctx context.Context, logger *zap.Logger, wg *sync.WaitGroup, reque
 		}
 	}
 
+	return nil
 }
 
 func sendResp(ctx context.Context, id uuid.UUID, out chan cStructs.OutResp, logger *zap.Logger, stream *cStructs.StreamAccess, fin chan bool) {
