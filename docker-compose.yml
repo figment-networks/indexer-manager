@@ -79,23 +79,6 @@ services:
       - postgresdatabase
       - managermigrate
 
-  artificialsource:
-    build:
-      context: .
-      dockerfile: ./Dockerfile.artificial_source
-    networks:
-      - internal
-
-  workercoda:
-    build:
-      context: .
-      dockerfile: ./Dockerfile.worker.coda
-    networks:
-      - internal
-    environment:
-      MANAGERS: cosmos-indexer_managerone_1:8085,cosmos-indexer_managertwo_1:8085
-      CODA_ENDPOINT: http://cosmos-indexer_artificialsource_1:3334/coda
-
   workercosmos:
     build:
       context: .
@@ -104,17 +87,6 @@ services:
       - internal
     env_file:
       - .cosmos.env
-    environment:
-      MANAGERS: cosmos-indexer_managerone_1:8085,cosmos-indexer_managertwo_1:8085
-
-  workerterra:
-    build:
-      context: .
-      dockerfile: ./Dockerfile.worker.terra
-    networks:
-      - internal
-    env_file:
-      - .terra.env
     environment:
       MANAGERS: cosmos-indexer_managerone_1:8085,cosmos-indexer_managertwo_1:8085
 

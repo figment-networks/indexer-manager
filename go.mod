@@ -3,7 +3,6 @@ module github.com/figment-networks/cosmos-indexer
 go 1.14
 
 require (
-	github.com/btcsuite/btcutil v1.0.2
 	github.com/cosmos/cosmos-sdk v0.39.1
 	github.com/figment-networks/indexing-engine v0.1.11
 	github.com/golang-migrate/migrate/v4 v4.12.2

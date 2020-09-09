@@ -21,9 +21,6 @@ import (
 
 const page = 100
 
-//const bigPage = 1000 // the separate request
-//const maximumHeightsToGet = 10000
-
 var (
 	getTransactionDuration *metrics.GroupObserver
 	getLatestDuration      *metrics.GroupObserver
@@ -103,8 +100,6 @@ func (ic *IndexerClient) Run(ctx context.Context, client *api.Client, stream *cS
 			switch taskRequest.Type {
 			case "GetTransactions":
 				ic.GetTransactions(ctx, taskRequest, stream, client)
-			case "GetBlock":
-				ic.GetBlock(ctx, taskRequest, stream, client)
 			case "GetLatest":
 				ic.GetLatest(ctx, taskRequest, stream, client)
 			default:
@@ -171,7 +166,7 @@ func (ic *IndexerClient) GetTransactions(ctx context.Context, tr cStructs.TaskRe
 				Error: cStructs.TaskError{Msg: err.Error()},
 				Final: true,
 			})
-			ic.logger.Error("[COSMOS-CLIENT] Error processing Search ", zap.Error(err), zap.Stringer("taskID", tr.Id))
+			ic.logger.Error("[COSMOS-CLIENT] Error getting range (Get Transactions) ", zap.Error(err), zap.Stringer("taskID", tr.Id))
 			return
 		}
 	}
@@ -194,7 +189,6 @@ func (ic *IndexerClient) GetBlock(ctx context.Context, tr cStructs.TaskRequest, 
 	timer := metrics.NewTimer(getBlockDuration)
 	defer timer.ObserveDuration()
 
-	//	log.Printf("Received Block Req: %+v ", tr)
 	hr := &structs.HeightHash{}
 	err := json.Unmarshal(tr.Payload, hr)
 	if err != nil {
@@ -300,7 +294,7 @@ func (ic *IndexerClient) GetLatest(ctx context.Context, tr cStructs.TaskRequest,
 				Error: cStructs.TaskError{Msg: err.Error()},
 				Final: true,
 			})
-			ic.logger.Error("[COSMOS-CLIENT] Error processing Search ", zap.Error(err), zap.Stringer("taskID", tr.Id))
+			ic.logger.Error("[COSMOS-CLIENT] Error GettingRange from get latest ", zap.Error(err), zap.Stringer("taskID", tr.Id))
 			break
 		}
 	}
@@ -318,60 +312,6 @@ func (ic *IndexerClient) GetLatest(ctx context.Context, tr cStructs.TaskRequest,
 		}
 	}
 }
-
-/*
-func getRange(ctx context.Context, logger *zap.Logger, client *api.Client, hr structs.HeightRange, out chan cStructs.OutResp) error {
-	defer logger.Sync()
-
-	logger.Debug("[COSMOS-CLIENT] Getting blocks for ", zap.Uint64("end", hr.EndHeight), zap.Uint64("start", hr.StartHeight))
-	blocks, err := client.GetBlocksMeta(ctx, hr)
-	if err != nil {
-		return fmt.Errorf("Error Getting Blocks (%d, %d) - %w", hr.StartHeight, hr.EndHeight, err)
-	}
-
-	logger.Debug("[COSMOS-CLIENT] Getting requests for ", zap.Any("range", hr))
-	count, err := client.SearchTx(ctx, nil, hr, blocks, out, 1, page, nil)
-	if err != nil {
-		return fmt.Errorf("Error Getting Transactions (%d, %d) - %w", hr.StartHeight, hr.EndHeight, err)
-	}
-
-	leftToBeDone := int(math.Ceil(float64(count/page))) - 1
-
-	if leftToBeDone > 1 {
-		// TODO(lukanus): use Pools
-		fin := make(chan string, 2)
-		defer close(fin)
-
-		go func() {
-			for c := range fin {
-				if c != "" {
-					logger.Error("[COSMOS-CLIENT] Error processing Search ", zap.String("error", c))
-				}
-			}
-		}()
-
-		innerWg := &sync.WaitGroup{}
-		logger.Debug("[COSMOS-CLIENT] Getting initial data ", zap.Int64("all", count), zap.Int64("page", page), zap.Int("toBeDone", leftToBeDone))
-		if leftToBeDone > 0 {
-			for i := 2; i < leftToBeDone+1; i++ {
-				innerWg.Add(1)
-				//ic.logger.Error("[COSMOS-CLIENT] Getting initial data ", zap.Int("i", i))
-				go client.SearchTx(ctx, innerWg, hr, blocks, out, i, page, fin)
-			}
-		}
-
-		innerWg.Wait()
-	}
-	// send blocks after all the transaction were sent
-	for _, block := range blocks {
-		out <- cStructs.OutResp{
-			Type:    "Block",
-			Payload: block,
-		}
-	}
-
-	return nil
-}*/
 
 func getRange(ctx context.Context, logger *zap.Logger, client *api.Client, hr structs.HeightRange, out chan cStructs.OutResp) error {
 	defer logger.Sync()
@@ -431,7 +371,6 @@ func getRange(ctx context.Context, logger *zap.Logger, client *api.Client, hr st
 		logger.Debug("[COSMOS-CLIENT] Getting initial data ", zap.Uint64("all", blocksAll.NumTxs), zap.Int64("page", page), zap.Int("toBeDone", toBeDone))
 		if toBeDone > 0 {
 			for i := 0; i < toBeDone; i++ {
-				//ic.logger.Error("[COSMOS-CLIENT] Getting initial data ", zap.Int("i", i))
 				go client.SearchTx(ctx, hr, blocksAll.Blocks, out, i+1, page, fin)
 			}
 		}
@@ -440,7 +379,7 @@ func getRange(ctx context.Context, logger *zap.Logger, client *api.Client, hr st
 		for c := range fin {
 			responses++
 			if c != "" {
-				logger.Error("[COSMOS-CLIENT] Error processing Search ", zap.String("error", c))
+				logger.Error("[COSMOS-CLIENT] Getting response from SearchTX", zap.String("error", c))
 			}
 			if responses == toBeDone {
 				break
@@ -467,7 +406,6 @@ SEND_LOOP:
 				break SEND_LOOP
 			}
 			b.Reset()
-			//logger.Debug("Task to send", zap.Stringer("taskID", t.ID), zap.Uint64("order", n.Order), zap.Uint64("order", t.All))
 
 			err := enc.Encode(t.Payload)
 			if err != nil {
