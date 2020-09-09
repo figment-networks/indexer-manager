@@ -126,6 +126,7 @@ func (hc *Client) GetTransactions(ctx context.Context, nv NetworkVersion, height
 			if heightRange.EndHeight == 0 {
 				return nil, errors.New("No transaction to get, bad request")
 			}
+			requestsToGetMetric.Observe(1)
 
 			b, _ := json.Marshal(shared.HeightRange{
 				StartHeight: heightRange.StartHeight,
@@ -236,6 +237,7 @@ func (hc *Client) SearchTransactions(ctx context.Context, nv NetworkVersion, ts 
 
 	return hc.storeEng.GetTransactions(ctx, params.TransactionSearch{
 		Network:   nv.Network,
+		ChainID:   nv.ChainID,
 		Height:    ts.Height,
 		Type:      ts.Type,
 		BlockHash: ts.BlockHash,
@@ -528,7 +530,9 @@ func (hc *Client) getMissingTransactions(ctx context.Context, nv NetworkVersion,
 					}
 					return fmt.Errorf("error getting missing transactions from missing blocks:  %w ", err)
 				}
-				progress.Report(missingRange, time.Since(now), nil, false)
+				if progress != nil {
+					progress.Report(missingRange, time.Since(now), nil, false)
+				}
 			}
 
 			missingBlocks, missingTransactions, err = hc.CheckMissingTransactions(ctx, nv, hr, 1000)
@@ -553,11 +557,14 @@ func (hc *Client) getMissingTransactions(ctx context.Context, nv NetworkVersion,
 				}
 				return fmt.Errorf("error getting missing transactions:  %w ", err)
 			}
-			progress.Report(missingRange, time.Since(now), nil, false)
+			if progress != nil {
+				progress.Report(missingRange, time.Since(now), nil, false)
+			}
 		}
 	}
-
-	progress.Report(shared.HeightRange{}, 0, nil, true)
+	if progress != nil {
+		progress.Report(shared.HeightRange{}, 0, nil, true)
+	}
 	return
 }
 

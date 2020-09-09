@@ -97,11 +97,12 @@ func (ic *IndexerClient) Run(ctx context.Context, client *api.Client, stream *cS
 			return
 		case taskRequest := <-stream.RequestListener:
 			receivedRequestsMetric.WithLabels(taskRequest.Type).Inc()
+			nCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 			switch taskRequest.Type {
 			case "GetTransactions":
-				ic.GetTransactions(ctx, taskRequest, stream, client)
+				ic.GetTransactions(nCtx, taskRequest, stream, client)
 			case "GetLatest":
-				ic.GetLatest(ctx, taskRequest, stream, client)
+				ic.GetLatest(nCtx, taskRequest, stream, client)
 			default:
 				stream.Send(cStructs.TaskResponse{
 					Id:    taskRequest.Id,
@@ -109,6 +110,7 @@ func (ic *IndexerClient) Run(ctx context.Context, client *api.Client, stream *cS
 					Final: true,
 				})
 			}
+			cancel()
 		}
 	}
 }
@@ -143,10 +145,9 @@ func (ic *IndexerClient) GetTransactions(ctx context.Context, tr cStructs.TaskRe
 	defer cancel()
 
 	out := make(chan cStructs.OutResp, page*2+1)
-	fin2 := make(chan bool, 2)
-	defer close(fin2)
+	fin := make(chan bool, 2)
 
-	go sendResp(ctx, tr.Id, out, ic.logger, stream, fin2)
+	go sendResp(sCtx, tr.Id, out, ic.logger, stream, fin)
 
 	diff := hr.EndHeight - hr.StartHeight
 	bigPages := uint64(math.Ceil(float64(diff) / float64(ic.bigPage)))
@@ -178,7 +179,7 @@ func (ic *IndexerClient) GetTransactions(ctx context.Context, tr cStructs.TaskRe
 		select {
 		case <-sCtx.Done():
 			return
-		case <-fin2:
+		case <-fin:
 			ic.logger.Debug("[COSMOS-CLIENT] Finished sending all", zap.Stringer("taskID", tr.Id))
 			return
 		}
@@ -241,11 +242,7 @@ func (ic *IndexerClient) GetLatest(ctx context.Context, tr cStructs.TaskRequest,
 	// (lukanus): Get latest block (height = 0)
 	block, err := client.GetBlock(sCtx, structs.HeightHash{})
 	if err != nil {
-		stream.Send(cStructs.TaskResponse{
-			Id:    tr.Id,
-			Error: cStructs.TaskError{Msg: "Error getting block data " + err.Error()},
-			Final: true,
-		})
+		stream.Send(cStructs.TaskResponse{Id: tr.Id, Error: cStructs.TaskError{Msg: "Error getting block data " + err.Error()}, Final: true})
 		return
 	}
 
@@ -275,10 +272,9 @@ func (ic *IndexerClient) GetLatest(ctx context.Context, tr cStructs.TaskRequest,
 
 	out := make(chan cStructs.OutResp, page)
 
-	fin2 := make(chan bool, 2)
-	defer close(fin2)
+	fin := make(chan bool, 2)
 
-	go sendResp(ctx, tr.Id, out, ic.logger, stream, fin2)
+	go sendResp(sCtx, tr.Id, out, ic.logger, stream, fin)
 	for i := uint64(0); i < bigPages; i++ {
 		hr := structs.HeightRange{
 			StartHeight: startingHeight + i*ic.bigPage,
@@ -306,7 +302,7 @@ func (ic *IndexerClient) GetLatest(ctx context.Context, tr cStructs.TaskRequest,
 		select {
 		case <-sCtx.Done():
 			return
-		case <-fin2:
+		case <-fin:
 			ic.logger.Debug("[COSMOS-CLIENT] Finished sending all", zap.Stringer("taskID", tr.Id))
 			return
 		}
@@ -396,10 +392,13 @@ func sendResp(ctx context.Context, id uuid.UUID, out chan cStructs.OutResp, logg
 	enc := json.NewEncoder(b)
 	order := uint64(0)
 
+	var contextDone bool
+
 SEND_LOOP:
 	for {
 		select {
 		case <-ctx.Done():
+			contextDone = true
 			break SEND_LOOP
 		case t, ok := <-out:
 			if !ok && t.Type == "" {
@@ -441,6 +440,10 @@ SEND_LOOP:
 	}
 
 	if fin != nil {
-		fin <- true
+		if !contextDone {
+			fin <- true
+		}
+		close(fin)
 	}
+
 }

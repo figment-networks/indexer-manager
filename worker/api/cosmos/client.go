@@ -37,8 +37,8 @@ func NewClient(url, key string, logger *zap.Logger, c *http.Client, reqPerSecLim
 		}
 	}
 
-	rateLimitter := rate.NewLimiter(rate.Every(time.Second*30), reqPerSecLimit*30) // < 2000
-	rateLimitter.SetBurst(reqPerSecLimit * 30)
+	rateLimitter := rate.NewLimiter(rate.Limit(reqPerSecLimit), reqPerSecLimit)
+
 	cli := &Client{
 		logger:       logger,
 		baseURL:      url, //tendermint rpc url

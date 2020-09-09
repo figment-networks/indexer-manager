@@ -187,7 +187,6 @@ type Run struct {
 }
 
 func NewRun(ctx context.Context, nv NetworkVersion, heightRange shared.HeightRange) *Run {
-
 	return &Run{
 		Ctx:         ctx,
 		NV:          nv,

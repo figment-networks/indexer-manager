@@ -42,6 +42,8 @@ func init() {
 }
 
 func main() {
+
+	ctx, cancel := context.WithCancel(context.Background())
 	// Initialize configuration
 	cfg, err := initConfig(configFlags.configPath)
 	if err != nil {
@@ -85,12 +87,12 @@ func main() {
 
 	logger.Info(fmt.Sprintf("Connecting to managers (%s)", strings.Join(managers, ",")))
 
-	go c.Run(context.Background(), logger.GetLogger(), cfg.ManagerInverval)
+	go c.Run(ctx, logger.GetLogger(), cfg.ManagerInverval)
 
 	grpcServer := grpc.NewServer()
 
 	// 33  per second is < 2000 minute
-	workerClient := cli.NewIndexerClient(context.Background(), logger.GetLogger(), cfg.TendermintRPCAddr, cfg.DatahubKey, uint64(cfg.BigPage), uint64(cfg.MaximumHeightsToGet), 33)
+	workerClient := cli.NewIndexerClient(ctx, logger.GetLogger(), cfg.TendermintRPCAddr, cfg.DatahubKey, uint64(cfg.BigPage), uint64(cfg.MaximumHeightsToGet), 33)
 
 	worker := grpcIndexer.NewIndexerServer(workerClient, logger.GetLogger())
 	grpcProtoIndexer.RegisterIndexerServiceServer(grpcServer, worker)
@@ -109,12 +111,12 @@ func main() {
 
 	go runGRPC(grpcServer, cfg.Port, logger.GetLogger(), exit)
 	go runHTTP(s, cfg.HTTPPort, logger.GetLogger(), exit)
-	ctx := context.Background()
 
 RUN_LOOP:
 	for {
 		select {
 		case <-osSig:
+			cancel()
 			grpcServer.GracefulStop()
 			s.Shutdown(ctx)
 			break RUN_LOOP
@@ -169,7 +171,6 @@ func runHTTP(s *http.Server, port string, logger *zap.Logger, exit chan<- string
 	defer logger.Sync()
 
 	logger.Info(fmt.Sprintf("[HTTP] Listening on 0.0.0.0:%s", port))
-
 	if err := s.ListenAndServe(); err != nil {
 		logger.Error("[HTTP] failed to listen", zap.Error(err))
 	}
