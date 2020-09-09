@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log"
 	"math"
 	"strconv"
 	"strings"
@@ -47,11 +48,21 @@ func flushTx(ctx context.Context, d *Driver) error {
 
 	var i = 0
 	valueArgs := []interface{}{}
+
+	deduplicate := map[string]bool{}
 READ_ALL:
 	for {
 		select {
 		case transaction := <-d.txBuff:
 			t := transaction.Transaction
+
+			key := transaction.Network + transaction.ChainID + t.Epoch + t.Hash
+			if _, ok := deduplicate[key]; ok {
+				// already exists
+				continue
+			}
+			deduplicate[key] = true
+
 			//recipients := []string{}
 			//senders := []string{}
 			parties := []string{}
@@ -104,7 +115,7 @@ READ_ALL:
 			qBuilder.WriteString(`)`)
 			valueArgs = append(valueArgs, transaction.Network)
 			valueArgs = append(valueArgs, transaction.ChainID)
-			valueArgs = append(valueArgs, "0.0.1")
+			valueArgs = append(valueArgs, transaction.Version)
 			valueArgs = append(valueArgs, t.Epoch)
 			valueArgs = append(valueArgs, t.Height)
 			valueArgs = append(valueArgs, t.Hash)
@@ -127,7 +138,18 @@ READ_ALL:
 		}
 	}
 
-	qBuilder.WriteString(` ON CONFLICT (network, chain_id, epoch, hash) DO NOTHING`)
+	qBuilder.WriteString(` ON CONFLICT (network, chain_id, epoch, hash)
+			DO UPDATE SET height = EXCLUDED.height,
+			time = EXCLUDED.time,
+			type = EXCLUDED.type,
+			parties = EXCLUDED.parties,
+			data = EXCLUDED.data,
+			amount = EXCLUDED.amount,
+			block_hash = EXCLUDED.block_hash,
+			gas_wanted = EXCLUDED.gas_wanted,
+			gas_used = EXCLUDED.gas_used,
+			memo = EXCLUDED.memo,
+			fee = EXCLUDED.fee`)
 
 	tx, err := d.db.Begin()
 	if err != nil {
@@ -136,6 +158,7 @@ READ_ALL:
 	a := qBuilder.String()
 	_, err = tx.Exec(a, valueArgs...)
 	if err != nil {
+		log.Println("Rollback flushTx error: ", err)
 		tx.Rollback()
 		return err
 	}
@@ -175,7 +198,6 @@ func uniqueEntry(in string, out []string) []string {
 }
 
 func (d *Driver) GetTransactions(ctx context.Context, tsearch params.TransactionSearch) (txs []structs.Transaction, err error) {
-
 	var i = 1
 
 	parts := []string{}

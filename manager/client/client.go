@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"sort"
+	"time"
 
 	"github.com/figment-networks/indexing-engine/metrics"
 	"go.uber.org/zap"
@@ -25,6 +27,7 @@ var ErrIntegrityCheckFailed = errors.New("integrity check failed")
 
 type NetworkVersion struct {
 	Network string
+	ChainID string
 	Version string
 }
 
@@ -43,8 +46,13 @@ type HubbleContractor interface {
 
 	SearchTransactions(ctx context.Context, nv NetworkVersion, ts shared.TransactionSearch) ([]shared.Transaction, error)
 	GetTransaction(ctx context.Context, nv NetworkVersion, id string) ([]shared.Transaction, error)
-	GetTransactions(ctx context.Context, nv NetworkVersion, heightRange shared.HeightRange) ([]shared.Transaction, error)
+	GetTransactions(ctx context.Context, nv NetworkVersion, heightRange shared.HeightRange, perRequest int, silent bool) ([]shared.Transaction, error)
 	InsertTransactions(ctx context.Context, nv NetworkVersion, read io.ReadCloser) error
+
+	CheckMissingTransactions(ctx context.Context, nv NetworkVersion, heightRange shared.HeightRange, window uint64) (missingBlocks, missingTransactions [][2]uint64, err error)
+	GetMissingTransactions(ctx context.Context, nv NetworkVersion, heightRange shared.HeightRange, window uint64, async bool, force bool) (run *Run, err error)
+
+	GetRunningTransactions(ctx context.Context) (run []Run, err error)
 }
 
 type SchedulerContractor interface {
@@ -59,10 +67,17 @@ type Client struct {
 	sender   TaskSender
 	storeEng store.DataStore
 	logger   *zap.Logger
+	runner   *Runner
 }
 
 func NewClient(storeEng store.DataStore, logger *zap.Logger) *Client {
-	return &Client{storeEng: storeEng, logger: logger}
+	c := &Client{
+		storeEng: storeEng,
+		logger:   logger,
+		runner:   NewRunner(),
+	}
+	go c.runner.Run()
+	return c
 }
 
 func (hc *Client) LinkSender(sender TaskSender) {
@@ -86,10 +101,11 @@ func (hc *Client) GetBlockTimes(ctx context.Context, nv NetworkVersion) {}
 func (hc *Client) GetBlockTimesInterval(ctx context.Context, nv NetworkVersion) {}
 
 func (hc *Client) GetTransaction(ctx context.Context, nv NetworkVersion, id string) ([]shared.Transaction, error) {
-	return hc.GetTransactions(ctx, nv, shared.HeightRange{Hash: id})
+	return hc.GetTransactions(ctx, nv, shared.HeightRange{Hash: id}, 1, false)
 }
 
-func (hc *Client) GetTransactions(ctx context.Context, nv NetworkVersion, heightRange shared.HeightRange) ([]shared.Transaction, error) {
+// GetTransactions gets transaction range and stores it in the database with respective blocks
+func (hc *Client) GetTransactions(ctx context.Context, nv NetworkVersion, heightRange shared.HeightRange, perRequest int, silent bool) ([]shared.Transaction, error) {
 	timer := metrics.NewTimer(callDurationGetTransactions)
 	defer timer.ObserveDuration()
 
@@ -106,24 +122,14 @@ func (hc *Client) GetTransactions(ctx context.Context, nv NetworkVersion, height
 		})
 	} else {
 		diff := float64(heightRange.EndHeight - heightRange.StartHeight)
-		if diff == 0 && heightRange.Hash == "" {
-			return nil, errors.New("No transaction to get, bad request")
-		}
-		requestsToGetMetric.Observe(diff)
-
-		if diff > 0 {
-			times = int(math.Ceil(diff / 100))
-		}
-
-		for i := 0; i < times; i++ {
-			endH := heightRange.StartHeight + uint64((i+1)*100)
-			if heightRange.EndHeight > 0 && endH > heightRange.EndHeight {
-				endH = heightRange.EndHeight
+		if diff == 0 {
+			if heightRange.EndHeight == 0 {
+				return nil, errors.New("No transaction to get, bad request")
 			}
 
 			b, _ := json.Marshal(shared.HeightRange{
-				StartHeight: heightRange.StartHeight + uint64(i*100),
-				EndHeight:   endH,
+				StartHeight: heightRange.StartHeight,
+				EndHeight:   heightRange.EndHeight,
 				Hash:        heightRange.Hash,
 			})
 
@@ -133,9 +139,36 @@ func (hc *Client) GetTransactions(ctx context.Context, nv NetworkVersion, height
 				Type:    "GetTransactions",
 				Payload: b,
 			})
+		} else {
+			requestsToGetMetric.Observe(diff)
+
+			if diff > 0 {
+				times = int(math.Ceil(diff / float64(perRequest)))
+			}
+
+			for i := 0; i < times; i++ {
+				endH := heightRange.StartHeight + uint64((i+1)*perRequest)
+				if heightRange.EndHeight > 0 && endH > heightRange.EndHeight {
+					endH = heightRange.EndHeight
+				}
+
+				b, _ := json.Marshal(shared.HeightRange{
+					StartHeight: heightRange.StartHeight + uint64(i*perRequest),
+					EndHeight:   endH,
+					Hash:        heightRange.Hash,
+				})
+
+				req = append(req, structs.TaskRequest{
+					Network: nv.Network,
+					Version: nv.Version,
+					Type:    "GetTransactions",
+					Payload: b,
+				})
+			}
 		}
 	}
 
+	hc.logger.Info("[Client] Sending request data:", zap.Any("request", req))
 	respAwait, err := hc.sender.Send(req)
 	if err != nil {
 		hc.logger.Error("[Client] Error sending data", zap.Error(err))
@@ -149,13 +182,16 @@ func (hc *Client) GetTransactions(ctx context.Context, nv NetworkVersion, height
 	buff := &bytes.Buffer{}
 	dec := json.NewDecoder(buff)
 
-	var receivedTransactions int
+	var receivedFinals int
 WAIT_FOR_ALL_DATA:
 	for {
 		select {
 		case <-ctx.Done():
 			return nil, errors.New("Request timed out")
 		case response := <-respAwait.Resp:
+
+			hc.logger.Debug("[Client] Get Transaction received data:", zap.Any("type", response.Type), zap.Any("response", response))
+
 			if response.Error.Msg != "" {
 				return trs, fmt.Errorf("error getting response: %s", response.Error.Msg)
 			}
@@ -169,7 +205,9 @@ WAIT_FOR_ALL_DATA:
 					if err := hc.storeTransaction(dec, nv.Network, nv.Version, t); err != nil {
 						return trs, fmt.Errorf("error storing transaction: %w", err)
 					}
-					trs = append(trs, *t)
+					if !silent {
+						trs = append(trs, *t)
+					}
 				case "Block":
 					b := &shared.Block{}
 					if err := hc.storeBlock(dec, nv.Network, nv.Version, b); err != nil {
@@ -179,10 +217,11 @@ WAIT_FOR_ALL_DATA:
 			}
 
 			if response.Final {
-				receivedTransactions++
+				receivedFinals++
 			}
 
-			if receivedTransactions == times {
+			if receivedFinals == times {
+				hc.logger.Info("[Client] Received All for", zap.Any("request", req))
 				break WAIT_FOR_ALL_DATA
 			}
 		}
@@ -190,9 +229,11 @@ WAIT_FOR_ALL_DATA:
 	return trs, nil
 }
 
+// SearchTransactions is the search
 func (hc *Client) SearchTransactions(ctx context.Context, nv NetworkVersion, ts shared.TransactionSearch) ([]shared.Transaction, error) {
 	timer := metrics.NewTimer(callDurationSearchTransactions)
 	defer timer.ObserveDuration()
+
 	return hc.storeEng.GetTransactions(ctx, params.TransactionSearch{
 		Network:   nv.Network,
 		Height:    ts.Height,
@@ -209,6 +250,7 @@ func (hc *Client) SearchTransactions(ctx context.Context, nv NetworkVersion, ts 
 	})
 }
 
+// InsertTransactions inserts external transactions batch
 func (hc *Client) InsertTransactions(ctx context.Context, nv NetworkVersion, readr io.ReadCloser) error {
 	timer := metrics.NewTimer(callDurationInsertTransactions)
 	defer timer.ObserveDuration()
@@ -219,7 +261,6 @@ func (hc *Client) InsertTransactions(ctx context.Context, nv NetworkVersion, rea
 	_, err := dec.Token()
 	if err != nil {
 		return fmt.Errorf("error decoding json - wrong format: %w", err)
-
 	}
 
 	inserted := 0
@@ -250,6 +291,7 @@ func (hc *Client) InsertTransactions(ctx context.Context, nv NetworkVersion, rea
 
 }
 
+// ScrapeLatest scrapes latest data using the latest known block from database
 func (hc *Client) ScrapeLatest(ctx context.Context, ldr shared.LatestDataRequest) (ldResp shared.LatestDataResponse, er error) {
 	timer := metrics.NewTimer(callDurationScrapeLatest)
 	defer timer.ObserveDuration()
@@ -337,13 +379,13 @@ WAIT_FOR_ALL_DATA:
 		}
 	}
 
-	missing, err := hc.storeEng.BlockContinuityCheck(ctx, shared.BlockExtra{ChainID: ldr.Version, Network: ldr.Network}, ldr.LastHeight)
+	missing, err := hc.storeEng.BlockContinuityCheck(ctx, shared.BlockExtra{ChainID: ldr.Version, Network: ldr.Network}, ldr.LastHeight, 0)
 	if err != nil {
 		return ldResp, err
 	}
 
 	if len(missing) > 0 {
-		hc.logger.Debug("[Client] ScrapeLatest", zap.Any("missing", missing))
+		hc.logger.Error("[Client] Block Continuity check failed", zap.Any("missing", missing))
 		return ldResp, ErrIntegrityCheckFailed
 	}
 
@@ -359,7 +401,7 @@ func (hc *Client) storeTransaction(dec *json.Decoder, network string, version st
 	err = hc.storeEng.StoreTransaction(
 		shared.TransactionExtra{
 			Network:     network,
-			ChainID:     version,
+			Version:     version,
 			Transaction: *m,
 		})
 
@@ -378,7 +420,8 @@ func (hc *Client) storeBlock(dec *json.Decoder, network string, version string, 
 	err := hc.storeEng.StoreBlock(
 		shared.BlockExtra{
 			Network: network,
-			ChainID: version,
+			Version: version,
+			ChainID: m.ChainID,
 			Block:   *m,
 		})
 
@@ -386,4 +429,218 @@ func (hc *Client) storeBlock(dec *json.Decoder, network string, version string, 
 		return fmt.Errorf("error storing block: %w", err)
 	}
 	return nil
+}
+
+// CheckMissingTransactions checks consistency of database if every transaction is written correctly (all blocks + correct transaction number from blocks)
+func (hc *Client) CheckMissingTransactions(ctx context.Context, nv NetworkVersion, heightRange shared.HeightRange, window uint64) (missingBlocks, missingTransactions [][2]uint64, err error) {
+	timer := metrics.NewTimer(callDurationCheckMissing)
+	defer timer.ObserveDuration()
+
+	blockContinuity, err := hc.storeEng.BlockContinuityCheck(ctx, shared.BlockExtra{Version: nv.Version, Network: nv.Network, ChainID: nv.ChainID}, heightRange.StartHeight, heightRange.EndHeight)
+	if err != nil && err != params.ErrNotFound {
+		return nil, nil, err
+	}
+
+	if len(blockContinuity) > 0 {
+		missingBlocks = groupRanges(blockContinuity, window)
+	}
+
+	clockTransactionCheck, err := hc.storeEng.BlockTransactionCheck(ctx, shared.BlockExtra{Version: nv.Version, Network: nv.Network, ChainID: nv.ChainID}, heightRange.StartHeight, heightRange.EndHeight)
+	if err != nil && err != params.ErrNotFound {
+		return nil, nil, err
+	}
+	if len(clockTransactionCheck) > 0 {
+		transactionRange := getRanges(clockTransactionCheck)
+		missingTransactions = groupRanges(transactionRange, window)
+	}
+
+	return missingBlocks, missingTransactions, err
+}
+
+func (hc *Client) GetRunningTransactions(ctx context.Context) (run []Run, err error) {
+	out := hc.runner.GetRunning()
+	return out.Run, out.Err
+}
+
+// GetMissingTransactions gets missing transactions for givent height range using CheckMissingTransactions
+func (hc *Client) GetMissingTransactions(ctx context.Context, nv NetworkVersion, heightRange shared.HeightRange, window uint64, async bool, force bool) (run *Run, err error) {
+
+	if !async {
+		return nil, hc.getMissingTransactions(ctx, nv, heightRange, window, nil)
+	}
+
+	hc.logger.Info("[Client] GetMissingTransactions StartProcess", zap.Any("range", heightRange), zap.Any("network", nv))
+
+	isNew, progress, err := hc.runner.StartProcess(nv, heightRange, force)
+	if err != nil {
+		return nil, err
+	}
+
+	if !isNew {
+		hc.logger.Info("[Client] Already Exists", zap.Any("range", heightRange), zap.Any("progress", progress))
+		return progress, err
+	}
+	nCtx := progress.Ctx
+	go hc.getMissingTransactions(nCtx, nv, heightRange, window, progress)
+
+	hc.logger.Info("[Client] Returning Progress", zap.Any("range", heightRange), zap.Any("network", nv))
+	<-time.After(time.Second)
+	return progress, nil
+
+}
+
+func (hc *Client) getMissingTransactions(ctx context.Context, nv NetworkVersion, heightRange shared.HeightRange, window uint64, progress *Run) (err error) {
+
+	timer := metrics.NewTimer(callDurationGetMissing)
+	defer timer.ObserveDuration()
+
+	count := heightRange.EndHeight - heightRange.StartHeight
+	countRounded := math.Ceil(float64(count) / 1000)
+
+	for i := 0; i < int(countRounded); i++ {
+
+		hr := shared.HeightRange{
+			StartHeight: heightRange.StartHeight + uint64(i)*1000,
+			EndHeight:   heightRange.StartHeight + uint64(i)*1000 + 999,
+		}
+
+		if hr.EndHeight > heightRange.EndHeight {
+			hr.EndHeight = heightRange.EndHeight
+		}
+
+		missingBlocks, missingTransactions, err := hc.CheckMissingTransactions(ctx, nv, hr, 1000)
+		if err != nil {
+			if progress != nil {
+				progress.Report(shared.HeightRange{}, 0, []error{err}, true)
+			}
+			return fmt.Errorf("Error checking missing transactions:  %w ", err)
+		}
+
+		if len(missingBlocks) > 0 {
+			for _, blocks := range missingBlocks {
+				// (lukanus): has to be blocking op
+				missingRange := shared.HeightRange{StartHeight: blocks[0], EndHeight: blocks[1]}
+				now := time.Now()
+				_, err := hc.GetTransactions(ctx, nv, missingRange, 1000, true)
+				if err != nil {
+					if progress != nil {
+						progress.Report(missingRange, time.Since(now), []error{err}, true)
+					}
+					return fmt.Errorf("error getting missing transactions from missing blocks:  %w ", err)
+				}
+				progress.Report(missingRange, time.Since(now), nil, false)
+			}
+
+			missingBlocks, missingTransactions, err = hc.CheckMissingTransactions(ctx, nv, hr, 1000)
+			if err != nil {
+				if progress != nil {
+					progress.Report(shared.HeightRange{}, 0, []error{err}, true)
+				}
+				return fmt.Errorf("error checking missing transactions (rerun):  %w ", err)
+			}
+
+		}
+
+		for _, transactions := range missingTransactions {
+			// (lukanus): has to be blocking op
+
+			missingRange := shared.HeightRange{StartHeight: transactions[0], EndHeight: transactions[1]}
+			now := time.Now()
+			_, err := hc.GetTransactions(ctx, nv, shared.HeightRange{StartHeight: transactions[0], EndHeight: transactions[1]}, 1000, true)
+			if err != nil {
+				if progress != nil {
+					progress.Report(missingRange, time.Since(now), []error{err}, true)
+				}
+				return fmt.Errorf("error getting missing transactions:  %w ", err)
+			}
+			progress.Report(missingRange, time.Since(now), nil, false)
+		}
+	}
+
+	progress.Report(shared.HeightRange{}, 0, nil, true)
+	return
+}
+
+func getRanges(in []uint64) (ranges [][2]uint64) {
+
+	sort.SliceStable(in, func(i, j int) bool { return in[i] < in[j] })
+
+	ranges = [][2]uint64{}
+	var temp = [2]uint64{}
+	for i, height := range in {
+
+		if i == 0 {
+			temp[0] = height
+			temp[1] = height
+			continue
+		}
+
+		if temp[1]+1 == height {
+			temp[1] = height
+			continue
+		}
+
+		ranges = append(ranges, temp)
+		temp[0] = height
+		temp[1] = height
+
+	}
+	if temp[1] != 0 {
+		ranges = append(ranges, temp)
+	}
+
+	return ranges
+}
+
+// groupRanges Groups ranges to fit the window of X records
+func groupRanges(ranges [][2]uint64, window uint64) (out [][2]uint64) {
+
+	pregroup := [][2]uint64{}
+
+	// (lukanus): first slice all the bigger ranges to get max(window)
+	for _, r := range ranges {
+		diff := r[1] - r[0]
+		if diff > window {
+			current := r[0]
+		SLICE_DIFF:
+			for {
+				next := current + window
+				if next <= r[1] {
+					pregroup = append(pregroup, [2]uint64{current, next})
+					current = next + 1
+					continue
+				}
+
+				pregroup = append(pregroup, [2]uint64{current, r[1]})
+				break SLICE_DIFF
+			}
+		} else {
+			pregroup = append(pregroup, r)
+		}
+	}
+
+	out = [][2]uint64{}
+
+	var temp = [2]uint64{}
+	for i, n := range pregroup {
+		if i == 0 {
+			temp[0] = n[0]
+			temp[1] = n[1]
+			continue
+		}
+
+		diff := n[1] - temp[0]
+		if diff <= window {
+			temp[1] = n[1]
+			continue
+		}
+		out = append(out, temp)
+		temp = [2]uint64{n[0], n[1]}
+	}
+
+	if temp[1] != 0 {
+		out = append(out, temp)
+	}
+	return out
+
 }

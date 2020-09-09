@@ -55,7 +55,6 @@ type ResultBlockchain struct {
 type BlockMeta struct {
 	BlockID BlockID     `json:"block_id"`
 	Header  BlockHeader `json:"header"`
-	NumTxs  string      `json:"num_txs"`
 }
 
 type BlockID struct {

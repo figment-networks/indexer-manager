@@ -15,7 +15,6 @@ type Driver struct {
 }
 
 func New(ctx context.Context, db *sql.DB) *Driver {
-
 	return &Driver{
 		db:     db,
 		txBuff: make(chan structs.TransactionExtra, 10),
@@ -24,7 +23,6 @@ func New(ctx context.Context, db *sql.DB) *Driver {
 }
 
 func (d *Driver) Flush() error {
-
 	if len(d.txBuff) > 0 {
 		if err := flushTx(context.Background(), d); err != nil {
 			return err

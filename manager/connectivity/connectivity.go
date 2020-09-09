@@ -1,10 +1,14 @@
 package connectivity
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
+	"net"
+	"net/http"
 	"sync"
 	"time"
 
@@ -321,4 +325,81 @@ func makeUUIDs(count int) []uuid.UUID {
 		uids[i], _ = uuid.NewRandom()
 	}
 	return uids
+}
+
+// PingInfo contract is defined here
+type PingInfo struct {
+	ID           string           `json:"id"`
+	Kind         string           `json:"kind"`
+	Connectivity ConnectivityInfo `json:"connectivity"`
+}
+type ConnectivityInfo struct {
+	Address string `json:"address"`
+	Version string `json:"version"`
+	Type    string `json:"type"`
+}
+
+func (m *Manager) AttachToMux(mux *http.ServeMux) {
+	b := &bytes.Buffer{}
+	block := &sync.Mutex{}
+	dec := json.NewDecoder(b)
+
+	mux.HandleFunc("/client_ping", func(w http.ResponseWriter, r *http.Request) {
+		pi := &PingInfo{}
+		block.Lock()
+		b.Reset()
+		_, err := b.ReadFrom(r.Body)
+		defer r.Body.Close()
+		if err != nil {
+			block.Unlock()
+			m.logger.Error("Error getting request body in /client_ping", zap.Error(err))
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		err = dec.Decode(pi)
+		if err != nil {
+			block.Unlock()
+			m.logger.Error("Error decoding request body in /client_ping", zap.Error(err))
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		block.Unlock()
+		/*
+			receivedSyncMetric = metrics.MustNewCounterWithTags(metrics.Options{
+				Namespace: "indexers",
+				Subsystem: "manager_main",
+				Name:      "received_sync",
+				Desc:      "Register attempts received from workers",
+				Tags:      []string{"network", "version", "address"},
+			})
+		*/
+		//	receivedSyncMetric.WithLabels(pi.Kind, pi.Connectivity.Version, pi.Connectivity.Address)
+		ipTo := net.ParseIP(r.RemoteAddr)
+		fwd := r.Header.Get("X-FORWARDED-FOR")
+		if fwd != "" {
+			ipTo = net.ParseIP(fwd)
+		}
+		m.Register(pi.ID, pi.Kind, structs.WorkerConnection{
+			Version: pi.Connectivity.Version,
+			Type:    pi.Connectivity.Type,
+			Addresses: []structs.WorkerAddress{{
+				IP:      ipTo,
+				Address: pi.Connectivity.Address,
+			}},
+		})
+		w.WriteHeader(http.StatusOK)
+	})
+
+	mux.HandleFunc("/get_workers", func(w http.ResponseWriter, r *http.Request) {
+		m, err := json.Marshal(m.GetAllWorkers())
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(`{"error": "Error marshaling data"}`))
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(m)
+		return
+	})
 }

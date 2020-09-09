@@ -148,7 +148,6 @@ func (ic *IndexerClient) GetTransactions(ctx context.Context, tr cStructs.TaskRe
 	defer cancel()
 
 	out := make(chan cStructs.OutResp, page*2+1)
-	defer close(out)
 	fin2 := make(chan bool, 2)
 	defer close(fin2)
 
@@ -178,6 +177,7 @@ func (ic *IndexerClient) GetTransactions(ctx context.Context, tr cStructs.TaskRe
 	}
 
 	ic.logger.Debug("[COSMOS-CLIENT] Received all", zap.Stringer("taskID", tr.Id))
+	close(out)
 
 	for {
 		select {
@@ -267,7 +267,12 @@ func (ic *IndexerClient) GetLatest(ctx context.Context, tr cStructs.TaskRequest,
 	} else {
 		diff := block.Height - ldr.LastHeight
 		if diff > ic.maximumHeightsToGet {
-			startingHeight = block.Height - ic.maximumHeightsToGet
+			if ic.maximumHeightsToGet > block.Height {
+				startingHeight = 0
+			} else {
+				startingHeight = block.Height - ic.maximumHeightsToGet
+			}
+
 		}
 	}
 
@@ -283,7 +288,7 @@ func (ic *IndexerClient) GetLatest(ctx context.Context, tr cStructs.TaskRequest,
 	for i := uint64(0); i < bigPages; i++ {
 		hr := structs.HeightRange{
 			StartHeight: startingHeight + i*ic.bigPage,
-			EndHeight:   startingHeight + i*ic.bigPage + ic.bigPage,
+			EndHeight:   startingHeight + i*ic.bigPage + (ic.bigPage - 1),
 		}
 		if hr.EndHeight > block.Height {
 			hr.EndHeight = block.Height
@@ -314,6 +319,7 @@ func (ic *IndexerClient) GetLatest(ctx context.Context, tr cStructs.TaskRequest,
 	}
 }
 
+/*
 func getRange(ctx context.Context, logger *zap.Logger, client *api.Client, hr structs.HeightRange, out chan cStructs.OutResp) error {
 	defer logger.Sync()
 
@@ -332,7 +338,6 @@ func getRange(ctx context.Context, logger *zap.Logger, client *api.Client, hr st
 	leftToBeDone := int(math.Ceil(float64(count/page))) - 1
 
 	if leftToBeDone > 1 {
-
 		// TODO(lukanus): use Pools
 		fin := make(chan string, 2)
 		defer close(fin)
@@ -363,6 +368,85 @@ func getRange(ctx context.Context, logger *zap.Logger, client *api.Client, hr st
 			Type:    "Block",
 			Payload: block,
 		}
+	}
+
+	return nil
+}*/
+
+func getRange(ctx context.Context, logger *zap.Logger, client *api.Client, hr structs.HeightRange, out chan cStructs.OutResp) error {
+	defer logger.Sync()
+
+	var blocksAllCount = hr.EndHeight - hr.StartHeight
+	blocksToBeDone := int(math.Ceil(float64(blocksAllCount) / 20.))
+
+	blocksCtrl := make(chan error, 2)
+	defer close(blocksCtrl)
+	blocksAll := &api.BlocksMap{Blocks: map[uint64]structs.Block{}}
+
+	for i := 0; i < blocksToBeDone; i++ {
+		bhr := structs.HeightRange{
+			StartHeight: hr.StartHeight + uint64(i*20),
+			EndHeight:   hr.StartHeight + uint64(i*20+19),
+		}
+		if bhr.EndHeight > hr.EndHeight {
+			bhr.EndHeight = hr.EndHeight
+		}
+
+		logger.Debug("[COSMOS-CLIENT] Getting blocks for ", zap.Uint64("end", bhr.EndHeight), zap.Uint64("start", bhr.StartHeight))
+		go client.GetBlocksMeta(ctx, bhr, blocksAll, blocksCtrl)
+	}
+
+	var responses int
+	var errors = []error{}
+	for err := range blocksCtrl {
+		responses++
+		if err != nil {
+			errors = append(errors, err)
+		}
+		if responses == blocksToBeDone {
+			break
+		}
+	}
+	if len(errors) > 0 {
+		errString := ""
+		for _, err := range errors {
+			errString += err.Error() + " , "
+		}
+		return fmt.Errorf("Errors Getting Blocks: - %s ", errString)
+	}
+
+	// send blocks after all the transaction were sent
+	for _, block := range blocksAll.Blocks {
+		out <- cStructs.OutResp{
+			Type:    "Block",
+			Payload: block,
+		}
+	}
+
+	if blocksAll.NumTxs > 0 {
+		fin := make(chan string, 2)
+		defer close(fin)
+		toBeDone := int(math.Ceil(float64(blocksAll.NumTxs) / float64(page)))
+
+		logger.Debug("[COSMOS-CLIENT] Getting initial data ", zap.Uint64("all", blocksAll.NumTxs), zap.Int64("page", page), zap.Int("toBeDone", toBeDone))
+		if toBeDone > 0 {
+			for i := 0; i < toBeDone; i++ {
+				//ic.logger.Error("[COSMOS-CLIENT] Getting initial data ", zap.Int("i", i))
+				go client.SearchTx(ctx, hr, blocksAll.Blocks, out, i+1, page, fin)
+			}
+		}
+
+		var responses int
+		for c := range fin {
+			responses++
+			if c != "" {
+				logger.Error("[COSMOS-CLIENT] Error processing Search ", zap.String("error", c))
+			}
+			if responses == toBeDone {
+				break
+			}
+		}
+
 	}
 
 	return nil
@@ -403,7 +487,6 @@ SEND_LOOP:
 			if err != nil {
 				logger.Error("[COSMOS-CLIENT] Error sending data", zap.Error(err))
 			}
-
 			sendResponseMetric.WithLabels(t.Type, "yes").Inc()
 		}
 	}

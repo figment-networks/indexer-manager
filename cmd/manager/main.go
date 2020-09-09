@@ -1,25 +1,20 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"crypto/tls"
 	"database/sql"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
-	"net"
 	"net/http"
 	"os"
 	"os/signal"
-	"sync"
 	"syscall"
 	"time"
 
 	"github.com/figment-networks/cosmos-indexer/manager/client"
 	"github.com/figment-networks/cosmos-indexer/manager/connectivity"
-	"github.com/figment-networks/cosmos-indexer/manager/connectivity/structs"
 	"github.com/figment-networks/cosmos-indexer/manager/store"
 	"github.com/figment-networks/cosmos-indexer/manager/store/postgres"
 	grpcTransport "github.com/figment-networks/cosmos-indexer/manager/transport/grpc"
@@ -106,7 +101,9 @@ func main() {
 	mux := http.NewServeMux()
 	hubbleHTTPTransport.AttachToHandler(mux)
 
-	attachConnectionManager(connManager, logger.GetLogger(), mux)
+	connManager.AttachToMux(mux)
+
+	attachHealthCheck(ctx, mux, db)
 
 	// (lukanus): only after passing param, conditionally enable scheduler
 	// this is for the scenario when manager is *the only* instance working.
@@ -176,75 +173,33 @@ func runHTTP(s *http.Server, address string, logger *zap.Logger, exit chan<- str
 	exit <- "http"
 }
 
-// PingInfo contract is defined here
-type PingInfo struct {
-	ID           string           `json:"id"`
-	Kind         string           `json:"kind"`
-	Connectivity ConnectivityInfo `json:"connectivity"`
-}
-type ConnectivityInfo struct {
-	Address string `json:"address"`
-	Version string `json:"version"`
-	Type    string `json:"type"`
-}
+func attachHealthCheck(ctx context.Context, mux *http.ServeMux, db *sql.DB) {
 
-func attachHealthCheck(mgr *connectivity.Manager, logger *zap.Logger, mux *http.ServeMux) {
-
-}
-
-func attachConnectionManager(mgr *connectivity.Manager, logger *zap.Logger, mux *http.ServeMux) {
-	b := &bytes.Buffer{}
-	block := &sync.Mutex{}
-	dec := json.NewDecoder(b)
-
-	mux.HandleFunc("/client_ping", func(w http.ResponseWriter, r *http.Request) {
-		pi := &PingInfo{}
-		block.Lock()
-		b.Reset()
-		_, err := b.ReadFrom(r.Body)
-		defer r.Body.Close()
-		if err != nil {
-			block.Unlock()
-			logger.Error("Error getting request body in /client_ping", zap.Error(err))
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-
-		err = dec.Decode(pi)
-		if err != nil {
-			block.Unlock()
-			logger.Error("Error decoding request body in /client_ping", zap.Error(err))
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-		block.Unlock()
-
-		receivedSyncMetric.WithLabels(pi.Kind, pi.Connectivity.Version, pi.Connectivity.Address)
-		ipTo := net.ParseIP(r.RemoteAddr)
-		fwd := r.Header.Get("X-FORWARDED-FOR")
-		if fwd != "" {
-			ipTo = net.ParseIP(fwd)
-		}
-		mgr.Register(pi.ID, pi.Kind, structs.WorkerConnection{
-			Version: pi.Connectivity.Version,
-			Type:    pi.Connectivity.Type,
-			Addresses: []structs.WorkerAddress{{
-				IP:      ipTo,
-				Address: pi.Connectivity.Address,
-			}},
-		})
+	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	mux.HandleFunc("/get_workers", func(w http.ResponseWriter, r *http.Request) {
-		m, err := json.Marshal(mgr.GetAllWorkers())
+	mux.HandleFunc("/readiness", func(w http.ResponseWriter, r *http.Request) {
+		tCtx, cancel := context.WithTimeout(ctx, time.Second*3)
+		defer cancel()
+
+		t := time.Now()
+		err := db.PingContext(tCtx)
+		dur := time.Since(t)
+		status := "ok"
+		strErr := "null"
 		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte(`{"error": "Error marshaling data"}`))
+			status = "ok"
+			strErr = `"` + err.Error() + `"`
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		w.Write(m)
-		return
+		fmt.Fprintf(w, `{"db": {"postgress": {"status": "%s" ,"time": "%s", "error": %s }}}`, status, dur.String(), strErr)
+
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+		} else {
+			w.WriteHeader(http.StatusOK)
+		}
+
 	})
 }

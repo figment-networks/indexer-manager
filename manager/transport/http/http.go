@@ -163,7 +163,7 @@ func (hc *HubbleConnector) GetTransactions(w http.ResponseWriter, req *http.Requ
 	if hash != "" {
 		hr.Hash = hash
 	}
-	transactions, err := hc.cli.GetTransactions(ctx, nv, hr)
+	transactions, err := hc.cli.GetTransactions(ctx, nv, hr, 1000, true)
 
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -266,25 +266,128 @@ func (hc *HubbleConnector) ScrapeLatest(w http.ResponseWriter, req *http.Request
 	w.WriteHeader(http.StatusOK)
 	enc := json.NewEncoder(w)
 	enc.Encode(ldResp)
+}
+
+type MissingTransactionsResponse struct {
+	MissingTransactions [][2]uint64 `json:"missing_transactions"`
+	MissingBlocks       [][2]uint64 `json:"missing_blocks"`
+}
+
+// CheckMissingTransactions is http handler for CheckMissingTransactions method
+func (hc *HubbleConnector) CheckMissingTransactions(w http.ResponseWriter, req *http.Request) {
+
+	strHeight := req.URL.Query().Get("start_height")
+	intHeight, _ := strconv.ParseUint(strHeight, 10, 64)
+
+	endHeight := req.URL.Query().Get("end_height")
+	intEndHeight, _ := strconv.ParseUint(endHeight, 10, 64)
+
+	if intHeight == 0 || intEndHeight == 0 {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("start_height and end_height query params are not set properly"))
+		return
+	}
+
+	var err error
+	mtr := MissingTransactionsResponse{}
+	nv := client.NetworkVersion{Network: "cosmos", Version: "0.0.1", ChainID: "cosmoshub-3"}
+	mtr.MissingBlocks, mtr.MissingTransactions, err = hc.cli.CheckMissingTransactions(req.Context(), nv, shared.HeightRange{StartHeight: intHeight, EndHeight: intEndHeight}, 1000)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	}
+
+	w.Header().Add("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	enc := json.NewEncoder(w)
+	enc.Encode(mtr)
+}
+
+func (hc *HubbleConnector) GetRunningTransactions(w http.ResponseWriter, req *http.Request) {
+
+	run, err := hc.cli.GetRunningTransactions(req.Context())
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	}
+
+	enc := json.NewEncoder(w)
+
+	w.Header().Add("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	enc.Encode(run)
+}
+
+// GetMissingTransactions is http handler for GetMissingTransactions method
+func (hc *HubbleConnector) GetMissingTransactions(w http.ResponseWriter, req *http.Request) {
+
+	nv := client.NetworkVersion{Network: "cosmos", Version: "0.0.1", ChainID: "cosmoshub-3"}
+
+	strHeight := req.URL.Query().Get("start_height")
+	intHeight, _ := strconv.ParseUint(strHeight, 10, 64)
+
+	endHeight := req.URL.Query().Get("end_height")
+	intEndHeight, _ := strconv.ParseUint(endHeight, 10, 64)
+
+	async := req.URL.Query().Get("async")
+
+	force := (req.URL.Query().Get("force") != "")
+
+	if intHeight == 0 || intEndHeight == 0 {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("start_height and end_height query params are not set properly"))
+		return
+	}
+
+	if async == "" {
+		_, err := hc.cli.GetMissingTransactions(req.Context(), nv,
+			shared.HeightRange{StartHeight: intHeight, EndHeight: intEndHeight}, 1000, false, force)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(err.Error()))
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	run, err := hc.cli.GetMissingTransactions(req.Context(), nv,
+		shared.HeightRange{StartHeight: intHeight, EndHeight: intEndHeight}, 1000, true, force)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	}
+
+	enc := json.NewEncoder(w)
+	w.Header().Add("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	enc.Encode(run)
 
 }
 
 // AttachToHandler attaches handlers to http server's mux
 func (hc *HubbleConnector) AttachToHandler(mux *http.ServeMux) {
-	mux.HandleFunc("/height", hc.GetCurrentHeight)
-	mux.HandleFunc("/block", hc.GetCurrentBlock)
-	mux.HandleFunc("/blocks", hc.GetBlocks)
-	mux.HandleFunc("/blocks/:id", hc.GetBlock)
-	mux.HandleFunc("/block_times", hc.GetBlockTimes)
-	mux.HandleFunc("/block_times_interval", hc.GetBlockTimesInterval)
+	//	mux.HandleFunc("/height", hc.GetCurrentHeight)
+	//	mux.HandleFunc("/block", hc.GetCurrentBlock)
+	//	mux.HandleFunc("/blocks", hc.GetBlocks)
+	//	mux.HandleFunc("/blocks/:id", hc.GetBlock)
+	//	mux.HandleFunc("/block_times", hc.GetBlockTimes)
+	//	mux.HandleFunc("/block_times_interval", hc.GetBlockTimesInterval)
+	//	mux.HandleFunc("/accounts", hc.GetAccounts)
+	//	mux.HandleFunc("/accounts/", hc.GetAccount)
+
 	mux.HandleFunc("/transactions", hc.GetTransactions)
 	mux.HandleFunc("/transactions/", hc.GetTransaction)
 	mux.HandleFunc("/transactions_search", hc.SearchTransactions)
-	mux.HandleFunc("/accounts", hc.GetAccounts)
-	mux.HandleFunc("/accounts/", hc.GetAccount)
 
 	mux.HandleFunc("/transactions_insert/", hc.InsertTransactions)
-
 	mux.HandleFunc("/scrape_latest", hc.ScrapeLatest)
+
+	mux.HandleFunc("/check_missing", hc.CheckMissingTransactions)
+	mux.HandleFunc("/get_missing", hc.GetMissingTransactions)
+	mux.HandleFunc("/get_running", hc.GetRunningTransactions)
 
 }

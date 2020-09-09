@@ -37,7 +37,8 @@ type BlockStore interface {
 
 	GetLatestBlock(ctx context.Context, blx structs.BlockExtra) (structs.Block, error)
 
-	BlockContinuityCheck(ctx context.Context, blx structs.BlockExtra, startHeight uint64) ([][2]uint64, error)
+	BlockContinuityCheck(ctx context.Context, blx structs.BlockExtra, startHeight, endHeight uint64) ([][2]uint64, error)
+	BlockTransactionCheck(ctx context.Context, blx structs.BlockExtra, startHeight, endHeight uint64) ([]uint64, error)
 }
 
 type Store struct {
@@ -85,6 +86,10 @@ func (s *Store) GetLatestBlock(ctx context.Context, blx structs.BlockExtra) (str
 	return s.driver.GetLatestBlock(ctx, blx)
 }
 
-func (s *Store) BlockContinuityCheck(ctx context.Context, blx structs.BlockExtra, startHeight uint64) ([][2]uint64, error) {
-	return s.driver.BlockContinuityCheck(ctx, blx, startHeight)
+func (s *Store) BlockContinuityCheck(ctx context.Context, blx structs.BlockExtra, startHeight, endHeight uint64) ([][2]uint64, error) {
+	return s.driver.BlockContinuityCheck(ctx, blx, startHeight, endHeight)
+}
+
+func (s *Store) BlockTransactionCheck(ctx context.Context, blx structs.BlockExtra, startHeight, endHeight uint64) ([]uint64, error) {
+	return s.driver.BlockTransactionCheck(ctx, blx, startHeight, endHeight)
 }

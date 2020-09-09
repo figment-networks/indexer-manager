@@ -10,7 +10,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/figment-networks/cosmos-indexer/structs"
@@ -32,6 +31,7 @@ type TxLogError struct {
 
 var curencyRegex = regexp.MustCompile("([0-9\\.\\,\\-\\s]+)([^0-9\\s]+)$")
 
+/*
 // SearchTx is making search api call
 func (c *Client) SearchTx(ctx context.Context, wg *sync.WaitGroup, r structs.HeightRange, blocks map[uint64]shared.Block, out chan cStruct.OutResp, page, perPage int, fin chan string) (count int64, err error) {
 	if wg != nil {
@@ -143,10 +143,119 @@ func (c *Client) SearchTx(ctx context.Context, wg *sync.WaitGroup, r structs.Hei
 	err = rawToTransaction(ctx, c, result.Result.Txs, blocks, out, c.logger, c.cdc)
 	if err != nil {
 		c.logger.Error("[COSMOS-API] Error getting rawToTransaction", zap.Error(err))
-
+		if fin != nil {
+			fin <- err.Error()
+		}
 	}
 	c.logger.Debug("[COSMOS-API] Converted all requests ")
+
+	if fin != nil {
+		fin <- ""
+	}
 	return totalCount, nil
+}
+*/
+
+// SearchTx is making search api call
+func (c *Client) SearchTx(ctx context.Context, r structs.HeightRange, blocks map[uint64]shared.Block, out chan cStruct.OutResp, page, perPage int, fin chan string) {
+	defer c.logger.Sync()
+
+	req, err := http.NewRequest(http.MethodGet, c.baseURL+"/tx_search", nil)
+	if err != nil {
+		fin <- err.Error()
+		return
+	}
+
+	req.Header.Add("Content-Type", "application/json")
+	if c.key != "" {
+		req.Header.Add("Authorization", c.key)
+	}
+
+	q := req.URL.Query()
+
+	s := strings.Builder{}
+
+	s.WriteString(`"`)
+	s.WriteString("tx.height>= ")
+	s.WriteString(strconv.FormatUint(r.StartHeight, 10))
+
+	if r.EndHeight > 0 && r.EndHeight != r.StartHeight {
+		s.WriteString(" AND ")
+		s.WriteString("tx.height<=")
+		s.WriteString(strconv.FormatUint(r.EndHeight, 10))
+	}
+	s.WriteString(`"`)
+
+	q.Add("query", s.String())
+	q.Add("page", strconv.Itoa(page))
+	q.Add("per_page", strconv.Itoa(perPage))
+	req.URL.RawQuery = q.Encode()
+
+	// (lukanus): do not block initial calls
+	if r.EndHeight != 0 && r.StartHeight != 0 {
+		err = c.rateLimitter.Wait(ctx)
+		if err != nil {
+			fin <- err.Error()
+			return
+		}
+	}
+
+	now := time.Now()
+	resp, err := c.httpClient.Do(req)
+
+	log.Debug("[COSMOS-API] Request Time (/tx_search)", zap.Duration("duration", time.Now().Sub(now)))
+	if err != nil {
+		fin <- err.Error()
+		return
+	}
+
+	if resp.StatusCode > 399 { // ERROR
+		serverError, _ := ioutil.ReadAll(resp.Body)
+
+		c.logger.Error("[COSMOS-API] error getting response from server", zap.Int("code", resp.StatusCode), zap.Any("response", string(serverError)))
+		err := fmt.Errorf("error getting response from server %d %s", resp.StatusCode, string(serverError))
+		fin <- err.Error()
+		return
+	}
+
+	rawRequestDuration.WithLabels("/tx_search", resp.Status).Observe(time.Since(now).Seconds())
+
+	decoder := json.NewDecoder(resp.Body)
+
+	result := &GetTxSearchResponse{}
+	if err = decoder.Decode(result); err != nil {
+		c.logger.Error("[COSMOS-API] unable to decode result body", zap.Error(err))
+		err := fmt.Errorf("unable to decode result body %w", err)
+		fin <- err.Error()
+		return
+	}
+
+	if result.Error.Message != "" {
+		c.logger.Error("[COSMOS-API] Error getting search", zap.Any("result", result.Error.Message))
+		err := fmt.Errorf("Error getting search: %s", result.Error.Message)
+		fin <- err.Error()
+		return
+	}
+
+	totalCount, err := strconv.ParseInt(result.Result.TotalCount, 10, 64)
+	if err != nil {
+		c.logger.Error("[COSMOS-API] Error getting totalCount", zap.Error(err), zap.Any("result", result), zap.String("query", req.URL.RawQuery), zap.Any("request", r))
+		fin <- err.Error()
+		return
+	}
+
+	numberOfItemsTransactions.Observe(float64(totalCount))
+
+	c.logger.Debug("[COSMOS-API] Converting requests ", zap.Int("number", len(result.Result.Txs)), zap.Int("blocks", len(blocks)))
+	err = rawToTransaction(ctx, c, result.Result.Txs, blocks, out, c.logger, c.cdc)
+	if err != nil {
+		c.logger.Error("[COSMOS-API] Error getting rawToTransaction", zap.Error(err))
+		fin <- err.Error()
+	}
+	c.logger.Debug("[COSMOS-API] Converted all requests ")
+
+	fin <- ""
+	return
 }
 
 func rawToTransaction(ctx context.Context, c *Client, in []TxResponse, blocks map[uint64]shared.Block, out chan cStruct.OutResp, logger *zap.Logger, cdc *codec.Codec) error {

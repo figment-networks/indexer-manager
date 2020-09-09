@@ -44,6 +44,7 @@ type LatestDataResponse struct {
 
 type TransactionExtra struct {
 	Network     string      `json:"network,omitempty"`
+	Version     string      `json:"version,omitempty"`
 	ChainID     string      `json:"chain_id,omitempty"`
 	Transaction Transaction `json:"transaction,omitempty"`
 }
@@ -127,7 +128,7 @@ type SubsetEventError struct {
 type BlockExtra struct {
 	Network string `json:"network,omitempty"`
 	ChainID string `json:"chain_id,omitempty"`
-	Version string `json:"version"`
+	Version string `json:"version,omitempty"`
 	Block   Block  `json:"block,omitempty"`
 }
 

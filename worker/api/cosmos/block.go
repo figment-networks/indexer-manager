@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/figment-networks/cosmos-indexer/structs"
@@ -15,6 +16,12 @@ import (
 type GetBlockParams struct {
 	Height uint64
 	Hash   string
+}
+
+type BlocksMap struct {
+	sync.Mutex
+	Blocks map[uint64]structs.Block
+	NumTxs uint64
 }
 
 // GetBlock fetches most recent block from chain
@@ -71,7 +78,7 @@ func (c Client) GetBlock(ctx context.Context, params structs.HeightHash) (block 
 	}
 	bTime, err := time.Parse(time.RFC3339Nano, result.Result.Block.Header.Time)
 	uHeight, err := strconv.ParseUint(result.Result.Block.Header.Height, 10, 64)
-	numTxs, _ := strconv.ParseUint(result.Result.BlockMeta.NumTxs, 10, 64)
+	numTxs, _ := strconv.ParseUint(result.Result.Block.Header.NumTxs, 10, 64)
 
 	block = structs.Block{
 		Hash:                 result.Result.BlockMeta.BlockID.Hash,
@@ -157,7 +164,7 @@ func (c Client) GetBlockAsync(ctx context.Context, in chan uint64, out chan<- Bl
 
 		bTime, err := time.Parse(time.RFC3339Nano, result.Result.Block.Header.Time)
 		uHeight, err := strconv.ParseUint(result.Result.Block.Header.Height, 10, 64)
-		numTxs, _ := strconv.ParseUint(result.Result.BlockMeta.NumTxs, 10, 64)
+		numTxs, _ := strconv.ParseUint(result.Result.Block.Header.NumTxs, 10, 64)
 
 		out <- BlockErrorPair{
 			Height: uHeight,
@@ -173,10 +180,11 @@ func (c Client) GetBlockAsync(ctx context.Context, in chan uint64, out chan<- Bl
 }
 
 // GetBlocksMeta fetches block metadata from given range of blocks
-func (c Client) GetBlocksMeta(ctx context.Context, params structs.HeightRange) (blocks map[uint64]structs.Block, er error) {
+func (c Client) GetBlocksMeta(ctx context.Context, params structs.HeightRange, blocks *BlocksMap, end chan<- error) {
 	req, err := http.NewRequest(http.MethodGet, c.baseURL+"/blockchain", nil)
 	if err != nil {
-		return nil, err
+		end <- err
+		return
 	}
 
 	req.Header.Add("Content-Type", "application/json")
@@ -196,13 +204,15 @@ func (c Client) GetBlocksMeta(ctx context.Context, params structs.HeightRange) (
 
 	err = c.rateLimitter.Wait(ctx)
 	if err != nil {
-		return nil, err
+		end <- err
+		return
 	}
 
 	n := time.Now()
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, err
+		end <- err
+		return
 	}
 	rawRequestDuration.WithLabels("/blockchain", resp.Status).Observe(time.Since(n).Seconds())
 	defer resp.Body.Close()
@@ -211,19 +221,21 @@ func (c Client) GetBlocksMeta(ctx context.Context, params structs.HeightRange) (
 
 	var result *GetBlockchainResponse
 	if err = decoder.Decode(&result); err != nil {
-		return nil, err
+		end <- err
+		return
 	}
 
 	if result.Error.Message != "" {
-		return nil, fmt.Errorf("error fetching block: %s ", result.Error.Message)
+		end <- fmt.Errorf("error fetching block: %s ", result.Error.Message)
+		return
 	}
 
-	blocks = map[uint64]structs.Block{}
+	blocks.Lock()
 	for _, meta := range result.Result.BlockMetas {
 
 		bTime, _ := time.Parse(time.RFC3339Nano, meta.Header.Time)
 		uHeight, _ := strconv.ParseUint(meta.Header.Height, 10, 64)
-		numTxs, _ := strconv.ParseUint(meta.NumTxs, 10, 64)
+		numTxs, _ := strconv.ParseUint(meta.Header.NumTxs, 10, 64)
 
 		block := structs.Block{
 			Hash:                 meta.BlockID.Hash,
@@ -232,10 +244,11 @@ func (c Client) GetBlocksMeta(ctx context.Context, params structs.HeightRange) (
 			Time:                 bTime,
 			NumberOfTransactions: numTxs,
 		}
-		blocks[block.Height] = block
-
-		c.Sbc.Add(block)
+		blocks.NumTxs += numTxs
+		blocks.Blocks[block.Height] = block
 	}
+	blocks.Unlock()
 
-	return blocks, nil
+	end <- nil
+	return
 }
