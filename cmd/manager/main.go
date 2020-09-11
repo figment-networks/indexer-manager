@@ -104,6 +104,7 @@ func main() {
 	connManager.AttachToMux(mux)
 
 	attachHealthCheck(ctx, mux, db)
+	attachProfiling(mux)
 
 	// (lukanus): only after passing param, conditionally enable scheduler
 	// this is for the scenario when manager is *the only* instance working.
@@ -189,7 +190,7 @@ func attachHealthCheck(ctx context.Context, mux *http.ServeMux, db *sql.DB) {
 		status := "ok"
 		strErr := "null"
 		if err != nil {
-			status = "ok"
+			status = "err"
 			strErr = `"` + err.Error() + `"`
 		}
 

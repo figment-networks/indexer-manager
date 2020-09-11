@@ -99,9 +99,9 @@ func (ic *IndexerClient) Run(ctx context.Context, client *api.Client, stream *cS
 			receivedRequestsMetric.WithLabels(taskRequest.Type).Inc()
 			nCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 			switch taskRequest.Type {
-			case "GetTransactions":
+			case structs.ReqIDGetTransactions:
 				ic.GetTransactions(nCtx, taskRequest, stream, client)
-			case "GetLatest":
+			case structs.ReqIDLatestData:
 				ic.GetLatest(nCtx, taskRequest, stream, client)
 			default:
 				stream.Send(cStructs.TaskResponse{
@@ -151,6 +151,9 @@ func (ic *IndexerClient) GetTransactions(ctx context.Context, tr cStructs.TaskRe
 
 	diff := hr.EndHeight - hr.StartHeight
 	bigPages := uint64(math.Ceil(float64(diff) / float64(ic.bigPage)))
+	if diff == 0 {
+		bigPages = 1
+	}
 
 	for i := uint64(0); i < bigPages; i++ {
 		hrInner := structs.HeightRange{
@@ -269,16 +272,18 @@ func (ic *IndexerClient) GetLatest(ctx context.Context, tr cStructs.TaskRequest,
 
 	diff := block.Height - startingHeight
 	bigPages := uint64(math.Ceil(float64(diff) / float64(ic.bigPage)))
+	if diff == 0 {
+		bigPages = 1
+	}
 
 	out := make(chan cStructs.OutResp, page)
-
 	fin := make(chan bool, 2)
 
 	go sendResp(sCtx, tr.Id, out, ic.logger, stream, fin)
 	for i := uint64(0); i < bigPages; i++ {
 		hr := structs.HeightRange{
 			StartHeight: startingHeight + i*ic.bigPage,
-			EndHeight:   startingHeight + i*ic.bigPage + (ic.bigPage - 1),
+			EndHeight:   startingHeight + i*ic.bigPage + ic.bigPage,
 		}
 		if hr.EndHeight > block.Height {
 			hr.EndHeight = block.Height
@@ -312,9 +317,11 @@ func (ic *IndexerClient) GetLatest(ctx context.Context, tr cStructs.TaskRequest,
 func getRange(ctx context.Context, logger *zap.Logger, client *api.Client, hr structs.HeightRange, out chan cStructs.OutResp) error {
 	defer logger.Sync()
 
-	var blocksAllCount = hr.EndHeight - hr.StartHeight
+	blocksAllCount := hr.EndHeight - hr.StartHeight
 	blocksToBeDone := int(math.Ceil(float64(blocksAllCount) / 20.))
-
+	if blocksAllCount == 0 {
+		blocksToBeDone = 1
+	}
 	blocksCtrl := make(chan error, 2)
 	defer close(blocksCtrl)
 	blocksAll := &api.BlocksMap{Blocks: map[uint64]structs.Block{}}
@@ -322,7 +329,7 @@ func getRange(ctx context.Context, logger *zap.Logger, client *api.Client, hr st
 	for i := 0; i < blocksToBeDone; i++ {
 		bhr := structs.HeightRange{
 			StartHeight: hr.StartHeight + uint64(i*20),
-			EndHeight:   hr.StartHeight + uint64(i*20+19),
+			EndHeight:   hr.StartHeight + uint64(i*20) + uint64(20),
 		}
 		if bhr.EndHeight > hr.EndHeight {
 			bhr.EndHeight = hr.EndHeight

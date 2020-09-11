@@ -117,7 +117,7 @@ func (hc *Client) GetTransactions(ctx context.Context, nv NetworkVersion, height
 		req = append(req, structs.TaskRequest{
 			Network: nv.Network,
 			Version: nv.Version,
-			Type:    "GetTransactions",
+			Type:    shared.ReqIDGetTransactions,
 			Payload: b,
 		})
 	} else {
@@ -137,7 +137,7 @@ func (hc *Client) GetTransactions(ctx context.Context, nv NetworkVersion, height
 			req = append(req, structs.TaskRequest{
 				Network: nv.Network,
 				Version: nv.Version,
-				Type:    "GetTransactions",
+				Type:    shared.ReqIDGetTransactions,
 				Payload: b,
 			})
 		} else {
@@ -162,7 +162,7 @@ func (hc *Client) GetTransactions(ctx context.Context, nv NetworkVersion, height
 				req = append(req, structs.TaskRequest{
 					Network: nv.Network,
 					Version: nv.Version,
-					Type:    "GetTransactions",
+					Type:    shared.ReqIDGetTransactions,
 					Payload: b,
 				})
 			}
@@ -236,19 +236,21 @@ func (hc *Client) SearchTransactions(ctx context.Context, nv NetworkVersion, ts 
 	defer timer.ObserveDuration()
 
 	return hc.storeEng.GetTransactions(ctx, params.TransactionSearch{
-		Network:   nv.Network,
-		ChainID:   nv.ChainID,
-		Height:    ts.Height,
-		Type:      ts.Type,
-		BlockHash: ts.BlockHash,
-		Account:   ts.Account,
-		Sender:    ts.Sender,
-		Receiver:  ts.Receiver,
-		Memo:      ts.Memo,
-		StartTime: ts.StartTime,
-		EndTime:   ts.EndTime,
-		Limit:     ts.Limit,
-		Offset:    ts.Offset,
+		Network:      nv.Network,
+		ChainID:      nv.ChainID,
+		Height:       ts.Height,
+		Type:         ts.Type,
+		BlockHash:    ts.BlockHash,
+		Account:      ts.Account,
+		Sender:       ts.Sender,
+		Receiver:     ts.Receiver,
+		Memo:         ts.Memo,
+		StartTime:    ts.StartTime,
+		EndTime:      ts.EndTime,
+		AfterHeight:  ts.AfterHeight,
+		BeforeHeight: ts.BeforeHeight,
+		Limit:        ts.Limit,
+		Offset:       ts.Offset,
 	})
 }
 
@@ -274,7 +276,7 @@ func (hc *Client) InsertTransactions(ctx context.Context, nv NetworkVersion, rea
 		}
 
 		err = hc.storeEng.StoreTransaction(
-			shared.TransactionExtra{
+			shared.TransactionWithMeta{
 				Network:     nv.Network,
 				ChainID:     nv.Version,
 				Transaction: req,
@@ -302,7 +304,7 @@ func (hc *Client) ScrapeLatest(ctx context.Context, ldr shared.LatestDataRequest
 
 	// (lukanus): self consistency check (optional), so we don;t care about an error
 	if ldr.SelfCheck {
-		lastBlock, err := hc.storeEng.GetLatestBlock(ctx, shared.BlockExtra{ChainID: ldr.Version, Network: ldr.Network})
+		lastBlock, err := hc.storeEng.GetLatestBlock(ctx, shared.BlockWithMeta{ChainID: ldr.Version, Network: ldr.Network})
 		if err == nil {
 			if lastBlock.Hash != "" {
 				ldr.LastHash = lastBlock.Hash
@@ -381,7 +383,7 @@ WAIT_FOR_ALL_DATA:
 		}
 	}
 
-	missing, err := hc.storeEng.BlockContinuityCheck(ctx, shared.BlockExtra{ChainID: ldr.Version, Network: ldr.Network}, ldr.LastHeight, 0)
+	missing, err := hc.storeEng.BlockContinuityCheck(ctx, shared.BlockWithMeta{ChainID: ldr.Version, Network: ldr.Network}, ldr.LastHeight, 0)
 	if err != nil {
 		return ldResp, err
 	}
@@ -401,14 +403,14 @@ func (hc *Client) storeTransaction(dec *json.Decoder, network string, version st
 	}
 
 	err = hc.storeEng.StoreTransaction(
-		shared.TransactionExtra{
+		shared.TransactionWithMeta{
 			Network:     network,
 			Version:     version,
 			Transaction: *m,
 		})
 
 	if err != nil {
-		return fmt.Errorf("error storing transaction: %w", err)
+		return fmt.Errorf("error storing transaction: %w %+v", err, m)
 	}
 	return nil
 }
@@ -420,7 +422,7 @@ func (hc *Client) storeBlock(dec *json.Decoder, network string, version string, 
 	}
 
 	err := hc.storeEng.StoreBlock(
-		shared.BlockExtra{
+		shared.BlockWithMeta{
 			Network: network,
 			Version: version,
 			ChainID: m.ChainID,
@@ -438,7 +440,7 @@ func (hc *Client) CheckMissingTransactions(ctx context.Context, nv NetworkVersio
 	timer := metrics.NewTimer(callDurationCheckMissing)
 	defer timer.ObserveDuration()
 
-	blockContinuity, err := hc.storeEng.BlockContinuityCheck(ctx, shared.BlockExtra{Version: nv.Version, Network: nv.Network, ChainID: nv.ChainID}, heightRange.StartHeight, heightRange.EndHeight)
+	blockContinuity, err := hc.storeEng.BlockContinuityCheck(ctx, shared.BlockWithMeta{Version: nv.Version, Network: nv.Network, ChainID: nv.ChainID}, heightRange.StartHeight, heightRange.EndHeight)
 	if err != nil && err != params.ErrNotFound {
 		return nil, nil, err
 	}
@@ -447,7 +449,7 @@ func (hc *Client) CheckMissingTransactions(ctx context.Context, nv NetworkVersio
 		missingBlocks = groupRanges(blockContinuity, window)
 	}
 
-	clockTransactionCheck, err := hc.storeEng.BlockTransactionCheck(ctx, shared.BlockExtra{Version: nv.Version, Network: nv.Network, ChainID: nv.ChainID}, heightRange.StartHeight, heightRange.EndHeight)
+	clockTransactionCheck, err := hc.storeEng.BlockTransactionCheck(ctx, shared.BlockWithMeta{Version: nv.Version, Network: nv.Network, ChainID: nv.ChainID}, heightRange.StartHeight, heightRange.EndHeight)
 	if err != nil && err != params.ErrNotFound {
 		return nil, nil, err
 	}
@@ -496,72 +498,73 @@ func (hc *Client) getMissingTransactions(ctx context.Context, nv NetworkVersion,
 	timer := metrics.NewTimer(callDurationGetMissing)
 	defer timer.ObserveDuration()
 
-	count := heightRange.EndHeight - heightRange.StartHeight
-	countRounded := math.Ceil(float64(count) / 1000)
-
-	for i := 0; i < int(countRounded); i++ {
-
-		hr := shared.HeightRange{
-			StartHeight: heightRange.StartHeight + uint64(i)*1000,
-			EndHeight:   heightRange.StartHeight + uint64(i)*1000 + 999,
+	hc.logger.Info("[Client] GetMissingTransactions CheckMissingTransactions", zap.Any("range", heightRange), zap.Any("network", nv))
+	now := time.Now()
+	missingBlocks, missingTransactions, err := hc.CheckMissingTransactions(ctx, nv, heightRange, 1000)
+	if err != nil {
+		if progress != nil {
+			progress.Report(shared.HeightRange{}, time.Since(now), []error{err}, true)
 		}
+		hc.logger.Error("[Client] GetMissingTransactions CheckMissingTransactions error", zap.Error(err), zap.Any("range", heightRange), zap.Any("network", nv))
+		return fmt.Errorf("Error checking missing transactions:  %w ", err)
+	}
 
-		if hr.EndHeight > heightRange.EndHeight {
-			hr.EndHeight = heightRange.EndHeight
-		}
+	for _, blocks := range missingBlocks {
 
-		missingBlocks, missingTransactions, err := hc.CheckMissingTransactions(ctx, nv, hr, 1000)
+		// (lukanus): has to be blocking op
+		missingRange := shared.HeightRange{StartHeight: blocks[0], EndHeight: blocks[1]}
+		now := time.Now()
+
+		hc.logger.Info("[Client] GetMissingTransactions missingBlocks GetTransactions", zap.Any("range", missingRange), zap.Any("network", nv))
+		_, err := hc.GetTransactions(ctx, nv, missingRange, 1000, true)
 		if err != nil {
 			if progress != nil {
-				progress.Report(shared.HeightRange{}, 0, []error{err}, true)
+				progress.Report(missingRange, time.Since(now), []error{err}, true)
 			}
-			return fmt.Errorf("Error checking missing transactions:  %w ", err)
+			hc.logger.Error("[Client] GetMissingTransactions missingBlocks GetTransactions error", zap.Error(err), zap.Any("range", missingRange), zap.Any("network", nv))
+			return fmt.Errorf("error getting missing transactions from missing blocks:  %w ", err)
 		}
-
-		if len(missingBlocks) > 0 {
-			for _, blocks := range missingBlocks {
-				// (lukanus): has to be blocking op
-				missingRange := shared.HeightRange{StartHeight: blocks[0], EndHeight: blocks[1]}
-				now := time.Now()
-				_, err := hc.GetTransactions(ctx, nv, missingRange, 1000, true)
-				if err != nil {
-					if progress != nil {
-						progress.Report(missingRange, time.Since(now), []error{err}, true)
-					}
-					return fmt.Errorf("error getting missing transactions from missing blocks:  %w ", err)
-				}
-				if progress != nil {
-					progress.Report(missingRange, time.Since(now), nil, false)
-				}
-			}
-
-			missingBlocks, missingTransactions, err = hc.CheckMissingTransactions(ctx, nv, hr, 1000)
-			if err != nil {
-				if progress != nil {
-					progress.Report(shared.HeightRange{}, 0, []error{err}, true)
-				}
-				return fmt.Errorf("error checking missing transactions (rerun):  %w ", err)
-			}
-
-		}
-
-		for _, transactions := range missingTransactions {
-			// (lukanus): has to be blocking op
-
-			missingRange := shared.HeightRange{StartHeight: transactions[0], EndHeight: transactions[1]}
-			now := time.Now()
-			_, err := hc.GetTransactions(ctx, nv, shared.HeightRange{StartHeight: transactions[0], EndHeight: transactions[1]}, 1000, true)
-			if err != nil {
-				if progress != nil {
-					progress.Report(missingRange, time.Since(now), []error{err}, true)
-				}
-				return fmt.Errorf("error getting missing transactions:  %w ", err)
-			}
-			if progress != nil {
-				progress.Report(missingRange, time.Since(now), nil, false)
-			}
+		if progress != nil {
+			hc.logger.Info("[Client] GetMissingTransactions missingBlocks GetTransactions Success", zap.Any("range", missingRange), zap.Any("network", nv))
+			progress.Report(missingRange, time.Since(now), nil, false)
 		}
 	}
+
+	if len(missingBlocks) > 0 {
+		hc.logger.Info("[Client] GetMissingTransactions CheckMissingTransactions #2", zap.Any("range", heightRange), zap.Any("network", nv))
+		now = time.Now()
+		missingBlocks, missingTransactions, err = hc.CheckMissingTransactions(ctx, nv, heightRange, 1000)
+		if err != nil {
+			if progress != nil {
+				progress.Report(shared.HeightRange{}, time.Since(now), []error{err}, true)
+			}
+			hc.logger.Error("[Client] GetMissingTransactions CheckMissingTransactions error #2", zap.Error(err), zap.Any("range", heightRange), zap.Any("network", nv))
+			return fmt.Errorf("error checking missing transactions (rerun):  %w ", err)
+		}
+	}
+
+	for _, transactions := range missingTransactions {
+		// (lukanus): has to be blocking op
+
+		missingRange := shared.HeightRange{StartHeight: transactions[0], EndHeight: transactions[1]}
+
+		hc.logger.Info("[Client] GetMissingTransactions missingTransactions GetTransactions", zap.Any("range", missingRange), zap.Any("network", nv))
+		now := time.Now()
+		_, err := hc.GetTransactions(ctx, nv, shared.HeightRange{StartHeight: transactions[0], EndHeight: transactions[1]}, 1000, true)
+		if err != nil {
+			if progress != nil {
+				progress.Report(missingRange, time.Since(now), []error{err}, true)
+			}
+			hc.logger.Error("[Client] GetMissingTransactions missingTransactions GetTransactions error", zap.Error(err), zap.Any("range", missingRange), zap.Any("network", nv))
+			return fmt.Errorf("error getting missing transactions:  %w ", err)
+		}
+
+		if progress != nil {
+			hc.logger.Info("[Client] GetMissingTransactions missingTransactions GetTransactions success", zap.Any("range", missingRange), zap.Any("network", nv))
+			progress.Report(missingRange, time.Since(now), nil, false)
+		}
+	}
+
 	if progress != nil {
 		progress.Report(shared.HeightRange{}, 0, nil, true)
 	}

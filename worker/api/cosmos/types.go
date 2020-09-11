@@ -137,7 +137,6 @@ type kvHolder struct {
 }
 
 func (lea *LogEventsAttributes) UnmarshalJSON(b []byte) error {
-	lea.Others = make(map[string][]string)
 
 	dec := json.NewDecoder(bytes.NewReader(b))
 	kc := &kvHolder{}
@@ -149,26 +148,24 @@ func (lea *LogEventsAttributes) UnmarshalJSON(b []byte) error {
 		switch kc.Key {
 		case "validator", "destination_validator", "source_validator":
 			if lea.Validator == nil {
-				lea.Validator = make(map[string][]string)
+				lea.Validator = map[string][]string{}
 			}
 			v, ok := lea.Validator[kc.Key]
 			if !ok {
 				v = []string{}
 			}
-			v = append(v, kc.Value)
-			lea.Validator[kc.Key] = v
+			lea.Validator[kc.Key] = append(v, kc.Value)
 
 		case "withdraw_address":
 			if lea.Withdraw == nil {
-				lea.Withdraw = make(map[string][]string)
+				lea.Withdraw = map[string][]string{}
 			}
 			// for now it's only address
 			v, ok := lea.Withdraw["address"]
 			if !ok {
 				v = []string{}
 			}
-			v = append(v, kc.Value)
-			lea.Withdraw[kc.Key] = v
+			lea.Withdraw[kc.Key] = append(v, kc.Value)
 		case "sender":
 			lea.Sender = append(lea.Sender, kc.Value)
 		case "recipient":
@@ -182,12 +179,15 @@ func (lea *LogEventsAttributes) UnmarshalJSON(b []byte) error {
 		case "amount":
 			lea.Amount = kc.Value
 		default:
+			if lea.Others == nil {
+				lea.Others = map[string][]string{}
+			}
+
 			k, ok := lea.Others[kc.Key]
 			if !ok {
 				k = []string{}
 			}
-			k = append(k, kc.Value)
-			lea.Others[kc.Key] = k
+			lea.Others[kc.Key] = append(k, kc.Value)
 		}
 	}
 	return nil

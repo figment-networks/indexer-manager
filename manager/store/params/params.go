@@ -23,8 +23,8 @@ type TransactionSearch struct {
 	StartTime time.Time `json:"start_time"`
 	EndTime   time.Time `json:"end_time"`
 
-	AfterHeight  uint64 `form:"after_height"`
-	BeforeHeight uint64 `form:"before_height"`
+	AfterHeight  uint64 `json:"after_height"`
+	BeforeHeight uint64 `json:"before_height"`
 	Limit        uint64 `json:"limit"`
 	Offset       uint64 `json:"offset"`
 }

@@ -97,9 +97,14 @@ func main() {
 	worker := grpcIndexer.NewIndexerServer(workerClient, logger.GetLogger())
 	grpcProtoIndexer.RegisterIndexerServiceServer(grpcServer, worker)
 
+	mux := http.NewServeMux()
+	attachProfiling(mux)
+
+	mux.Handle("/metrics", metrics.Handler())
+
 	s := &http.Server{
 		Addr:         "0.0.0.0:" + cfg.HTTPPort,
-		Handler:      metrics.Handler(),
+		Handler:      mux,
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 10 * time.Second,
 	}

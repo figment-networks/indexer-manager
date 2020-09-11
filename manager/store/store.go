@@ -24,21 +24,21 @@ type FlushBuffered interface {
 }
 
 type TransactionStore interface {
-	StoreTransaction(structs.TransactionExtra) error
-	StoreTransactions([]structs.TransactionExtra) error
+	StoreTransaction(structs.TransactionWithMeta) error
+	StoreTransactions([]structs.TransactionWithMeta) error
 
 	GetTransactions(ctx context.Context, tsearch params.TransactionSearch) ([]structs.Transaction, error)
 
-	GetLatestTransaction(ctx context.Context, tx structs.TransactionExtra) (structs.Transaction, error)
+	GetLatestTransaction(ctx context.Context, tx structs.TransactionWithMeta) (structs.Transaction, error)
 }
 
 type BlockStore interface {
-	StoreBlock(structs.BlockExtra) error
+	StoreBlock(structs.BlockWithMeta) error
 
-	GetLatestBlock(ctx context.Context, blx structs.BlockExtra) (structs.Block, error)
+	GetLatestBlock(ctx context.Context, blx structs.BlockWithMeta) (structs.Block, error)
 
-	BlockContinuityCheck(ctx context.Context, blx structs.BlockExtra, startHeight, endHeight uint64) ([][2]uint64, error)
-	BlockTransactionCheck(ctx context.Context, blx structs.BlockExtra, startHeight, endHeight uint64) ([]uint64, error)
+	BlockContinuityCheck(ctx context.Context, blx structs.BlockWithMeta, startHeight, endHeight uint64) ([][2]uint64, error)
+	BlockTransactionCheck(ctx context.Context, blx structs.BlockWithMeta, startHeight, endHeight uint64) ([]uint64, error)
 }
 
 type Store struct {
@@ -62,11 +62,11 @@ func (s *Store) Run(ctx context.Context, dur time.Duration) {
 	}
 }
 
-func (s *Store) StoreTransaction(tx structs.TransactionExtra) error {
+func (s *Store) StoreTransaction(tx structs.TransactionWithMeta) error {
 	return s.driver.StoreTransaction(tx)
 }
 
-func (s *Store) StoreTransactions(txs []structs.TransactionExtra) error {
+func (s *Store) StoreTransactions(txs []structs.TransactionWithMeta) error {
 	return s.driver.StoreTransactions(txs)
 }
 
@@ -74,22 +74,22 @@ func (s *Store) GetTransactions(ctx context.Context, tsearch params.TransactionS
 	return s.driver.GetTransactions(ctx, tsearch)
 }
 
-func (s *Store) GetLatestTransaction(ctx context.Context, in structs.TransactionExtra) (out structs.Transaction, err error) {
+func (s *Store) GetLatestTransaction(ctx context.Context, in structs.TransactionWithMeta) (out structs.Transaction, err error) {
 	return s.driver.GetLatestTransaction(ctx, in)
 }
 
-func (s *Store) StoreBlock(bl structs.BlockExtra) error {
+func (s *Store) StoreBlock(bl structs.BlockWithMeta) error {
 	return s.driver.StoreBlock(bl)
 }
 
-func (s *Store) GetLatestBlock(ctx context.Context, blx structs.BlockExtra) (structs.Block, error) {
+func (s *Store) GetLatestBlock(ctx context.Context, blx structs.BlockWithMeta) (structs.Block, error) {
 	return s.driver.GetLatestBlock(ctx, blx)
 }
 
-func (s *Store) BlockContinuityCheck(ctx context.Context, blx structs.BlockExtra, startHeight, endHeight uint64) ([][2]uint64, error) {
+func (s *Store) BlockContinuityCheck(ctx context.Context, blx structs.BlockWithMeta, startHeight, endHeight uint64) ([][2]uint64, error) {
 	return s.driver.BlockContinuityCheck(ctx, blx, startHeight, endHeight)
 }
 
-func (s *Store) BlockTransactionCheck(ctx context.Context, blx structs.BlockExtra, startHeight, endHeight uint64) ([]uint64, error) {
+func (s *Store) BlockTransactionCheck(ctx context.Context, blx structs.BlockWithMeta, startHeight, endHeight uint64) ([]uint64, error) {
 	return s.driver.BlockTransactionCheck(ctx, blx, startHeight, endHeight)
 }

@@ -51,7 +51,7 @@ func (c *Client) SearchTx(ctx context.Context, r structs.HeightRange, blocks map
 	s := strings.Builder{}
 
 	s.WriteString(`"`)
-	s.WriteString("tx.height>= ")
+	s.WriteString("tx.height>=")
 	s.WriteString(strconv.FormatUint(r.StartHeight, 10))
 
 	if r.EndHeight > 0 && r.EndHeight != r.StartHeight {
@@ -172,6 +172,7 @@ func rawToTransaction(ctx context.Context, c *Client, in []TxResponse, blocks ma
 			Hash:      txRaw.Hash,
 			Memo:      tx.GetMemo(),
 			Time:      block.Time,
+			ChainID:   block.ChainID,
 			BlockHash: block.Hash,
 		}
 
@@ -196,7 +197,7 @@ func rawToTransaction(ctx context.Context, c *Client, in []TxResponse, blocks ma
 				sub := shared.SubsetEvent{
 					Type: ev.Type,
 				}
-				for _, attr := range ev.Attributes {
+				for atk, attr := range ev.Attributes {
 					sub.Module = attr.Module
 					sub.Action = attr.Action
 
@@ -241,10 +242,14 @@ func rawToTransaction(ctx context.Context, c *Client, in []TxResponse, blocks ma
 							sub.Amount.Numeric, _ = strconv.ParseFloat(attr.Amount, 64)
 						}
 					}
+					ev.Attributes[atk] = nil
 				}
 				tev.Sub = append(tev.Sub, sub)
+
 			}
+			logf.Events = nil
 			trans.Events = append(trans.Events, tev)
+
 		}
 
 		if txErr.Message != "" {
@@ -260,6 +265,9 @@ func rawToTransaction(ctx context.Context, c *Client, in []TxResponse, blocks ma
 		outTX.Payload = trans
 		out <- outTX
 		timer.ObserveDuration()
+
+		// GC Help
+		lf = nil
 	}
 
 	return nil

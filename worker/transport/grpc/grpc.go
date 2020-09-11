@@ -141,8 +141,6 @@ CONTROLRPC:
 			}
 			responseMetric.WithLabels(resp.Type, "send_error").Inc()
 			logger.Error("[GRPC] Error sending TaskResponse", zap.Error(err))
-
-			//accessCh.RUnlock()
 		}
 	}
 }

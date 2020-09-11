@@ -21,28 +21,7 @@ type HeightHash struct {
 	Hash   string
 }
 
-type LatestDataRequest struct {
-	Network string `json:"network"`
-	Version string `json:"version"`
-
-	LastHash   string    `json:"lastHash"`
-	LastEpoch  string    `json:"lastEpoch"`
-	LastHeight uint64    `json:"lastHeight"`
-	LastTime   time.Time `json:"lastTime"`
-	Nonce      []byte    `json:"nonce"`
-
-	SelfCheck bool `json:"selfCheck"`
-}
-
-type LatestDataResponse struct {
-	LastHash   string    `json:"lastHash"`
-	LastHeight uint64    `json:"lastHeight"`
-	LastTime   time.Time `json:"lastTime"`
-	LastEpoch  string    `json:"lastEpoch"`
-	Nonce      []byte    `json:"nonce"`
-}
-
-type TransactionExtra struct {
+type TransactionWithMeta struct {
 	Network     string      `json:"network,omitempty"`
 	Version     string      `json:"version,omitempty"`
 	ChainID     string      `json:"chain_id,omitempty"`
@@ -58,9 +37,10 @@ type Transaction struct {
 	Hash      string `json:"hash,omitempty"`
 	BlockHash string `json:"block_hash,omitempty"`
 
-	Height uint64    `json:"height,omitempty"`
-	Epoch  string    `json:"epoch,omitempty"`
-	Time   time.Time `json:"time,omitempty"`
+	Height  uint64    `json:"height,omitempty"`
+	Epoch   string    `json:"epoch,omitempty"`
+	ChainID string    `json:"chain_id,omitempty"`
+	Time    time.Time `json:"time,omitempty"`
 
 	Fee       []TransactionFee `json:"transaction_fee,omitempty"`
 	GasWanted uint64           `json:"gas_wanted,omitempty"`
@@ -125,7 +105,7 @@ type SubsetEventError struct {
 	Message string `json:"message,omitempty"`
 }
 
-type BlockExtra struct {
+type BlockWithMeta struct {
 	Network string `json:"network,omitempty"`
 	ChainID string `json:"chain_id,omitempty"`
 	Version string `json:"version,omitempty"`

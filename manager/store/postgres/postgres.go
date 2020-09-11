@@ -10,15 +10,20 @@ import (
 type Driver struct {
 	db *sql.DB
 
-	txBuff chan structs.TransactionExtra
-	blBuff chan structs.BlockExtra
+	txBuff chan structs.TransactionWithMeta
+	txPool *ValuesPool
+
+	blBuff chan structs.BlockWithMeta
+	blPool *ValuesPool
 }
 
 func New(ctx context.Context, db *sql.DB) *Driver {
 	return &Driver{
 		db:     db,
-		txBuff: make(chan structs.TransactionExtra, 10),
-		blBuff: make(chan structs.BlockExtra, 10),
+		txBuff: make(chan structs.TransactionWithMeta, 20),
+		txPool: NewValuesPool(20, 16, 20),
+		blBuff: make(chan structs.BlockWithMeta, 20),
+		blPool: NewValuesPool(20, 8, 20),
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"hash/maphash"
 	"log"
 	"math"
 	"strconv"
@@ -13,7 +14,16 @@ import (
 	"github.com/figment-networks/cosmos-indexer/structs"
 )
 
-func (d *Driver) StoreBlock(bl structs.BlockExtra) error {
+const (
+	insertHead = `INSERT INTO public.blocks("network", "chain_id", "version", "epoch", "height", "hash",  "time", "numtxs" ) VALUES `
+	insertFoot = ` ON CONFLICT (network, chain_id, epoch, hash)
+	DO UPDATE SET
+	height = EXCLUDED.height,
+	time = EXCLUDED.time,
+	numtxs = EXCLUDED.numtxs`
+)
+
+func (d *Driver) StoreBlock(bl structs.BlockWithMeta) error {
 	select {
 	case d.blBuff <- bl:
 	default:
@@ -28,19 +38,28 @@ func (d *Driver) StoreBlock(bl structs.BlockExtra) error {
 func flushB(ctx context.Context, d *Driver) error {
 
 	qBuilder := strings.Builder{}
-	qBuilder.WriteString(`INSERT INTO public.blocks("network", "chain_id", "version", "epoch", "height", "hash",  "time", "numtxs" ) VALUES `)
+	qBuilder.WriteString(insertHead)
 
 	var i = 0
-	valueArgs := []interface{}{}
-	deduplicate := map[string]bool{}
+	var last = 0
+	deduplicate := map[uint64]bool{}
 
+	var h maphash.Hash
+
+	va := d.blPool.Get()
+	defer d.blPool.Put(va)
 READ_ALL:
 	for {
 		select {
 		case block := <-d.blBuff:
-			b := block.Block
+			b := &block.Block
 
-			key := block.Network + block.ChainID + b.Epoch + b.Hash
+			h.Reset()
+			h.WriteString(block.Network)
+			h.WriteString(block.ChainID)
+			h.WriteString(b.Epoch)
+			h.WriteString(b.Hash)
+			key := h.Sum64()
 			if _, ok := deduplicate[key]; ok {
 				// already exists
 				continue
@@ -62,43 +81,47 @@ READ_ALL:
 
 			qBuilder.WriteString(`)`)
 
-			valueArgs = append(valueArgs, block.Network)
-			valueArgs = append(valueArgs, block.ChainID)
-			valueArgs = append(valueArgs, block.Version)
-			valueArgs = append(valueArgs, b.Epoch)
-			valueArgs = append(valueArgs, b.Height)
-			valueArgs = append(valueArgs, b.Hash)
-			valueArgs = append(valueArgs, b.Time)
-			valueArgs = append(valueArgs, b.NumberOfTransactions)
-
+			base := i * 8
+			va[base] = block.Network
+			va[base+1] = block.ChainID
+			va[base+2] = block.Version
+			va[base+3] = b.Epoch
+			va[base+4] = b.Height
+			va[base+5] = b.Hash
+			va[base+6] = b.Time
+			va[base+7] = b.NumberOfTransactions
+			last = base + 7
 			i++
+
+			// (lukanus): do not exceed alloc
+			if i == d.blPool.count-1 {
+				break READ_ALL
+			}
 		default:
 			break READ_ALL
 		}
 	}
 
-	qBuilder.WriteString(` ON CONFLICT (network, chain_id, epoch, hash)
-	DO UPDATE SET
-	height = EXCLUDED.height,
-	time = EXCLUDED.time,
-	numtxs = EXCLUDED.numtxs`)
+	h.Reset()
+	deduplicate = nil
+
+	qBuilder.WriteString(insertFoot)
 
 	tx, err := d.db.Begin()
 	if err != nil {
 		return err
 	}
-	a := qBuilder.String()
-	_, err = tx.Exec(a, valueArgs...)
+
+	_, err = tx.Exec(qBuilder.String(), va[:last+1]...)
 	if err != nil {
-		log.Println("Rollback flushB error: ", err)
+		log.Println("[DB] Rollback flushB error: ", err)
 		tx.Rollback()
 		return err
 	}
 	return tx.Commit()
-
 }
 
-func (d *Driver) GetLatestBlock(ctx context.Context, blx structs.BlockExtra) (out structs.Block, err error) {
+func (d *Driver) GetLatestBlock(ctx context.Context, blx structs.BlockWithMeta) (out structs.Block, err error) {
 	returnBlx := structs.Block{}
 
 	row := d.db.QueryRowContext(ctx, "SELECT id, epoch, height, hash, time, numtxs FROM public.blocks WHERE version = $1 AND network = $2 ORDER BY time DESC LIMIT 1", blx.ChainID, blx.Network)
@@ -118,7 +141,7 @@ type orderPair struct {
 	PreHeight uint64
 }
 
-func (d *Driver) BlockContinuityCheck(ctx context.Context, blx structs.BlockExtra, startHeight, endHeight uint64) ([][2]uint64, error) {
+func (d *Driver) BlockContinuityCheck(ctx context.Context, blx structs.BlockWithMeta, startHeight, endHeight uint64) ([][2]uint64, error) {
 	pairs := [][2]uint64{}
 
 	if endHeight > 0 {
@@ -181,7 +204,7 @@ func (d *Driver) BlockContinuityCheck(ctx context.Context, blx structs.BlockExtr
 	return pairs, nil
 }
 
-func (d *Driver) BlockTransactionCheck(ctx context.Context, blx structs.BlockExtra, startHeight, endHeight uint64) ([]uint64, error) {
+func (d *Driver) BlockTransactionCheck(ctx context.Context, blx structs.BlockWithMeta, startHeight, endHeight uint64) ([]uint64, error) {
 	q := `SELECT t.height, count(t.hash) AS c, b.numtxs
 	FROM transaction_events AS t
 	LEFT JOIN blocks AS b ON (t.height = b.height)

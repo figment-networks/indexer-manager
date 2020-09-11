@@ -22,9 +22,8 @@ type Status string
 var (
 	ErrAlreadyEnabled = errors.New("this schedule is already enabled")
 
-	StatusEnabled  Status = "enabled"
-	StatusChanged  Status = "changed"
-	StatusDisabled Status = "disabled"
+	StatusEnabled Status = "enabled"
+	StatusChanged Status = "changed"
 )
 
 type RunInfo struct {
@@ -172,10 +171,6 @@ func (c *Core) EnableSchedule(ctx context.Context, sID uuid.UUID) error {
 	return nil
 }
 
-func (c *Core) DisableSchedule(new structures.RunConfig) {
-
-}
-
 func (c *Core) handlerListSchedule(w http.ResponseWriter, r *http.Request) {
 	schedule := c.ListSchedule()
 	enc := json.NewEncoder(w)
@@ -184,11 +179,6 @@ func (c *Core) handlerListSchedule(w http.ResponseWriter, r *http.Request) {
 	enc.Encode(schedule)
 }
 
-func (c *Core) handlerAddSchedule(w http.ResponseWriter, r *http.Request) {
-
-}
-
 func (c *Core) RegisterHandles(smux *http.ServeMux) {
-	smux.HandleFunc("/scheduler/core/add", c.handlerAddSchedule)
 	smux.HandleFunc("/scheduler/core/list", c.handlerListSchedule)
 }

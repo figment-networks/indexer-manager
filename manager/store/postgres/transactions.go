@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"hash/maphash"
 	"log"
 	"math"
 	"strconv"
@@ -16,7 +17,7 @@ import (
 	"github.com/lib/pq"
 )
 
-func (d *Driver) StoreTransaction(tx structs.TransactionExtra) error {
+func (d *Driver) StoreTransaction(tx structs.TransactionWithMeta) error {
 	select {
 	case d.txBuff <- tx:
 	default:
@@ -28,7 +29,7 @@ func (d *Driver) StoreTransaction(tx structs.TransactionExtra) error {
 	return nil
 }
 
-func (d *Driver) StoreTransactions(txs []structs.TransactionExtra) error {
+func (d *Driver) StoreTransactions(txs []structs.TransactionWithMeta) error {
 	for _, t := range txs {
 		if err := d.StoreTransaction(t); err != nil {
 			return err
@@ -37,34 +38,57 @@ func (d *Driver) StoreTransactions(txs []structs.TransactionExtra) error {
 	return nil
 }
 
+const (
+	txInsertHead = `INSERT INTO public.transaction_events("network", "chain_id", "version", "epoch", "height", "hash", "block_hash", "time", "type", "parties", "amount", "fee", "gas_wanted", "gas_used", "memo", "data") VALUES `
+	txInsertFoot = ` ON CONFLICT (network, chain_id, epoch, hash)
+	DO UPDATE SET height = EXCLUDED.height,
+	time = EXCLUDED.time,
+	type = EXCLUDED.type,
+	parties = EXCLUDED.parties,
+	data = EXCLUDED.data,
+	amount = EXCLUDED.amount,
+	block_hash = EXCLUDED.block_hash,
+	gas_wanted = EXCLUDED.gas_wanted,
+	gas_used = EXCLUDED.gas_used,
+	memo = EXCLUDED.memo,
+	fee = EXCLUDED.fee`
+)
+
 func flushTx(ctx context.Context, d *Driver) error {
 
 	buff := &bytes.Buffer{}
 	enc := json.NewEncoder(buff)
 
 	qBuilder := strings.Builder{}
-	//	qBuilder.WriteString(`INSERT INTO public.transaction_events("network", "chain_id",  "height", "hash", "block_hash", "time", "type", "senders", "recipients", "amount", "fee", "gas_wanted", "gas_used", "memo", "data") VALUES `)
-	qBuilder.WriteString(`INSERT INTO public.transaction_events("network", "chain_id", "version", "epoch", "height", "hash", "block_hash", "time", "type", "parties", "amount", "fee", "gas_wanted", "gas_used", "memo", "data") VALUES `)
+	qBuilder.WriteString(txInsertHead)
 
 	var i = 0
-	valueArgs := []interface{}{}
+	var last = 0
 
-	deduplicate := map[string]bool{}
+	var h maphash.Hash
+
+	va := d.txPool.Get()
+	defer d.txPool.Put(va)
+	deduplicate := map[uint64]bool{}
+
 READ_ALL:
 	for {
 		select {
 		case transaction := <-d.txBuff:
-			t := transaction.Transaction
+			t := &transaction.Transaction
 
-			key := transaction.Network + transaction.ChainID + t.Epoch + t.Hash
+			h.Reset()
+			h.WriteString(transaction.Network)
+			h.WriteString(t.ChainID)
+			h.WriteString(t.Epoch)
+			h.WriteString(t.Hash)
+			key := h.Sum64()
 			if _, ok := deduplicate[key]; ok {
 				// already exists
 				continue
 			}
 			deduplicate[key] = true
 
-			//recipients := []string{}
-			//senders := []string{}
 			parties := []string{}
 			types := []string{}
 			amount := .0
@@ -72,11 +96,9 @@ READ_ALL:
 				for _, sub := range ev.Sub {
 					if len(sub.Recipient) > 0 {
 						parties = uniqueEntries(sub.Recipient, parties)
-						//recipients = uniqueEntries(sub.Recipient, recipients)
 					}
 					if len(sub.Sender) > 0 {
 						parties = uniqueEntries(sub.Sender, parties)
-						//senders = uniqueEntries(sub.Sender, senders)
 					}
 
 					if len(sub.Validator) > 0 {
@@ -97,7 +119,10 @@ READ_ALL:
 				}
 			}
 
-			enc.Encode(t.Events)
+			err := enc.Encode(t.Events)
+			if err != nil {
+
+			}
 
 			if i > 0 {
 				qBuilder.WriteString(`,`)
@@ -113,56 +138,72 @@ READ_ALL:
 			}
 
 			qBuilder.WriteString(`)`)
-			valueArgs = append(valueArgs, transaction.Network)
-			valueArgs = append(valueArgs, transaction.ChainID)
-			valueArgs = append(valueArgs, transaction.Version)
-			valueArgs = append(valueArgs, t.Epoch)
-			valueArgs = append(valueArgs, t.Height)
-			valueArgs = append(valueArgs, t.Hash)
-			valueArgs = append(valueArgs, t.BlockHash)
-			valueArgs = append(valueArgs, t.Time)
-			valueArgs = append(valueArgs, pq.Array(types))
-			//		valueArgs = append(valueArgs, pq.Array(senders))
-			//		valueArgs = append(valueArgs, pq.Array(recipients))
-			valueArgs = append(valueArgs, pq.Array(parties))
-			valueArgs = append(valueArgs, pq.Array([]float64{amount}))
-			valueArgs = append(valueArgs, 0)
-			valueArgs = append(valueArgs, t.GasWanted)
-			valueArgs = append(valueArgs, t.GasUsed)
-			valueArgs = append(valueArgs, t.Memo)
-			valueArgs = append(valueArgs, buff.String())
-			buff.Reset()
+			/*
+				log.Printf("Append :  %+v ", t)
+				log.Printf("Append_2 :  %#v  ", t)
+
+				log.Println("t.Memo: ", t.Height, " ", t.Memo)
+				log.Println("string: ", buff.String())
+			*/
+
+			base := i * 16
+			va[base] = transaction.Network
+			va[base+1] = t.ChainID
+			va[base+2] = transaction.Version
+			va[base+3] = t.Epoch
+			va[base+4] = t.Height
+			va[base+5] = t.Hash
+			va[base+6] = t.BlockHash
+			va[base+7] = t.Time
+			va[base+8] = pq.Array(types)
+			va[base+9] = pq.Array(parties)
+			va[base+10] = pq.Array([]float64{amount})
+			va[base+11] = 0
+			va[base+12] = t.GasWanted
+			va[base+13] = t.GasUsed
+			va[base+14] = strings.Map(removeCharacters, t.Memo)
+			va[base+15] = buff.String()
 			i++
+
+			last = base + 15
+
+			buff.Reset()
+
+			// (lukanus): do not exceed allocw
+			if i == d.txPool.count-1 {
+				break READ_ALL
+			}
+
 		default:
 			break READ_ALL
 		}
 	}
 
-	qBuilder.WriteString(` ON CONFLICT (network, chain_id, epoch, hash)
-			DO UPDATE SET height = EXCLUDED.height,
-			time = EXCLUDED.time,
-			type = EXCLUDED.type,
-			parties = EXCLUDED.parties,
-			data = EXCLUDED.data,
-			amount = EXCLUDED.amount,
-			block_hash = EXCLUDED.block_hash,
-			gas_wanted = EXCLUDED.gas_wanted,
-			gas_used = EXCLUDED.gas_used,
-			memo = EXCLUDED.memo,
-			fee = EXCLUDED.fee`)
+	qBuilder.WriteString(txInsertFoot)
 
 	tx, err := d.db.Begin()
 	if err != nil {
 		return err
 	}
-	a := qBuilder.String()
-	_, err = tx.Exec(a, valueArgs...)
+
+	//	log.Printf("Query  :  %s ", qBuilder.String())
+	//	log.Printf("Buffer :  %+v ", va)
+	//	log.Printf("BufferPart :  %+v ", va[:last+1])
+	_, err = tx.Exec(qBuilder.String(), va[:last+1]...)
 	if err != nil {
 		log.Println("Rollback flushTx error: ", err)
 		tx.Rollback()
 		return err
 	}
 	return tx.Commit()
+}
+
+// Removes ASCII hex 0-7 causingf utf-8 error in db
+func removeCharacters(r rune) rune {
+	if r < 7 {
+		return -1
+	}
+	return r
 }
 
 func uniqueEntries(in, out []string) []string {
@@ -239,31 +280,23 @@ func (d *Driver) GetTransactions(ctx context.Context, tsearch params.Transaction
 		i++
 	}
 
-	if tsearch.Account != "" || tsearch.Sender != "" || tsearch.Receiver != "" {
+	if tsearch.Account != "" {
 		parts = append(parts, "$"+strconv.Itoa(i)+"=ANY(parties)")
-		data = append(data, tsearch.Account+tsearch.Sender+tsearch.Receiver) // (lukanus): one would be filled
+		data = append(data, tsearch.Account) // (lukanus): one would be filled
 		i++
 	}
 
-	/*
-		if tsearch.Account != "" {
-			parts = append(parts, "($"+strconv.Itoa(i)+"=ANY(senders) OR $"+strconv.Itoa(i+1)+")=ANY(recipients)")
-			data = append(data, tsearch.Account)
-			data = append(data, tsearch.Account)
-			i += 2
-		} else {
-			if tsearch.Sender != "" {
-				parts = append(parts, "$"+strconv.Itoa(i)+"=ANY(senders)")
-				data = append(data, tsearch.Sender)
-				i++
-			}
-			if tsearch.Receiver != "" {
-				parts = append(parts, "$"+strconv.Itoa(i)+"=ANY(recipients)")
-				data = append(data, tsearch.Receiver)
-				i++
-			}
-		}
-	*/
+	if tsearch.Sender != "" {
+		parts = append(parts, "$"+strconv.Itoa(i)+"=ANY(senders)")
+		data = append(data, tsearch.Sender)
+		i++
+	}
+
+	if tsearch.Receiver != "" {
+		parts = append(parts, "$"+strconv.Itoa(i)+"=ANY(recipients)")
+		data = append(data, tsearch.Receiver)
+		i++
+	}
 
 	if len(tsearch.Memo) > 2 {
 		parts = append(parts, "memo ILIKE $"+strconv.Itoa(i))
@@ -324,7 +357,7 @@ func (d *Driver) GetTransactions(ctx context.Context, tsearch params.Transaction
 	return txs, nil
 }
 
-func (d *Driver) GetLatestTransaction(ctx context.Context, in structs.TransactionExtra) (out structs.Transaction, err error) {
+func (d *Driver) GetLatestTransaction(ctx context.Context, in structs.TransactionWithMeta) (out structs.Transaction, err error) {
 	tx := structs.Transaction{}
 
 	d.Flush()
