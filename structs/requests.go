@@ -11,6 +11,7 @@ const (
 
 type LatestDataRequest struct {
 	Network string `json:"network"`
+	ChainID string `json:"chain_id"`
 	Version string `json:"version"`
 
 	LastHash   string    `json:"lastHash"`

@@ -129,7 +129,6 @@ type Block struct {
 
 type TransactionSearch struct {
 	Height    uint64    `json:"height"`
-	Epoch     string    `json:"epoch"`
 	Type      []string  `json:"type"`
 	BlockHash string    `json:"block_hash"`
 	Account   string    `json:"account"`
@@ -145,4 +144,6 @@ type TransactionSearch struct {
 	BeforeHeight uint64 `form:"before_id"`
 
 	Network string `json:"network"`
+	ChainID string `json:"chain_id"`
+	Epoch   string `json:"epoch"`
 }

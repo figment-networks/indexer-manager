@@ -118,10 +118,10 @@ func (c *Core) LoadScheduler(ctx context.Context) error {
 		}
 
 		// In fact run scheduler
-		c.logger.Info(fmt.Sprintf("[Core] Running schedule %s (%s:%s) %s", runner.Name(), r.Network, r.Version, r.Duration.String()))
+		c.logger.Info(fmt.Sprintf("[Core] Running schedule %s (%s:%s) %s", runner.Name(), r.Network, r.ChainID, r.Version, r.Duration.String()))
 		var cCtx context.Context
 		cCtx, r.CFunc = context.WithCancel(ctx)
-		go c.scheduler.Run(cCtx, s.ID.String(), r.Duration, r.Network, r.Version, runner)
+		go c.scheduler.Run(cCtx, s.ID.String(), r.Duration, r.Network, r.ChainID, r.Version, runner)
 		err := c.store.MarkRunning(ctx, s.RunID, s.ID)
 		if err != nil {
 			c.logger.Error("[Core] Error setting state running", zap.Error(err))
@@ -159,7 +159,7 @@ func (c *Core) EnableSchedule(ctx context.Context, sID uuid.UUID) error {
 	}
 
 	runner, _ := c.runners[r.Kind]
-	go c.scheduler.Run(ctx, sID.String(), r.Duration, r.Network, r.Version, runner)
+	go c.scheduler.Run(ctx, sID.String(), r.Duration, r.Network, r.ChainID, r.Version, runner)
 	err := c.store.MarkRunning(ctx, c.ID, sID)
 	if err != nil {
 		c.logger.Error("[Core] Error setting state running", zap.Error(err))

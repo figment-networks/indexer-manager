@@ -20,6 +20,7 @@ import (
 )
 
 const page = 100
+const blockchainEndpointLimit = 20
 
 var (
 	getTransactionDuration *metrics.GroupObserver
@@ -318,35 +319,35 @@ func getRange(ctx context.Context, logger *zap.Logger, client *api.Client, hr st
 	defer logger.Sync()
 
 	blocksAllCount := hr.EndHeight - hr.StartHeight
-	blocksToBeDone := int(math.Ceil(float64(blocksAllCount) / 20.))
+	numBatches := int(math.Ceil(float64(blocksAllCount) / blockchainEndpointLimit))
 	if blocksAllCount == 0 {
-		blocksToBeDone = 1
+		numBatches = 1
 	}
-	blocksCtrl := make(chan error, 2)
-	defer close(blocksCtrl)
+	batchesCtrl := make(chan error, 2)
+	defer close(batchesCtrl)
 	blocksAll := &api.BlocksMap{Blocks: map[uint64]structs.Block{}}
 
-	for i := 0; i < blocksToBeDone; i++ {
+	for i := 0; i < numBatches; i++ {
 		bhr := structs.HeightRange{
-			StartHeight: hr.StartHeight + uint64(i*20),
-			EndHeight:   hr.StartHeight + uint64(i*20) + uint64(20),
+			StartHeight: hr.StartHeight + uint64(i*blockchainEndpointLimit),
+			EndHeight:   hr.StartHeight + uint64(i*blockchainEndpointLimit) + uint64(blockchainEndpointLimit),
 		}
 		if bhr.EndHeight > hr.EndHeight {
 			bhr.EndHeight = hr.EndHeight
 		}
 
 		logger.Debug("[COSMOS-CLIENT] Getting blocks for ", zap.Uint64("end", bhr.EndHeight), zap.Uint64("start", bhr.StartHeight))
-		go client.GetBlocksMeta(ctx, bhr, blocksAll, blocksCtrl)
+		go client.GetBlocksMeta(ctx, bhr, blocksAll, batchesCtrl)
 	}
 
 	var responses int
 	var errors = []error{}
-	for err := range blocksCtrl {
+	for err := range batchesCtrl {
 		responses++
 		if err != nil {
 			errors = append(errors, err)
 		}
-		if responses == blocksToBeDone {
+		if responses == numBatches {
 			break
 		}
 	}

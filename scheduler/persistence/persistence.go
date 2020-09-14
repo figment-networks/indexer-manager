@@ -7,18 +7,18 @@ import (
 )
 
 type PDriver interface {
-	GetLatest(ctx context.Context, kind, network, version string) (structures.LatestRecord, error)
-	SetLatest(ctx context.Context, kind, network, version string, latest structures.LatestRecord) error
+	GetLatest(ctx context.Context, kind, network, chainID, version string) (structures.LatestRecord, error)
+	SetLatest(ctx context.Context, kind, network, chainID, version string, latest structures.LatestRecord) error
 }
 
 type Storage struct {
 	Driver PDriver
 }
 
-func (s *Storage) GetLatest(ctx context.Context, kind, network, version string) (structures.LatestRecord, error) {
-	return s.Driver.GetLatest(ctx, kind, network, version)
+func (s *Storage) GetLatest(ctx context.Context, kind, network, chainID, version string) (structures.LatestRecord, error) {
+	return s.Driver.GetLatest(ctx, kind, network, chainID, version)
 }
 
-func (s *Storage) SetLatest(ctx context.Context, kind, network, version string, latest structures.LatestRecord) error {
-	return s.Driver.SetLatest(ctx, kind, network, version, latest)
+func (s *Storage) SetLatest(ctx context.Context, kind, network, chainID, version string, latest structures.LatestRecord) error {
+	return s.Driver.SetLatest(ctx, kind, network, version, chainID, latest)
 }

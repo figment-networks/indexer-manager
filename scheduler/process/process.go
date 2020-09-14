@@ -11,7 +11,7 @@ import (
 )
 
 type Runner interface {
-	Run(ctx context.Context, network, version string) error
+	Run(ctx context.Context, network, chain, version string) error
 	Name() string
 }
 
@@ -34,7 +34,7 @@ func NewScheduler(logger *zap.Logger) *Scheduler {
 	}
 }
 
-func (s *Scheduler) Run(ctx context.Context, name string, d time.Duration, network, version string, r Runner) {
+func (s *Scheduler) Run(ctx context.Context, name string, d time.Duration, network, chainID, version string, r Runner) {
 
 	cCtx, cancel := context.WithCancel(ctx)
 	tckr := time.NewTicker(d)
@@ -50,7 +50,7 @@ RUN_LOOP:
 	for {
 		select {
 		case <-tckr.C:
-			if err := r.Run(cCtx, network, version); err != nil {
+			if err := r.Run(cCtx, network, chainID, version); err != nil {
 				var rErr *structures.RunError
 				s.logger.Error("[Scheduler - Process] Error running  "+name, zap.Error(err))
 				if errors.As(err, &rErr) {

@@ -124,7 +124,7 @@ READ_ALL:
 func (d *Driver) GetLatestBlock(ctx context.Context, blx structs.BlockWithMeta) (out structs.Block, err error) {
 	returnBlx := structs.Block{}
 
-	row := d.db.QueryRowContext(ctx, "SELECT id, epoch, height, hash, time, numtxs FROM public.blocks WHERE version = $1 AND network = $2 ORDER BY time DESC LIMIT 1", blx.ChainID, blx.Network)
+	row := d.db.QueryRowContext(ctx, "SELECT id, epoch, height, hash, time, numtxs FROM public.blocks WHERE chain_id = $1 AND network = $2 ORDER BY time DESC LIMIT 1", blx.ChainID, blx.Network)
 	if row == nil {
 		return out, params.ErrNotFound
 	}
@@ -146,7 +146,7 @@ func (d *Driver) BlockContinuityCheck(ctx context.Context, blx structs.BlockWith
 
 	if endHeight > 0 {
 		// start - X
-		row := d.db.QueryRowContext(ctx, "SELECT height FROM blocks WHERE chain_id = $1 AND network = $2 AND version = $3 AND height >= $4 AND height <= $5 ORDER BY height ASC LIMIT 1", blx.ChainID, blx.Network, blx.Version, startHeight, endHeight)
+		row := d.db.QueryRowContext(ctx, "SELECT height FROM blocks WHERE chain_id = $1 AND network = $2  height >= $3 AND height <= $4 ORDER BY height ASC LIMIT 1", blx.ChainID, blx.Network, startHeight, endHeight)
 		var height uint64
 
 		if err := row.Scan(&height); err != nil {
@@ -160,7 +160,7 @@ func (d *Driver) BlockContinuityCheck(ctx context.Context, blx structs.BlockWith
 		}
 
 		//   X - end
-		row = d.db.QueryRowContext(ctx, "SELECT height FROM blocks WHERE chain_id = $1 AND network = $2 AND version = $3 AND height >= $4 AND height <= $5 ORDER BY height DESC LIMIT 1", blx.ChainID, blx.Network, blx.Version, startHeight, endHeight)
+		row = d.db.QueryRowContext(ctx, "SELECT height FROM blocks WHERE chain_id = $1 AND network = $2 AND height >= $3 AND height <= $4 ORDER BY height DESC LIMIT 1", blx.ChainID, blx.Network, startHeight, endHeight)
 
 		if err := row.Scan(&height); err != nil {
 			if err == sql.ErrNoRows { // no record exists
@@ -179,9 +179,9 @@ func (d *Driver) BlockContinuityCheck(ctx context.Context, blx structs.BlockWith
 	)
 
 	if endHeight == 0 {
-		rows, err = d.db.QueryContext(ctx, "SELECT height, pre_height FROM (SELECT height, lag(height) over (order by height) as pre_height FROM blocks WHERE chain_id = $1 AND network = $2 AND version = $3 AND height >= $4 ORDER BY height ASC) as ss WHERE height != pre_height+1;", blx.ChainID, blx.Network, blx.Version, startHeight)
+		rows, err = d.db.QueryContext(ctx, "SELECT height, pre_height FROM (SELECT height, lag(height) over (order by height) as pre_height FROM blocks WHERE chain_id = $1 AND network = $2 AND height >= $3 ORDER BY height ASC) as ss WHERE height != pre_height+1;", blx.ChainID, blx.Network, startHeight)
 	} else {
-		rows, err = d.db.QueryContext(ctx, "SELECT height, pre_height FROM (SELECT height, lag(height) over (order by height) as pre_height FROM blocks WHERE chain_id = $1 AND network = $2 AND version = $3 AND height >= $4 AND height <= $5 ORDER BY height ASC) as ss WHERE height != pre_height+1;", blx.ChainID, blx.Network, blx.Version, startHeight, endHeight)
+		rows, err = d.db.QueryContext(ctx, "SELECT height, pre_height FROM (SELECT height, lag(height) over (order by height) as pre_height FROM blocks WHERE chain_id = $1 AND network = $2 AND height >= $3 AND height <= $4 ORDER BY height ASC) as ss WHERE height != pre_height+1;", blx.ChainID, blx.Network, startHeight, endHeight)
 	}
 
 	switch {
@@ -208,11 +208,11 @@ func (d *Driver) BlockTransactionCheck(ctx context.Context, blx structs.BlockWit
 	q := `SELECT t.height, count(t.hash) AS c, b.numtxs
 	FROM transaction_events AS t
 	LEFT JOIN blocks AS b ON (t.height = b.height)
-	WHERE t.version = $1 AND t.network = $2 AND t.height >= $3 AND t.height <= $4
+	WHERE t.chain_id = $1 AND t.network = $2 AND t.height >= $3 AND t.height <= $4
 	GROUP BY t.height,b.numtxs
 	HAVING count(t.hash) != b.numtxs`
 
-	rows, err := d.db.QueryContext(ctx, q, blx.Version, blx.Network, startHeight, endHeight)
+	rows, err := d.db.QueryContext(ctx, q, blx.ChainID, blx.Network, startHeight, endHeight)
 
 	switch {
 	case err == sql.ErrNoRows:

@@ -274,5 +274,5 @@ func rawToTransaction(ctx context.Context, c *Client, in []TxResponse, blocks ma
 }
 
 func getCurrency(in string) []string {
-	return curencyRegex.FindAllString(in, 2)
+	return curencyRegex.FindStringSubmatch(in)
 }

@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS schedule
     runID       uuid NOT NULL,
 
     network     VARCHAR(100)  NOT NULL,
+    chain_id    VARCHAR(100)  NOT NULL,
     version     VARCHAR(50)  NOT NULL,
 
     duration    BIGINT,

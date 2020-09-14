@@ -224,10 +224,14 @@ func (hc *HubbleConnector) SearchTransactions(w http.ResponseWriter, req *http.R
 		network = "cosmos"
 	}
 
+	if ts.ChainID == "" {
+
+	}
+
 	ctx, cancel := context.WithTimeout(req.Context(), 1*time.Minute)
 	defer cancel()
 
-	transactions, err := hc.cli.SearchTransactions(ctx, client.NetworkVersion{Network: network, Version: "0.0.1"}, *ts)
+	transactions, err := hc.cli.SearchTransactions(ctx, client.NetworkVersion{Network: network, ChainID: ts.ChainID, Version: "0.0.1"}, *ts)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(err.Error()))

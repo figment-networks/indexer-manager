@@ -46,7 +46,7 @@ type HubbleContractor interface {
 
 	SearchTransactions(ctx context.Context, nv NetworkVersion, ts shared.TransactionSearch) ([]shared.Transaction, error)
 	GetTransaction(ctx context.Context, nv NetworkVersion, id string) ([]shared.Transaction, error)
-	GetTransactions(ctx context.Context, nv NetworkVersion, heightRange shared.HeightRange, perRequest int, silent bool) ([]shared.Transaction, error)
+	GetTransactions(ctx context.Context, nv NetworkVersion, heightRange shared.HeightRange, batchLimit uint64, silent bool) ([]shared.Transaction, error)
 	InsertTransactions(ctx context.Context, nv NetworkVersion, read io.ReadCloser) error
 
 	CheckMissingTransactions(ctx context.Context, nv NetworkVersion, heightRange shared.HeightRange, window uint64) (missingBlocks, missingTransactions [][2]uint64, err error)
@@ -105,11 +105,11 @@ func (hc *Client) GetTransaction(ctx context.Context, nv NetworkVersion, id stri
 }
 
 // GetTransactions gets transaction range and stores it in the database with respective blocks
-func (hc *Client) GetTransactions(ctx context.Context, nv NetworkVersion, heightRange shared.HeightRange, perRequest int, silent bool) ([]shared.Transaction, error) {
+func (hc *Client) GetTransactions(ctx context.Context, nv NetworkVersion, heightRange shared.HeightRange, batchLimit uint64, silent bool) ([]shared.Transaction, error) {
 	timer := metrics.NewTimer(callDurationGetTransactions)
 	defer timer.ObserveDuration()
 
-	times := 1
+	times := uint64(1)
 	req := []structs.TaskRequest{}
 
 	if heightRange.Hash != "" {
@@ -144,17 +144,17 @@ func (hc *Client) GetTransactions(ctx context.Context, nv NetworkVersion, height
 			requestsToGetMetric.Observe(diff)
 
 			if diff > 0 {
-				times = int(math.Ceil(diff / float64(perRequest)))
+				times = uint64(math.Ceil(diff / float64(batchLimit)))
 			}
 
-			for i := 0; i < times; i++ {
-				endH := heightRange.StartHeight + uint64((i+1)*perRequest)
+			for i := uint64(0); i < times; i++ {
+				endH := heightRange.StartHeight + i*batchLimit + batchLimit
 				if heightRange.EndHeight > 0 && endH > heightRange.EndHeight {
 					endH = heightRange.EndHeight
 				}
 
 				b, _ := json.Marshal(shared.HeightRange{
-					StartHeight: heightRange.StartHeight + uint64(i*perRequest),
+					StartHeight: heightRange.StartHeight + uint64(i*batchLimit),
 					EndHeight:   endH,
 					Hash:        heightRange.Hash,
 				})
@@ -183,7 +183,7 @@ func (hc *Client) GetTransactions(ctx context.Context, nv NetworkVersion, height
 	buff := &bytes.Buffer{}
 	dec := json.NewDecoder(buff)
 
-	var receivedFinals int
+	var receivedFinals uint64
 WAIT_FOR_ALL_DATA:
 	for {
 		select {
@@ -238,6 +238,7 @@ func (hc *Client) SearchTransactions(ctx context.Context, nv NetworkVersion, ts 
 	return hc.storeEng.GetTransactions(ctx, params.TransactionSearch{
 		Network:      nv.Network,
 		ChainID:      nv.ChainID,
+		Epoch:        ts.Epoch,
 		Height:       ts.Height,
 		Type:         ts.Type,
 		BlockHash:    ts.BlockHash,
@@ -304,7 +305,7 @@ func (hc *Client) ScrapeLatest(ctx context.Context, ldr shared.LatestDataRequest
 
 	// (lukanus): self consistency check (optional), so we don;t care about an error
 	if ldr.SelfCheck {
-		lastBlock, err := hc.storeEng.GetLatestBlock(ctx, shared.BlockWithMeta{ChainID: ldr.Version, Network: ldr.Network})
+		lastBlock, err := hc.storeEng.GetLatestBlock(ctx, shared.BlockWithMeta{ChainID: ldr.ChainID, Network: ldr.Network, Version: ldr.Version})
 		if err == nil {
 			if lastBlock.Hash != "" {
 				ldr.LastHash = lastBlock.Hash

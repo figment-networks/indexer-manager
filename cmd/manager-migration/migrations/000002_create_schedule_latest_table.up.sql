@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS schedule_latest
 	time        TIMESTAMP WITH TIME ZONE,
 
     network     VARCHAR(100)  NOT NULL,
+    chain_id    VARCHAR(100)  NOT NULL,
     version     VARCHAR(50)  NOT NULL,
 	kind        VARCHAR(100),
 
@@ -19,4 +20,4 @@ CREATE TABLE IF NOT EXISTS schedule_latest
 );
 
 
-CREATE INDEX idx_sch_lst_nv on schedule_latest(network, version, kind, time);
+CREATE INDEX idx_sch_lst_nvc on schedule_latest(network, chain_id, version,  kind, time);

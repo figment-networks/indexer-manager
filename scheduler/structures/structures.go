@@ -18,6 +18,7 @@ type RunConfig struct {
 
 	RunID   uuid.UUID `json:"runID"`
 	Network string    `json:"network"`
+	ChainID string    `json:"chainID"`
 	Version string    `json:"version"`
 
 	Duration time.Duration `json:"duration"`

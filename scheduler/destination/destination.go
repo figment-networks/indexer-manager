@@ -12,27 +12,29 @@ import (
 )
 
 type Target struct {
+	ChainID string
 	Network string
 	Version string
 	Address string
 }
 
-type NVKey struct {
+type NVCKey struct {
 	Network string
 	Version string
+	ChainID string
 }
 
-func (nv NVKey) String() string {
+func (nv NVCKey) String() string {
 	return fmt.Sprintf("%s:%s", nv.Network, nv.Version)
 }
 
 type Scheme struct {
-	destinations    map[NVKey][]Target
+	destinations    map[NVCKey][]Target
 	destinationLock sync.RWMutex
 
 	logger *zap.Logger
 
-	managers map[string]map[NVKey]bool
+	managers map[string]map[NVCKey]bool
 }
 
 type WorkerNetworkStatic struct {
@@ -42,23 +44,24 @@ type WorkerNetworkStatic struct {
 }
 
 type WorkerInfoStatic struct {
-	NodeSelfID     string           `json:"node_id"`
-	Type           string           `json:"type"`
-	State          int64            `json:"state"`
-	ConnectionInfo WorkerConnection `json:"connection"`
-	LastCheck      time.Time        `json:"last_check"`
+	NodeSelfID     string             `json:"node_id"`
+	Type           string             `json:"type"`
+	State          int64              `json:"state"`
+	ConnectionInfo []WorkerConnection `json:"connection"`
+	LastCheck      time.Time          `json:"last_check"`
 }
 
 type WorkerConnection struct {
 	Version string `json:"version"`
+	ChainID string `json:"chain_id"`
 	Type    string `json:"type"`
 }
 
 func NewScheme(logger *zap.Logger) *Scheme {
 	return &Scheme{
 		logger:       logger,
-		destinations: make(map[NVKey][]Target),
-		managers:     make(map[string]map[NVKey]bool),
+		destinations: make(map[NVCKey][]Target),
+		managers:     make(map[string]map[NVCKey]bool),
 	}
 }
 
@@ -66,16 +69,16 @@ func (s *Scheme) Add(t Target) {
 	s.destinationLock.Lock()
 	defer s.destinationLock.Unlock()
 
-	i, ok := s.destinations[NVKey{t.Network, t.Version}]
+	i, ok := s.destinations[NVCKey{t.Network, t.Version, t.ChainID}]
 	if !ok {
 		i = []Target{}
 	}
 	i = append(i, t)
 
-	s.destinations[NVKey{t.Network, t.Version}] = i
+	s.destinations[NVCKey{t.Network, t.Version, t.ChainID}] = i
 }
 
-func (s *Scheme) Get(nv NVKey) (Target, bool) {
+func (s *Scheme) Get(nv NVCKey) (Target, bool) {
 	s.destinationLock.RLock()
 	defer s.destinationLock.RUnlock()
 
@@ -92,7 +95,7 @@ func (s *Scheme) AddManager(address string) {
 	}
 
 	s.logger.Info("[Scheme] Adding Manager", zap.String("address", address))
-	s.managers[address] = make(map[NVKey]bool)
+	s.managers[address] = make(map[NVCKey]bool)
 }
 
 func (s *Scheme) Refresh(ctx context.Context) error {
@@ -120,11 +123,13 @@ func (s *Scheme) Refresh(ctx context.Context) error {
 			return fmt.Errorf("error making request to  %s : %w", "http://"+address+"/get_workers", err)
 		}
 
-		k := make(map[NVKey]bool)
+		k := make(map[NVCKey]bool)
 
 		for network, sub := range wns {
 			for _, w := range sub.Workers {
-				k[NVKey{network, w.ConnectionInfo.Version}] = (w.State == 1) // (lukanus): 1 is  online
+				for _, ci := range w.ConnectionInfo {
+					k[NVCKey{network, ci.Version, ci.ChainID}] = (w.State == 1) // (lukanus): 1 is  online
+				}
 			}
 		}
 
@@ -147,7 +152,7 @@ func (s *Scheme) Refresh(ctx context.Context) error {
 			if !ok {
 				dest = []Target{}
 			}
-			dest = append(dest, Target{Network: nv.Network, Version: nv.Version, Address: addr})
+			dest = append(dest, Target{Network: nv.Network, ChainID: nv.ChainID, Version: nv.Version, Address: addr})
 			s.destinations[nv] = dest
 		}
 	}

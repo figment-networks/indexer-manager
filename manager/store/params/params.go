@@ -10,8 +10,6 @@ var (
 )
 
 type TransactionSearch struct {
-	Network   string   `json:"network"`
-	ChainID   string   `json:"chain_id"`
 	Height    uint64   `json:"height"`
 	Type      []string `json:"type"`
 	BlockHash string   `json:"block_hash"`
@@ -27,4 +25,8 @@ type TransactionSearch struct {
 	BeforeHeight uint64 `json:"before_height"`
 	Limit        uint64 `json:"limit"`
 	Offset       uint64 `json:"offset"`
+
+	Network string `json:"network"`
+	ChainID string `json:"chain_id"`
+	Epoch   string `json:"epoch"`
 }

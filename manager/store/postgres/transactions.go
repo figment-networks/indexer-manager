@@ -39,7 +39,7 @@ func (d *Driver) StoreTransactions(txs []structs.TransactionWithMeta) error {
 }
 
 const (
-	txInsertHead = `INSERT INTO public.transaction_events("network", "chain_id", "version", "epoch", "height", "hash", "block_hash", "time", "type", "parties", "amount", "fee", "gas_wanted", "gas_used", "memo", "data") VALUES `
+	txInsertHead = `INSERT INTO public.transaction_events("network", "chain_id", "version", "epoch", "height", "hash", "block_hash", "time", "type", "parties", "senders", "recipients", "amount", "fee", "gas_wanted", "gas_used", "memo", "data") VALUES `
 	txInsertFoot = ` ON CONFLICT (network, chain_id, epoch, hash)
 	DO UPDATE SET height = EXCLUDED.height,
 	time = EXCLUDED.time,
@@ -90,15 +90,19 @@ READ_ALL:
 			deduplicate[key] = true
 
 			parties := []string{}
+			senders := []string{}
+			recipients := []string{}
 			types := []string{}
 			amount := .0
 			for _, ev := range t.Events {
 				for _, sub := range ev.Sub {
 					if len(sub.Recipient) > 0 {
 						parties = uniqueEntries(sub.Recipient, parties)
+						recipients = uniqueEntries(sub.Recipient, recipients)
 					}
 					if len(sub.Sender) > 0 {
 						parties = uniqueEntries(sub.Sender, parties)
+						senders = uniqueEntries(sub.Recipient, senders)
 					}
 
 					if len(sub.Validator) > 0 {
@@ -119,34 +123,24 @@ READ_ALL:
 				}
 			}
 
-			err := enc.Encode(t.Events)
-			if err != nil {
-
-			}
+			enc.Encode(t.Events)
 
 			if i > 0 {
 				qBuilder.WriteString(`,`)
 			}
 			qBuilder.WriteString(`(`)
-			for j := 1; j < 17; j++ {
+			for j := 1; j < 19; j++ {
 				qBuilder.WriteString(`$`)
-				current := i*16 + j
+				current := i*18 + j
 				qBuilder.WriteString(strconv.Itoa(current))
-				if current == 1 || math.Mod(float64(current), 16) != 0 {
+				if current == 1 || math.Mod(float64(current), 18) != 0 {
 					qBuilder.WriteString(`,`)
 				}
 			}
 
 			qBuilder.WriteString(`)`)
-			/*
-				log.Printf("Append :  %+v ", t)
-				log.Printf("Append_2 :  %#v  ", t)
 
-				log.Println("t.Memo: ", t.Height, " ", t.Memo)
-				log.Println("string: ", buff.String())
-			*/
-
-			base := i * 16
+			base := i * 18
 			va[base] = transaction.Network
 			va[base+1] = t.ChainID
 			va[base+2] = transaction.Version
@@ -157,15 +151,17 @@ READ_ALL:
 			va[base+7] = t.Time
 			va[base+8] = pq.Array(types)
 			va[base+9] = pq.Array(parties)
-			va[base+10] = pq.Array([]float64{amount})
-			va[base+11] = 0
-			va[base+12] = t.GasWanted
-			va[base+13] = t.GasUsed
-			va[base+14] = strings.Map(removeCharacters, t.Memo)
-			va[base+15] = buff.String()
+			va[base+10] = pq.Array(senders)
+			va[base+11] = pq.Array(recipients)
+			va[base+12] = pq.Array([]float64{amount})
+			va[base+13] = 0
+			va[base+14] = t.GasWanted
+			va[base+15] = t.GasUsed
+			va[base+16] = strings.Map(removeCharacters, t.Memo)
+			va[base+17] = buff.String()
 			i++
 
-			last = base + 15
+			last = base + 17
 
 			buff.Reset()
 
@@ -186,9 +182,6 @@ READ_ALL:
 		return err
 	}
 
-	//	log.Printf("Query  :  %s ", qBuilder.String())
-	//	log.Printf("Buffer :  %+v ", va)
-	//	log.Printf("BufferPart :  %+v ", va[:last+1])
 	_, err = tx.Exec(qBuilder.String(), va[:last+1]...)
 	if err != nil {
 		log.Println("Rollback flushTx error: ", err)
@@ -247,6 +240,18 @@ func (d *Driver) GetTransactions(ctx context.Context, tsearch params.Transaction
 	if tsearch.Network != "" {
 		parts = append(parts, "network = $"+strconv.Itoa(i))
 		data = append(data, tsearch.Network)
+		i++
+	}
+
+	if tsearch.ChainID != "" {
+		parts = append(parts, "chain_id = $"+strconv.Itoa(i))
+		data = append(data, tsearch.ChainID)
+		i++
+	}
+
+	if tsearch.Epoch != "" {
+		parts = append(parts, "chain_id = $"+strconv.Itoa(i))
+		data = append(data, tsearch.ChainID)
 		i++
 	}
 
@@ -362,7 +367,7 @@ func (d *Driver) GetLatestTransaction(ctx context.Context, in structs.Transactio
 
 	d.Flush()
 
-	row := d.db.QueryRowContext(ctx, "SELECT id, version, epoch, height, hash, block_hash, time FROM public.transaction_events WHERE version = $1 AND network = $2 ORDER BY time DESC LIMIT 1", in.ChainID, in.Network)
+	row := d.db.QueryRowContext(ctx, "SELECT id, version, epoch, height, hash, block_hash, time FROM public.transaction_events WHERE chain_id = $1 AND network = $2 AND epoch = $3 ORDER BY time DESC LIMIT 1", in.ChainID, in.Network, in.Transaction.Epoch)
 	if row == nil {
 		return out, params.ErrNotFound
 	}

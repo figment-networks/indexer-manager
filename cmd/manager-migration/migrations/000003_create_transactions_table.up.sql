@@ -38,6 +38,7 @@ CREATE TABLE IF NOT EXISTS transaction_events
 
 
 CREATE INDEX idx_tx_ev_height on transaction_events (network, chain_id, epoch, height);
+CREATE INDEX idx_tx_ev_time on transaction_events (network, chain_id, time);
 CREATE UNIQUE INDEX idx_tx_ev_hash on transaction_events (network, chain_id, epoch, hash);
 CREATE INDEX idx_tx_ev_block_hash on transaction_events (network, chain_id, block_hash);
 CREATE INDEX idx_tx_ev_parties_gin ON transaction_events USING GIN(parties);
