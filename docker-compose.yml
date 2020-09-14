@@ -20,7 +20,7 @@ volumes:
 
 services:
   postgresdatabase:
-    image: timescale/timescaledb:latest-pg10
+    image: postgres:12
     networks:
       - internal
     ports:
