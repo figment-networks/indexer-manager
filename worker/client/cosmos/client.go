@@ -307,26 +307,22 @@ func (ic *IndexerClient) GetLatest(ctx context.Context, tr cStructs.TaskRequest,
 
 // getStartingHeight - based current state
 func getStartingHeight(lastHeight, maximumHeightsToGet, blockHeightFromDB uint64) (startingHeight uint64) {
-	startingHeight = lastHeight
-
 	// (lukanus): When nothing is scraped we want to get only X number of last requests
 	if lastHeight == 0 {
 		lastX := blockHeightFromDB - maximumHeightsToGet
 		if lastX > 0 {
-			startingHeight = lastX
-		}
-	} else {
-		if maximumHeightsToGet < blockHeightFromDB-lastHeight {
-			if maximumHeightsToGet > blockHeightFromDB {
-				startingHeight = 0
-			} else {
-				startingHeight = blockHeightFromDB - maximumHeightsToGet
-			}
-
+			return lastX
 		}
 	}
 
-	return startingHeight
+	if maximumHeightsToGet < blockHeightFromDB-lastHeight {
+		if maximumHeightsToGet > blockHeightFromDB {
+			return 0
+		}
+		return blockHeightFromDB - maximumHeightsToGet
+	}
+
+	return lastHeight
 }
 
 // getRange gets given range of blocks and transactions
