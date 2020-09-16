@@ -101,10 +101,10 @@ func main() {
 	client.InitMetrics()
 	hClient := client.NewClient(managerStore, logger.GetLogger())
 	hClient.LinkSender(connManager)
-	hubbleHTTPTransport := httpTransport.NewHubbleConnector(hClient)
+	HTTPTransport := httpTransport.NewConnector(hClient)
 
 	mux := http.NewServeMux()
-	hubbleHTTPTransport.AttachToHandler(mux)
+	HTTPTransport.AttachToHandler(mux)
 
 	connManager.AttachToMux(mux)
 

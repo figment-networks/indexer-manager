@@ -30,25 +30,25 @@ type TransactionSearch struct {
 	Limit     uint     `json:"limit"`
 }
 
-// HubbleConnector is main HTTP connector for manager
-type HubbleConnector struct {
-	cli client.HubbleContractor
+// Connector is main HTTP connector for manager
+type Connector struct {
+	cli client.ClientContractor
 }
 
-// NewHubbleConnector is HubbleConnector constructor
-func NewHubbleConnector(cli client.HubbleContractor) *HubbleConnector {
-	return &HubbleConnector{cli}
+// NewConnector is  Connector constructor
+func NewConnector(cli client.ClientContractor) *Connector {
+	return &Connector{cli}
 }
 
 // GetTransaction is http handler for GetTransaction method
-func (hc *HubbleConnector) GetTransaction(w http.ResponseWriter, req *http.Request) {
+func (hc *Connector) GetTransaction(w http.ResponseWriter, req *http.Request) {
 	nv := client.NetworkVersion{Network: "cosmos", Version: "0.0.1"}
 	hc.cli.GetTransaction(req.Context(), nv, "")
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
 // InsertTransactions is http handler for InsertTransactions method
-func (hc *HubbleConnector) InsertTransactions(w http.ResponseWriter, req *http.Request) {
+func (hc *Connector) InsertTransactions(w http.ResponseWriter, req *http.Request) {
 	nv := client.NetworkVersion{Network: "cosmos", Version: "0.0.1"}
 	s := strings.Split(req.URL.Path, "/")
 
@@ -69,7 +69,7 @@ func (hc *HubbleConnector) InsertTransactions(w http.ResponseWriter, req *http.R
 }
 
 // GetTransactions is http handler for GetTransactions method
-func (hc *HubbleConnector) GetTransactions(w http.ResponseWriter, req *http.Request) {
+func (hc *Connector) GetTransactions(w http.ResponseWriter, req *http.Request) {
 	strHeight := req.URL.Query().Get("height")
 	intHeight, _ := strconv.Atoi(strHeight)
 
@@ -112,7 +112,7 @@ func (hc *HubbleConnector) GetTransactions(w http.ResponseWriter, req *http.Requ
 }
 
 // SearchTransactions is http handler for SearchTransactions method
-func (hc *HubbleConnector) SearchTransactions(w http.ResponseWriter, req *http.Request) {
+func (hc *Connector) SearchTransactions(w http.ResponseWriter, req *http.Request) {
 	ct := req.Header.Get("Content-Type")
 
 	network := ""
@@ -177,7 +177,7 @@ func (hc *HubbleConnector) SearchTransactions(w http.ResponseWriter, req *http.R
 }
 
 // ScrapeLatest is http handler for ScrapeLatest method
-func (hc *HubbleConnector) ScrapeLatest(w http.ResponseWriter, req *http.Request) {
+func (hc *Connector) ScrapeLatest(w http.ResponseWriter, req *http.Request) {
 	ct := req.Header.Get("Content-Type")
 
 	ldReq := &shared.LatestDataRequest{}
@@ -210,7 +210,7 @@ type MissingTransactionsResponse struct {
 }
 
 // CheckMissingTransactions is http handler for CheckMissingTransactions method
-func (hc *HubbleConnector) CheckMissingTransactions(w http.ResponseWriter, req *http.Request) {
+func (hc *Connector) CheckMissingTransactions(w http.ResponseWriter, req *http.Request) {
 	strHeight := req.URL.Query().Get("start_height")
 	intHeight, _ := strconv.ParseUint(strHeight, 10, 64)
 
@@ -240,7 +240,7 @@ func (hc *HubbleConnector) CheckMissingTransactions(w http.ResponseWriter, req *
 }
 
 // GetRunningTransactions gets currently running transactions
-func (hc *HubbleConnector) GetRunningTransactions(w http.ResponseWriter, req *http.Request) {
+func (hc *Connector) GetRunningTransactions(w http.ResponseWriter, req *http.Request) {
 	run, err := hc.cli.GetRunningTransactions(req.Context())
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -256,7 +256,7 @@ func (hc *HubbleConnector) GetRunningTransactions(w http.ResponseWriter, req *ht
 }
 
 // GetMissingTransactions is http handler for GetMissingTransactions method
-func (hc *HubbleConnector) GetMissingTransactions(w http.ResponseWriter, req *http.Request) {
+func (hc *Connector) GetMissingTransactions(w http.ResponseWriter, req *http.Request) {
 	nv := client.NetworkVersion{Network: "cosmos", Version: "0.0.1", ChainID: "cosmoshub-3"}
 
 	strHeight := req.URL.Query().Get("start_height")
@@ -303,16 +303,16 @@ func (hc *HubbleConnector) GetMissingTransactions(w http.ResponseWriter, req *ht
 }
 
 // AttachToHandler attaches handlers to http server's mux
-func (hc *HubbleConnector) AttachToHandler(mux *http.ServeMux) {
-	mux.HandleFunc("/transactions", hc.GetTransactions)
-	mux.HandleFunc("/transactions/", hc.GetTransaction)
-	mux.HandleFunc("/transactions_search", hc.SearchTransactions)
+func (c *Connector) AttachToHandler(mux *http.ServeMux) {
+	mux.HandleFunc("/transactions", c.GetTransactions)
+	mux.HandleFunc("/transactions/", c.GetTransaction)
+	mux.HandleFunc("/transactions_search", c.SearchTransactions)
 
-	mux.HandleFunc("/transactions_insert/", hc.InsertTransactions)
-	mux.HandleFunc("/scrape_latest", hc.ScrapeLatest)
+	mux.HandleFunc("/transactions_insert/", c.InsertTransactions)
+	mux.HandleFunc("/scrape_latest", c.ScrapeLatest)
 
-	mux.HandleFunc("/check_missing", hc.CheckMissingTransactions)
-	mux.HandleFunc("/get_missing", hc.GetMissingTransactions)
-	mux.HandleFunc("/get_running", hc.GetRunningTransactions)
+	mux.HandleFunc("/check_missing", c.CheckMissingTransactions)
+	mux.HandleFunc("/get_missing", c.GetMissingTransactions)
+	mux.HandleFunc("/get_running", c.GetRunningTransactions)
 
 }

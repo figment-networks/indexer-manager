@@ -31,23 +31,27 @@ type NetworkVersion struct {
 	Version string
 }
 
-// HubbleContractor a format agnostic
-type HubbleContractor interface {
+// ClientContractor a format agnostic
+type ClientContractor interface {
 	SchedulerContractor
+	ControllContractor
 
 	SearchTransactions(ctx context.Context, nv NetworkVersion, ts shared.TransactionSearch) ([]shared.Transaction, error)
 	GetTransaction(ctx context.Context, nv NetworkVersion, id string) ([]shared.Transaction, error)
 	GetTransactions(ctx context.Context, nv NetworkVersion, heightRange shared.HeightRange, batchLimit uint64, silent bool) ([]shared.Transaction, error)
+}
+
+type SchedulerContractor interface {
+	ScrapeLatest(ctx context.Context, ldr shared.LatestDataRequest) (ldResp shared.LatestDataResponse, er error)
+}
+
+type ControllContractor interface {
 	InsertTransactions(ctx context.Context, nv NetworkVersion, read io.ReadCloser) error
 
 	CheckMissingTransactions(ctx context.Context, nv NetworkVersion, heightRange shared.HeightRange, window uint64) (missingBlocks, missingTransactions [][2]uint64, err error)
 	GetMissingTransactions(ctx context.Context, nv NetworkVersion, heightRange shared.HeightRange, window uint64, async bool, force bool) (run *Run, err error)
 
 	GetRunningTransactions(ctx context.Context) (run []Run, err error)
-}
-
-type SchedulerContractor interface {
-	ScrapeLatest(ctx context.Context, ldr shared.LatestDataRequest) (ldResp shared.LatestDataResponse, er error)
 }
 
 type TaskSender interface {
