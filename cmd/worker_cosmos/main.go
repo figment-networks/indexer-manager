@@ -88,7 +88,7 @@ func main() {
 
 	logger.Info(fmt.Sprintf("Connecting to managers (%s)", strings.Join(managers, ",")))
 
-	go c.Run(ctx, logger.GetLogger(), cfg.ManagerInverval)
+	go c.Run(ctx, logger.GetLogger(), cfg.ManagerInterval)
 
 	grpcServer := grpc.NewServer()
 

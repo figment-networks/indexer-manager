@@ -24,7 +24,7 @@ type Config struct {
 	DatahubKey        string `json:"datahub_key" envconfig:"DATAHUB_KEY"`
 
 	Managers        string        `json:"managers" envconfig:"MANAGERS" default:"127.0.0.1:8085"`
-	ManagerInverval time.Duration `json:"manager_interavl" envconfig:"MANAGER_INTERVAL" default:"10s"`
+	ManagerInterval time.Duration `json:"manager_interval" envconfig:"MANAGER_INTERVAL" default:"10s"`
 	Hostname        string        `json:"hostname" envconfig:"HOSTNAME"`
 
 	MaximumHeightsToGet float64 `json:"maximum_heights_to_get" envconfig:"MAXIMUM_HEIGHTS_TO_GET" default:"10000"`

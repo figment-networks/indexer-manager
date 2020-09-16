@@ -90,7 +90,7 @@ func main() {
 	managerStore := store.New(pgsqlDriver)
 	go managerStore.Run(ctx, time.Second*5)
 
-	// Initialise manager
+	// Initialize manager
 	mID, _ := uuid.NewRandom()
 	connManager := connectivity.NewManager(mID.String(), logger.GetLogger())
 
@@ -200,7 +200,7 @@ func attachHealthCheck(ctx context.Context, mux *http.ServeMux, db *sql.DB) {
 			strErr = `"` + err.Error() + `"`
 		}
 
-		fmt.Fprintf(w, `{"db": {"postgress": {"status": "%s" ,"time": "%s", "error": %s }}}`, status, dur.String(), strErr)
+		fmt.Fprintf(w, `{"db": {"postgres": {"status": "%s" ,"time": "%s", "error": %s }}}`, status, dur.String(), strErr)
 
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)

@@ -40,25 +40,6 @@ func NewHubbleConnector(cli client.HubbleContractor) *HubbleConnector {
 	return &HubbleConnector{cli}
 }
 
-// GetBlock is http handler for GetBlock method
-func (hc *HubbleConnector) GetBlock(w http.ResponseWriter, req *http.Request) {
-	nv := client.NetworkVersion{Network: "cosmos", Version: "0.0.1"}
-
-	keys := req.URL.Query()
-	id := keys.Get("id")
-	if id == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
-	hc.cli.GetBlock(req.Context(), nv, id)
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// GetBlocks is http handler for GetBlocks method
-func (hc *HubbleConnector) GetBlocks(w http.ResponseWriter, req *http.Request) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
 // GetTransaction is http handler for GetTransaction method
 func (hc *HubbleConnector) GetTransaction(w http.ResponseWriter, req *http.Request) {
 	nv := client.NetworkVersion{Network: "cosmos", Version: "0.0.1"}
@@ -262,6 +243,7 @@ func (hc *HubbleConnector) CheckMissingTransactions(w http.ResponseWriter, req *
 	enc.Encode(mtr)
 }
 
+// GetRunningTransactions gets currently running transactions
 func (hc *HubbleConnector) GetRunningTransactions(w http.ResponseWriter, req *http.Request) {
 
 	run, err := hc.cli.GetRunningTransactions(req.Context())

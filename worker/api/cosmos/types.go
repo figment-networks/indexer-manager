@@ -50,6 +50,7 @@ type BlockMeta struct {
 	Header  BlockHeader `json:"header"`
 }
 
+// BlockID info
 type BlockID struct {
 	Hash string `json:"hash"`
 }
@@ -67,6 +68,7 @@ type BlockHeader struct {
 	NumTxs  string `json:"num_txs"`
 }
 
+// Error is api error
 type Error struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
@@ -79,7 +81,7 @@ type ResultTxSearch struct {
 	TotalCount string       `json:"total_count"`
 }
 
-// GetTxSearchResponse cosmos resoinse for search
+// GetTxSearchResponse cosmos response for search
 type GetTxSearchResponse struct {
 	ID     string         `json:"id"`
 	RPC    string         `json:"jsonrpc"`
@@ -103,6 +105,7 @@ type GetBlockchainResponse struct {
 	Error  Error            `json:"error"`
 }
 
+// LogFormat format of logs from cosmos
 type LogFormat struct {
 	MsgIndex float64     `json:"msg_index"`
 	Success  bool        `json:"success"`
@@ -110,12 +113,14 @@ type LogFormat struct {
 	Events   []LogEvents `json:"events"`
 }
 
+// LogEvents format of events from logs cosmos
 type LogEvents struct {
 	Type string `json:"type"`
 	//Attributes []string `json:"attributes"`
 	Attributes []*LogEventsAttributes `json:"attributes"`
 }
 
+// LogEventsAttributes enhanced format of event attributes
 type LogEventsAttributes struct {
 	Module         string
 	Action         string
@@ -136,7 +141,7 @@ type kvHolder struct {
 
 // UnmarshalJSON LogEvents into a different format,
 // to be able to parse it later more easily
-// thats fulfilment of json.Unmarshaler inferface
+// thats fulfillment of json.Unmarshaler inferface
 func (lea *LogEventsAttributes) UnmarshalJSON(b []byte) error {
 
 	dec := json.NewDecoder(bytes.NewReader(b))

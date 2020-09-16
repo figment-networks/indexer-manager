@@ -56,7 +56,7 @@ const (
 	fee = EXCLUDED.fee`
 )
 
-// flushTransactions persist buffer into postgress
+// flushTransactions persist buffer into postgres
 func flushTransactions(ctx context.Context, d *Driver) error {
 
 	buff := &bytes.Buffer{}

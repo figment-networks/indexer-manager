@@ -130,7 +130,7 @@ func (ic *IndexerClient) GetTransactions(ctx context.Context, tr cStructs.TaskRe
 	hr := &structs.HeightRange{}
 	err := json.Unmarshal(tr.Payload, hr)
 	if err != nil {
-		ic.logger.Debug("[COSMOS-CLIENT] Cannot umnarshal payload", zap.String("contents", string(tr.Payload)))
+		ic.logger.Debug("[COSMOS-CLIENT] Cannot unmarshal payload", zap.String("contents", string(tr.Payload)))
 		stream.Send(cStructs.TaskResponse{
 			Id:    tr.Id,
 			Error: cStructs.TaskError{Msg: "cannot unmarshal payload: " + err.Error()},

@@ -35,15 +35,6 @@ type NetworkVersion struct {
 type HubbleContractor interface {
 	SchedulerContractor
 
-	GetAccounts(ctx context.Context, nv NetworkVersion)
-	GetAccount(ctx context.Context, nv NetworkVersion)
-	GetCurrentHeight(ctx context.Context, nv NetworkVersion)
-	GetCurrentBlock(ctx context.Context, nv NetworkVersion)
-	GetBlock(ctx context.Context, nv NetworkVersion, id string)
-	GetBlocks(ctx context.Context, nv NetworkVersion)
-	GetBlockTimes(ctx context.Context, nv NetworkVersion)
-	GetBlockTimesInterval(ctx context.Context, nv NetworkVersion)
-
 	SearchTransactions(ctx context.Context, nv NetworkVersion, ts shared.TransactionSearch) ([]shared.Transaction, error)
 	GetTransaction(ctx context.Context, nv NetworkVersion, id string) ([]shared.Transaction, error)
 	GetTransactions(ctx context.Context, nv NetworkVersion, heightRange shared.HeightRange, batchLimit uint64, silent bool) ([]shared.Transaction, error)
@@ -83,22 +74,6 @@ func NewClient(storeEng store.DataStore, logger *zap.Logger) *Client {
 func (hc *Client) LinkSender(sender TaskSender) {
 	hc.sender = sender
 }
-
-func (hc *Client) GetAccounts(ctx context.Context, nv NetworkVersion) {}
-
-func (hc *Client) GetAccount(ctx context.Context, nv NetworkVersion) {}
-
-func (hc *Client) GetCurrentHeight(ctx context.Context, nv NetworkVersion) {}
-
-func (hc *Client) GetCurrentBlock(ctx context.Context, nv NetworkVersion) {}
-
-func (hc *Client) GetBlock(ctx context.Context, nv NetworkVersion, id string) {}
-
-func (hc *Client) GetBlocks(ctx context.Context, nv NetworkVersion) {}
-
-func (hc *Client) GetBlockTimes(ctx context.Context, nv NetworkVersion) {}
-
-func (hc *Client) GetBlockTimesInterval(ctx context.Context, nv NetworkVersion) {}
 
 func (hc *Client) GetTransaction(ctx context.Context, nv NetworkVersion, id string) ([]shared.Transaction, error) {
 	return hc.GetTransactions(ctx, nv, shared.HeightRange{Hash: id}, 1, false)
@@ -462,12 +437,14 @@ func (hc *Client) CheckMissingTransactions(ctx context.Context, nv NetworkVersio
 	return missingBlocks, missingTransactions, err
 }
 
+// GetRunningTransactions gets running transactions
 func (hc *Client) GetRunningTransactions(ctx context.Context) (run []Run, err error) {
 	out := hc.runner.GetRunning()
 	return out.Run, out.Err
 }
 
-// GetMissingTransactions gets missing transactions for givent height range using CheckMissingTransactions
+// GetMissingTransactions gets missing transactions for given height range using CheckMissingTransactions.
+// This may run very very long (aka synchronize entire chain). For that kind of operations async parameter got added and runner was created.
 func (hc *Client) GetMissingTransactions(ctx context.Context, nv NetworkVersion, heightRange shared.HeightRange, window uint64, async bool, force bool) (run *Run, err error) {
 
 	if !async {
@@ -494,6 +471,7 @@ func (hc *Client) GetMissingTransactions(ctx context.Context, nv NetworkVersion,
 
 }
 
+// getMissingTransactions scrape missing transactions based on height
 func (hc *Client) getMissingTransactions(ctx context.Context, nv NetworkVersion, heightRange shared.HeightRange, window uint64, progress *Run) (err error) {
 
 	timer := metrics.NewTimer(callDurationGetMissing)

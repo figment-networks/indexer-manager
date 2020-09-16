@@ -9,16 +9,22 @@ import (
 	shared "github.com/figment-networks/cosmos-indexer/structs"
 )
 
+// Progresser is interface that allows to report progress
 type Progresser interface {
 	Report(done shared.HeightRange, duration time.Duration, err []error, finished bool)
 }
 
+// Runner is a runner for async long running process.
+//
+// Sometimes there is a need to run process asynchronously.
+// Runner serves as a simple manager for NetworkVersion pairs
 type Runner struct {
 	runs map[NetworkVersion][]*Run
 	in   chan RunReq
 	out  chan chan ReqOut
 }
 
+// NewRunner is Runner constructor
 func NewRunner() *Runner {
 	return &Runner{
 		in:   make(chan RunReq, 2),
@@ -38,6 +44,7 @@ type RunResp struct {
 	Err   error
 }
 
+// RunReq async task structure
 type RunReq struct {
 	Kind        string //Type
 	NV          NetworkVersion
@@ -47,6 +54,7 @@ type RunReq struct {
 	Resp  chan RunResp
 }
 
+// StartProcess starts task waiting until task will be started then return it's reference.
 func (r *Runner) StartProcess(nv NetworkVersion, heightRange shared.HeightRange, force bool) (bool, *Run, error) {
 	resp := make(chan RunResp, 1)
 	defer close(resp)
@@ -55,6 +63,7 @@ func (r *Runner) StartProcess(nv NetworkVersion, heightRange shared.HeightRange,
 	return response.IsNew, response.Run, response.Err
 }
 
+// StopProcess stops task
 func (r *Runner) StopProcess(nv NetworkVersion, heightRange shared.HeightRange) error {
 	resp := make(chan RunResp, 1)
 	defer close(resp)
@@ -113,7 +122,7 @@ func (r *Runner) Run() {
 					continue
 				}
 
-				rReq.Resp <- RunResp{IsNew: false, Run: nil, Err: errors.New("error occured")}
+				rReq.Resp <- RunResp{IsNew: false, Run: nil, Err: errors.New("error occurred")}
 			} else if rReq.Kind == "stop" {
 				currentlyRunning, ok := r.checkExisting(rReq)
 				if ok {
@@ -162,12 +171,13 @@ func (r *Runner) checkExisting(req RunReq) (currentlyRunning *Run, ok bool) {
 			return currentlyRunning, false
 		}
 
-		// TODO(lukanus): support other ranges (split), this is just optimisation
+		// TODO(lukanus): support other ranges (split), this is just optimization
 
 	}
 	return nil, true
 }
 
+// Run is process handler
 type Run struct {
 	sync.Mutex `json:"-"`
 
@@ -186,6 +196,7 @@ type Run struct {
 	LastProgressTime time.Time `json:"last_progress_time"`
 }
 
+// NewRun is Run constructor
 func NewRun(ctx context.Context, nv NetworkVersion, heightRange shared.HeightRange) *Run {
 	return &Run{
 		Ctx:         ctx,
@@ -195,6 +206,7 @@ func NewRun(ctx context.Context, nv NetworkVersion, heightRange shared.HeightRan
 	}
 }
 
+// Report reports progress of certain process
 func (r *Run) Report(done shared.HeightRange, duration time.Duration, err []error, finished bool) {
 	r.Lock()
 	defer r.Unlock()
@@ -215,6 +227,7 @@ func (r *Run) Report(done shared.HeightRange, duration time.Duration, err []erro
 	}
 }
 
+// Stop stops.
 func (r *Run) Stop() {
 	r.Lock()
 	defer r.Unlock()
@@ -224,6 +237,7 @@ func (r *Run) Stop() {
 	r.FinishTime = time.Now()
 }
 
+// RunProgress info
 type RunProgress struct {
 	Done   shared.HeightRange `json:"done"`
 	D      time.Duration      `json:"duration"`
