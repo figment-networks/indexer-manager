@@ -23,6 +23,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+// TxLogError Error message
 type TxLogError struct {
 	Codespace string  `json:"codespace"`
 	Code      float64 `json:"code"`
@@ -133,6 +134,7 @@ func (c *Client) SearchTx(ctx context.Context, r structs.HeightRange, blocks map
 	return
 }
 
+// transform raw data from cosmos into transaction format with augmentation from blocks
 func rawToTransaction(ctx context.Context, c *Client, in []TxResponse, blocks map[uint64]shared.Block, out chan cStruct.OutResp, logger *zap.Logger, cdc *codec.Codec) error {
 	readr := strings.NewReader("")
 	dec := json.NewDecoder(readr)

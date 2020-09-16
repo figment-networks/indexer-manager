@@ -13,7 +13,7 @@ import (
 	"google.golang.org/grpc"
 )
 
-// ConnectGRPCRunner
+// ConnectGRPCRunner  GRPC Runner interface
 type ConnectGRPCRunner interface {
 	Connect(ctx context.Context, stream *structs.StreamAccess) error
 	Run(ctx context.Context, logger *zap.Logger, stream *structs.StreamAccess)
@@ -81,7 +81,7 @@ func (c *Client) Run(ctx context.Context, logger *zap.Logger, stream *structs.St
 		return
 	}
 
-	logger.Info("[GRPC] Sucessfully Dialed ", zap.Stringer("id", id), zap.String("address", connectedTo))
+	logger.Info("[GRPC] Successfully Dialed ", zap.Stringer("id", id), zap.String("address", connectedTo))
 
 	receiverClosed := make(chan error)
 
@@ -161,8 +161,6 @@ CONTROLRPC:
 
 // Recv listener for stream messages
 func Recv(id uuid.UUID, logger *zap.Logger, stream indexer.IndexerService_TaskRPCClient, internalStream *structs.StreamAccess, pingCh chan<- structs.TaskResponse, finishCh chan error) {
-
-	//	log.Printf("Started receive %s", id.String())
 	defer close(finishCh)
 	for {
 		in, err := stream.Recv()

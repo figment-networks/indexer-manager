@@ -19,6 +19,7 @@ type Address struct {
 	Address  string
 }
 
+// WorkerConnections is connection controller for worker
 type WorkerConnections struct {
 	network                 string
 	version                 string
@@ -28,6 +29,7 @@ type WorkerConnections struct {
 	managerAddressesLock    sync.RWMutex
 }
 
+// NewWorkerConnections is WorkerConnections constructor
 func NewWorkerConnections(id, address, network, version string) *WorkerConnections {
 	return &WorkerConnections{
 		network:                 network,
@@ -38,6 +40,7 @@ func NewWorkerConnections(id, address, network, version string) *WorkerConnectio
 	}
 }
 
+// AddManager dynamically adds manager to the list
 func (wc *WorkerConnections) AddManager(managerAddress string) {
 	wc.managerAddressesLock.Lock()
 	defer wc.managerAddressesLock.Unlock()
@@ -49,12 +52,14 @@ func (wc *WorkerConnections) AddManager(managerAddress string) {
 	}
 }
 
+// RemoveManager dynamically removes manager to the list
 func (wc *WorkerConnections) RemoveManager(managerAddress string) {
 	wc.managerAddressesLock.Lock()
 	defer wc.managerAddressesLock.Unlock()
 	delete(wc.managerAddresses, managerAddress)
 }
 
+// Run controls the registration of worker in manager. Every tick it sends it's identity (with address and network type) to every configured address.
 func (wc *WorkerConnections) Run(ctx context.Context, logger *zap.Logger, dur time.Duration) {
 	defer logger.Sync()
 

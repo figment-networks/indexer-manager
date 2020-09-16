@@ -6,12 +6,14 @@ import (
 	"github.com/figment-networks/cosmos-indexer/structs"
 )
 
+// SimpleBlockCache simple in memory block cache to store latest blocks
 type SimpleBlockCache struct {
 	space  map[uint64]structs.Block
 	blocks chan *structs.Block
 	l      sync.RWMutex
 }
 
+// NewSimpleBlockCache a SimpleBlockCache constructor
 func NewSimpleBlockCache(cap int) *SimpleBlockCache {
 	return &SimpleBlockCache{
 		space:  make(map[uint64]structs.Block),
@@ -19,6 +21,7 @@ func NewSimpleBlockCache(cap int) *SimpleBlockCache {
 	}
 }
 
+// Add blocks to the cache (thread safe)
 func (sbc *SimpleBlockCache) Add(bl structs.Block) {
 	sbc.l.Lock()
 	defer sbc.l.Unlock()
@@ -41,6 +44,7 @@ func (sbc *SimpleBlockCache) Add(bl structs.Block) {
 
 }
 
+// Get and check block of given height (thread safe)
 func (sbc *SimpleBlockCache) Get(height uint64) (bl structs.Block, ok bool) {
 	sbc.l.RLock()
 	defer sbc.l.RUnlock()

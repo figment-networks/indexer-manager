@@ -23,11 +23,12 @@ const (
 	numtxs = EXCLUDED.numtxs`
 )
 
+// StoreBlock appends data to buffer
 func (d *Driver) StoreBlock(bl structs.BlockWithMeta) error {
 	select {
 	case d.blBuff <- bl:
 	default:
-		if err := flushB(context.Background(), d); err != nil {
+		if err := flushBlocks(context.Background(), d); err != nil {
 			return err
 		}
 		d.blBuff <- bl
@@ -35,7 +36,8 @@ func (d *Driver) StoreBlock(bl structs.BlockWithMeta) error {
 	return nil
 }
 
-func flushB(ctx context.Context, d *Driver) error {
+// flush buffer of blocks into database
+func flushBlocks(ctx context.Context, d *Driver) error {
 
 	qBuilder := strings.Builder{}
 	qBuilder.WriteString(insertHead)
@@ -121,6 +123,7 @@ READ_ALL:
 	return tx.Commit()
 }
 
+// GetLatestBlock gets latest block
 func (d *Driver) GetLatestBlock(ctx context.Context, blx structs.BlockWithMeta) (out structs.Block, err error) {
 	returnBlx := structs.Block{}
 
@@ -141,6 +144,7 @@ type orderPair struct {
 	PreHeight uint64
 }
 
+// BlockContinuityCheck check data consistency between given ranges in network / chain
 func (d *Driver) BlockContinuityCheck(ctx context.Context, blx structs.BlockWithMeta, startHeight, endHeight uint64) ([][2]uint64, error) {
 	pairs := [][2]uint64{}
 
@@ -204,6 +208,7 @@ func (d *Driver) BlockContinuityCheck(ctx context.Context, blx structs.BlockWith
 	return pairs, nil
 }
 
+// BlockTransactionCheck check if every block has correct, corresponding number of transactions
 func (d *Driver) BlockTransactionCheck(ctx context.Context, blx structs.BlockWithMeta, startHeight, endHeight uint64) ([]uint64, error) {
 	q := `SELECT t.height, count(t.hash) AS c, b.numtxs
 	FROM transaction_events AS t

@@ -1,3 +1,4 @@
+// Package GRPC incorporate GRPC interface of worker allows it to accept new streams and forward messages
 package grpc
 
 import (
@@ -10,12 +11,14 @@ import (
 	cStructs "github.com/figment-networks/cosmos-indexer/worker/connectivity/structs"
 )
 
+// IndexerServer is implemantation of GRPC IndexerServiceServer
 type IndexerServer struct {
 	indexer.UnimplementedIndexerServiceServer
 	client cStructs.IndexerClienter
 	logger *zap.Logger
 }
 
+// NewIndexerServer if IndexerServer constructor
 func NewIndexerServer(client cStructs.IndexerClienter, logger *zap.Logger) *IndexerServer {
 	return &IndexerServer{
 		client: client,
@@ -23,6 +26,8 @@ func NewIndexerServer(client cStructs.IndexerClienter, logger *zap.Logger) *Inde
 	}
 }
 
+// TaskRPC is fullfilment of TaskRPC endpoint from grpc.
+// it receives new stream requests and creates the second stream, afterwards just controls incoming mesasges
 func (is *IndexerServer) TaskRPC(taskStream indexer.IndexerService_TaskRPCServer) error {
 
 	ctx := taskStream.Context()
@@ -75,6 +80,7 @@ func (is *IndexerServer) TaskRPC(taskStream indexer.IndexerService_TaskRPCServer
 
 		uid, err := uuid.Parse(in.Id)
 
+		// PING type support on top of the default implementation.
 		if in.Type == "PING" {
 			err := stream.Send(cStructs.TaskResponse{
 				Id:   uid,
@@ -95,6 +101,7 @@ func (is *IndexerServer) TaskRPC(taskStream indexer.IndexerService_TaskRPCServer
 
 }
 
+// Send pairs outgoing messages, with proper stream. It shoud run in separate goroutine than TaskRPC
 func Send(taskStream indexer.IndexerService_TaskRPCServer, accessCh *cStructs.StreamAccess, logger *zap.Logger, receiverClosed chan error) {
 	logger.Debug("[GRPC] Send started ")
 	defer logger.Debug("[GRPC] Send finished ")

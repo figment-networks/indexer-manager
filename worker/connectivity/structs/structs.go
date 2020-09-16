@@ -9,34 +9,7 @@ import (
 	"github.com/google/uuid"
 )
 
-var TaskResponseChanPool = NewtaskResponsePool(40)
-
-type taskResponsePool struct {
-	pool chan chan TaskResponse
-}
-
-func NewtaskResponsePool(size int) *taskResponsePool {
-	return &taskResponsePool{make(chan chan TaskResponse, size)}
-}
-
-func (tr *taskResponsePool) Get() chan TaskResponse {
-	select {
-	case t := <-tr.pool:
-		return t
-	default:
-	}
-
-	return make(chan TaskResponse, 40)
-}
-
-func (tr *taskResponsePool) Put(t chan TaskResponse) {
-	select {
-	case tr.pool <- t:
-	default:
-		close(t)
-	}
-}
-
+// StreamState the state of stream ;D
 type StreamState int
 
 const (
@@ -45,6 +18,10 @@ const (
 	StreamOffline
 )
 
+// StreamAccess creates a proxy between code and transport level.
+// The extra layer serves a function of access manager.
+// Requests and Responses are processed by different goroutines, that doesn't need to know about connection state.
+// This code prevents sending messages on closed channels after connection breakage.
 type StreamAccess struct {
 	Finish           chan bool
 	State            StreamState
@@ -56,6 +33,7 @@ type StreamAccess struct {
 	reqLock         sync.RWMutex
 }
 
+// NewStreamAccess is StreamAccess constructor
 func NewStreamAccess() *StreamAccess {
 
 	responsesCh := TaskResponseChanPool.Get()
@@ -69,6 +47,7 @@ func NewStreamAccess() *StreamAccess {
 	}
 }
 
+// Send sends TaskResponse back to manager (thread safe)
 func (sa *StreamAccess) Send(tr TaskResponse) error {
 	sa.respLock.RLock()
 	defer sa.respLock.RUnlock()
@@ -82,6 +61,7 @@ func (sa *StreamAccess) Send(tr TaskResponse) error {
 
 }
 
+// Req receive TaskRequest (thread safe)
 func (sa *StreamAccess) Req(tr TaskRequest) error {
 	sa.reqLock.RLock()
 	defer sa.reqLock.RUnlock()
@@ -93,6 +73,7 @@ func (sa *StreamAccess) Req(tr TaskRequest) error {
 	return nil
 }
 
+// Close is closing access stream  (thread safe)
 func (sa *StreamAccess) Close() error {
 	sa.reqLock.Lock()
 	sa.respLock.RLock()
@@ -108,6 +89,7 @@ func (sa *StreamAccess) Close() error {
 	return nil
 }
 
+// OutResp is enriched response format used internally in workers
 type OutResp struct {
 	ID      uuid.UUID
 	Type    string
@@ -115,16 +97,19 @@ type OutResp struct {
 	Error   error
 }
 
+// TaskRequest is the incoming request
 type TaskRequest struct {
 	Id      uuid.UUID
 	Type    string
 	Payload json.RawMessage
 }
 
+// TaskError is basic error format
 type TaskError struct {
 	Msg string
 }
 
+// TaskResponse is task ... response :)
 type TaskResponse struct {
 	Version string
 	Id      uuid.UUID
@@ -135,6 +120,7 @@ type TaskResponse struct {
 	Payload json.RawMessage
 }
 
+// IndexerClienter is a client interface
 type IndexerClienter interface {
 	RegisterStream(ctx context.Context, stream *StreamAccess) error
 	CloseStream(ctx context.Context, streamID uuid.UUID) error

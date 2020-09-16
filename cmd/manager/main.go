@@ -45,6 +45,7 @@ func init() {
 
 func main() {
 	ctx := context.Background()
+
 	// Initialize configuration
 	cfg, err := initConfig(configFlags.configPath)
 	if err != nil {
@@ -59,6 +60,7 @@ func main() {
 
 	defer logger.Sync()
 
+	// setup metrics
 	prom := prometheusmetrics.New()
 	err = metrics.AddEngine(prom)
 	if err != nil {
@@ -69,6 +71,7 @@ func main() {
 		logger.Error(err)
 	}
 
+	// connect to database
 	logger.Info("[DB] Connecting to database...")
 	db, err := sql.Open("postgres", cfg.DatabaseURL)
 	if err != nil {
@@ -83,13 +86,15 @@ func main() {
 	logger.Info("[DB] Ping successfull...")
 	defer db.Close()
 
-	pgsqlDriver := postgres.New(ctx, db)
+	pgsqlDriver := postgres.NewDriver(ctx, db)
 	managerStore := store.New(pgsqlDriver)
 	go managerStore.Run(ctx, time.Second*5)
 
+	// Initialise manager
 	mID, _ := uuid.NewRandom()
 	connManager := connectivity.NewManager(mID.String(), logger.GetLogger())
 
+	// setup grpc transport
 	grpcCli := grpcTransport.NewClient()
 	connManager.AddTransport(grpcCli)
 
@@ -174,6 +179,7 @@ func runHTTP(s *http.Server, address string, logger *zap.Logger, exit chan<- str
 	exit <- "http"
 }
 
+// attachHealthCheck basic healthcheck with basic simple readiness endpoint
 func attachHealthCheck(ctx context.Context, mux *http.ServeMux, db *sql.DB) {
 
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {

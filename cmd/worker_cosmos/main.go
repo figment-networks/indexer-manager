@@ -56,6 +56,7 @@ func main() {
 	}
 	defer logger.Sync()
 
+	// Initialize metrics
 	prom := prometheusmetrics.New()
 	err = metrics.AddEngine(prom)
 	if err != nil {
@@ -92,7 +93,7 @@ func main() {
 	grpcServer := grpc.NewServer()
 
 	// 33  per second is < 2000 minute
-	workerClient := cli.NewIndexerClient(ctx, logger.GetLogger(), cfg.TendermintRPCAddr, cfg.DatahubKey, uint64(cfg.BigPage), uint64(cfg.MaximumHeightsToGet), 33)
+	workerClient := cli.NewIndexerClient(ctx, logger.GetLogger(), cfg.TendermintRPCAddr, cfg.DatahubKey, uint64(cfg.BigPage), uint64(cfg.MaximumHeightsToGet), int(cfg.RequestsPerSecond))
 
 	worker := grpcIndexer.NewIndexerServer(workerClient, logger.GetLogger())
 	grpcProtoIndexer.RegisterIndexerServiceServer(grpcServer, worker)
@@ -126,6 +127,7 @@ RUN_LOOP:
 			s.Shutdown(ctx)
 			break RUN_LOOP
 		case k := <-exit:
+			cancel()
 			if k == "grpc" { // (lukanus): when grpc is finished, stop http and vice versa
 				s.Shutdown(ctx)
 			} else {

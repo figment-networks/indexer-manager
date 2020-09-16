@@ -17,11 +17,12 @@ import (
 	"github.com/lib/pq"
 )
 
+// StoreTransaction adds transaction to storage buffer
 func (d *Driver) StoreTransaction(tx structs.TransactionWithMeta) error {
 	select {
 	case d.txBuff <- tx:
 	default:
-		if err := flushTx(context.Background(), d); err != nil {
+		if err := flushTransactions(context.Background(), d); err != nil {
 			return err
 		}
 		d.txBuff <- tx
@@ -29,6 +30,7 @@ func (d *Driver) StoreTransaction(tx structs.TransactionWithMeta) error {
 	return nil
 }
 
+// StoreTransactions adds transactions to storage buffer
 func (d *Driver) StoreTransactions(txs []structs.TransactionWithMeta) error {
 	for _, t := range txs {
 		if err := d.StoreTransaction(t); err != nil {
@@ -54,7 +56,8 @@ const (
 	fee = EXCLUDED.fee`
 )
 
-func flushTx(ctx context.Context, d *Driver) error {
+// flushTransactions persist buffer into postgress
+func flushTransactions(ctx context.Context, d *Driver) error {
 
 	buff := &bytes.Buffer{}
 	enc := json.NewEncoder(buff)
@@ -231,6 +234,7 @@ func uniqueEntry(in string, out []string) []string {
 	return append(out, in)
 }
 
+// GetTransactions gets transactions based on given criteria the order is forced to be time DESC
 func (d *Driver) GetTransactions(ctx context.Context, tsearch params.TransactionSearch) (txs []structs.Transaction, err error) {
 	var i = 1
 
@@ -340,7 +344,6 @@ func (d *Driver) GetTransactions(ctx context.Context, tsearch params.Transaction
 	}
 
 	a := qBuilder.String()
-	//log.Printf("DEBUG QUERY: %s %+v ", a, data)
 	rows, err := d.db.QueryContext(ctx, a, data...)
 	switch {
 	case err == sql.ErrNoRows:
@@ -362,6 +365,7 @@ func (d *Driver) GetTransactions(ctx context.Context, tsearch params.Transaction
 	return txs, nil
 }
 
+// GetLatestTransaction gets latest transaction from database
 func (d *Driver) GetLatestTransaction(ctx context.Context, in structs.TransactionWithMeta) (out structs.Transaction, err error) {
 	tx := structs.Transaction{}
 

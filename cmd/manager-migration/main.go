@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 
 	"github.com/figment-networks/cosmos-indexer/cmd/manager-migration/config"
-	"github.com/golang-migrate/migrate"
+	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 )
@@ -53,9 +53,9 @@ func main() {
 
 	if configFlags.version > 0 {
 		log.Println("Migrating to version: ", configFlags.version)
-		err = MigrateTo(srcPath, cfg.DatabaseURL, configFlags.version)
+		err = migrateTo(srcPath, cfg.DatabaseURL, configFlags.version)
 	} else {
-		err = RunMigrations(srcPath, cfg.DatabaseURL)
+		err = runMigrations(srcPath, cfg.DatabaseURL)
 	}
 
 	if err != nil {
@@ -84,7 +84,7 @@ func initConfig(path string) (config.Config, error) {
 	return *cfg, nil
 }
 
-func RunMigrations(srcPath, dbURL string) error {
+func runMigrations(srcPath, dbURL string) error {
 	m, err := migrate.New(srcPath, dbURL)
 	if err != nil {
 		return err
@@ -95,7 +95,7 @@ func RunMigrations(srcPath, dbURL string) error {
 	return m.Up()
 }
 
-func MigrateTo(srcPath, dbURL string, version uint) error {
+func migrateTo(srcPath, dbURL string, version uint) error {
 	m, err := migrate.New(srcPath, dbURL)
 	if err != nil {
 		return err

@@ -28,6 +28,7 @@ var (
 	getBlockDuration       *metrics.GroupObserver
 )
 
+// IndexerClient is implementation of a client (main worker code)
 type IndexerClient struct {
 	cosmosEndpoint string
 	cosmosKey      string
@@ -42,6 +43,7 @@ type IndexerClient struct {
 	maximumHeightsToGet uint64
 }
 
+// NewIndexerClient is IndexerClient constructor
 func NewIndexerClient(ctx context.Context, logger *zap.Logger, cosmosEndpoint, cosmosKey string, bigPage, maximumHeightsToGet uint64, reqPerSecLimit int) *IndexerClient {
 	getTransactionDuration = endpointDuration.WithLabels("getTransactions")
 	getLatestDuration = endpointDuration.WithLabels("getLatest")
@@ -59,6 +61,7 @@ func NewIndexerClient(ctx context.Context, logger *zap.Logger, cosmosEndpoint, c
 	}
 }
 
+// CloseStream removes stream from worker/client
 func (ic *IndexerClient) CloseStream(ctx context.Context, streamID uuid.UUID) error {
 	ic.sLock.Lock()
 	defer ic.sLock.Unlock()
@@ -69,6 +72,7 @@ func (ic *IndexerClient) CloseStream(ctx context.Context, streamID uuid.UUID) er
 	return nil
 }
 
+// RegisterStream adds new listeners to the streams - currently fixed number per stream
 func (ic *IndexerClient) RegisterStream(ctx context.Context, stream *cStructs.StreamAccess) error {
 	ic.logger.Debug("[COSMOS-CLIENT] Register Stream", zap.Stringer("streamID", stream.StreamID))
 	newStreamsMetric.WithLabels().Inc()
@@ -85,8 +89,8 @@ func (ic *IndexerClient) RegisterStream(ctx context.Context, stream *cStructs.St
 	return nil
 }
 
+// Run listens on the stream events (new tasks)
 func (ic *IndexerClient) Run(ctx context.Context, client *api.Client, stream *cStructs.StreamAccess) {
-
 	for {
 		select {
 		case <-ctx.Done():
@@ -107,7 +111,7 @@ func (ic *IndexerClient) Run(ctx context.Context, client *api.Client, stream *cS
 			default:
 				stream.Send(cStructs.TaskResponse{
 					Id:    taskRequest.Id,
-					Error: cStructs.TaskError{"There is no such handler " + taskRequest.Type},
+					Error: cStructs.TaskError{Msg: "There is no such handler " + taskRequest.Type},
 					Final: true,
 				})
 			}
@@ -116,6 +120,8 @@ func (ic *IndexerClient) Run(ctx context.Context, client *api.Client, stream *cS
 	}
 }
 
+// GetTransactions gets new transactions and blocks from cosmos for given range
+// it slice requests for batch up to the `bigPage` count
 func (ic *IndexerClient) GetTransactions(ctx context.Context, tr cStructs.TaskRequest, stream *cStructs.StreamAccess, client *api.Client) {
 
 	timer := metrics.NewTimer(getTransactionDuration)
@@ -190,6 +196,7 @@ func (ic *IndexerClient) GetTransactions(ctx context.Context, tr cStructs.TaskRe
 	}
 }
 
+// GetBlock gets block
 func (ic *IndexerClient) GetBlock(ctx context.Context, tr cStructs.TaskRequest, stream *cStructs.StreamAccess, client *api.Client) {
 	timer := metrics.NewTimer(getBlockDuration)
 	defer timer.ObserveDuration()
@@ -230,6 +237,8 @@ func (ic *IndexerClient) GetBlock(ctx context.Context, tr cStructs.TaskRequest, 
 	sendResp(ctx, tr.Id, out, ic.logger, stream, nil)
 }
 
+// GetLatest gets latest transactions and blocks.
+// It gets latest transaction, then diff it with
 func (ic *IndexerClient) GetLatest(ctx context.Context, tr cStructs.TaskRequest, stream *cStructs.StreamAccess, client *api.Client) {
 	timer := metrics.NewTimer(getLatestDuration)
 	defer timer.ObserveDuration()
@@ -251,25 +260,7 @@ func (ic *IndexerClient) GetLatest(ctx context.Context, tr cStructs.TaskRequest,
 	}
 
 	ic.logger.Debug("[COSMOS-CLIENT] Get last block ", zap.Any("block", block), zap.Any("in", ldr))
-	startingHeight := ldr.LastHeight
-
-	// (lukanus): When nothing is scraped we want to get only X number of last requests
-	if ldr.LastHeight == 0 {
-		lastX := block.Height - ic.maximumHeightsToGet
-		if lastX > 0 {
-			startingHeight = lastX
-		}
-	} else {
-		diff := block.Height - ldr.LastHeight
-		if diff > ic.maximumHeightsToGet {
-			if ic.maximumHeightsToGet > block.Height {
-				startingHeight = 0
-			} else {
-				startingHeight = block.Height - ic.maximumHeightsToGet
-			}
-
-		}
-	}
+	startingHeight := getStartingHeight(ldr.LastHeight, ic.maximumHeightsToGet, block.Height)
 
 	diff := block.Height - startingHeight
 	bigPages := uint64(math.Ceil(float64(diff) / float64(ic.bigPage)))
@@ -315,6 +306,31 @@ func (ic *IndexerClient) GetLatest(ctx context.Context, tr cStructs.TaskRequest,
 	}
 }
 
+// getStartingHeight - based current state
+func getStartingHeight(lastHeight, maximumHeightsToGet, blockHeightFromDB uint64) (startingHeight uint64) {
+	startingHeight = lastHeight
+
+	// (lukanus): When nothing is scraped we want to get only X number of last requests
+	if lastHeight == 0 {
+		lastX := blockHeightFromDB - maximumHeightsToGet
+		if lastX > 0 {
+			startingHeight = lastX
+		}
+	} else {
+		if maximumHeightsToGet < blockHeightFromDB-lastHeight {
+			if maximumHeightsToGet > blockHeightFromDB {
+				startingHeight = 0
+			} else {
+				startingHeight = blockHeightFromDB - maximumHeightsToGet
+			}
+
+		}
+	}
+
+	return startingHeight
+}
+
+// getRange gets given range of blocks and transactions
 func getRange(ctx context.Context, logger *zap.Logger, client *api.Client, hr structs.HeightRange, out chan cStructs.OutResp) error {
 	defer logger.Sync()
 
@@ -351,6 +367,7 @@ func getRange(ctx context.Context, logger *zap.Logger, client *api.Client, hr st
 			break
 		}
 	}
+
 	if len(errors) > 0 {
 		errString := ""
 		for _, err := range errors {
@@ -359,7 +376,6 @@ func getRange(ctx context.Context, logger *zap.Logger, client *api.Client, hr st
 		return fmt.Errorf("Errors Getting Blocks: - %s ", errString)
 	}
 
-	// send blocks after all the transaction were sent
 	for _, block := range blocksAll.Blocks {
 		out <- cStructs.OutResp{
 			Type:    "Block",
@@ -370,13 +386,12 @@ func getRange(ctx context.Context, logger *zap.Logger, client *api.Client, hr st
 	if blocksAll.NumTxs > 0 {
 		fin := make(chan string, 2)
 		defer close(fin)
+
 		toBeDone := int(math.Ceil(float64(blocksAll.NumTxs) / float64(page)))
 
 		logger.Debug("[COSMOS-CLIENT] Getting initial data ", zap.Uint64("all", blocksAll.NumTxs), zap.Int64("page", page), zap.Int("toBeDone", toBeDone))
-		if toBeDone > 0 {
-			for i := 0; i < toBeDone; i++ {
-				go client.SearchTx(ctx, hr, blocksAll.Blocks, out, i+1, page, fin)
-			}
+		for i := 0; i < toBeDone; i++ {
+			go client.SearchTx(ctx, hr, blocksAll.Blocks, out, i+1, page, fin)
 		}
 
 		var responses int
@@ -389,12 +404,12 @@ func getRange(ctx context.Context, logger *zap.Logger, client *api.Client, hr st
 				break
 			}
 		}
-
 	}
 
 	return nil
 }
 
+// sendResp sends responses to out channel preparing
 func sendResp(ctx context.Context, id uuid.UUID, out chan cStructs.OutResp, logger *zap.Logger, stream *cStructs.StreamAccess, fin chan bool) {
 	b := &bytes.Buffer{}
 	enc := json.NewEncoder(b)

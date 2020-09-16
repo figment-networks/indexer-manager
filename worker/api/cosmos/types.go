@@ -3,8 +3,6 @@ package cosmos
 import (
 	"bytes"
 	"encoding/json"
-
-	"github.com/google/uuid"
 )
 
 // TxResponse is result of querying for a tx
@@ -18,23 +16,18 @@ type TxResponse struct {
 	TxData string `json:"tx"`
 
 	All int64
-
-	TaskID TxID
 }
 
-type TxID struct {
-	RunID  uuid.UUID
-	TaskID uuid.UUID
-}
-
+// ResponseDeliverTx result
 type ResponseDeliverTx struct {
-	Log       string   `json:"log"`
-	GasWanted string   `json:"gasWanted"`
-	GasUsed   string   `json:"gasUsed"`
-	Tags      []TxTags `json:"tags"`
+	Log       string  `json:"log"`
+	GasWanted string  `json:"gasWanted"`
+	GasUsed   string  `json:"gasUsed"`
+	Tags      []TxTag `json:"tags"`
 }
 
-type TxTags struct {
+// TxTag is tag from cosmos
+type TxTag struct {
 	Key   string `json:"key"`
 	Value string `json:"value"`
 }
@@ -66,6 +59,7 @@ type Block struct {
 	Header BlockHeader `json:"header"`
 }
 
+// BlockHeader structures
 type BlockHeader struct {
 	Height  string `json:"height"`
 	ChainID string `json:"chain_id"`
@@ -79,18 +73,21 @@ type Error struct {
 	Data    string `json:"data"`
 }
 
-// Result of searching for txs
+// ResultTxSearch of searching for txs
 type ResultTxSearch struct {
 	Txs        []TxResponse `json:"txs"`
 	TotalCount string       `json:"total_count"`
 }
 
+// GetTxSearchResponse cosmos resoinse for search
 type GetTxSearchResponse struct {
 	ID     string         `json:"id"`
 	RPC    string         `json:"jsonrpc"`
 	Result ResultTxSearch `json:"result"`
 	Error  Error          `json:"error"`
 }
+
+// GetBlockResponse cosmos response from block
 type GetBlockResponse struct {
 	ID     string      `json:"id"`
 	RPC    string      `json:"jsonrpc"`
@@ -98,6 +95,7 @@ type GetBlockResponse struct {
 	Error  Error       `json:"error"`
 }
 
+// GetBlockchainResponse cosmos response from blockchain
 type GetBlockchainResponse struct {
 	ID     string           `json:"id"`
 	RPC    string           `json:"jsonrpc"`
@@ -136,6 +134,9 @@ type kvHolder struct {
 	Value string `json:"value"`
 }
 
+// UnmarshalJSON LogEvents into a different format,
+// to be able to parse it later more easily
+// thats fulfilment of json.Unmarshaler inferface
 func (lea *LogEventsAttributes) UnmarshalJSON(b []byte) error {
 
 	dec := json.NewDecoder(bytes.NewReader(b))

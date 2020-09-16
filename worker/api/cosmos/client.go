@@ -66,6 +66,7 @@ func makeCodec() *codec.Codec {
 	return cdc
 }
 
+// InitMetrics initialise metrics
 func InitMetrics() {
 	convertionDurationObserver = conversionDuration.WithLabels("conversion")
 	transactionConversionDuration = conversionDuration.WithLabels("transaction")

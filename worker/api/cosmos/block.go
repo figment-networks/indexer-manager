@@ -13,15 +13,19 @@ import (
 	"github.com/figment-networks/cosmos-indexer/structs"
 )
 
-type GetBlockParams struct {
-	Height uint64
-	Hash   string
-}
-
+// BlocksMap map of blocks to control block map
+// with extra summary of number of transactions
 type BlocksMap struct {
 	sync.Mutex
 	Blocks map[uint64]structs.Block
 	NumTxs uint64
+}
+
+// BlockErrorPair to wrap error response
+type BlockErrorPair struct {
+	Height uint64
+	Block  structs.Block
+	Err    error
 }
 
 // GetBlock fetches most recent block from chain
@@ -92,12 +96,7 @@ func (c Client) GetBlock(ctx context.Context, params structs.HeightHash) (block 
 	return block, nil
 }
 
-type BlockErrorPair struct {
-	Height uint64
-	Block  structs.Block
-	Err    error
-}
-
+// GetBlockAsync the async version of get block
 func (c Client) GetBlockAsync(ctx context.Context, in chan uint64, out chan<- BlockErrorPair) {
 
 	for height := range in {
