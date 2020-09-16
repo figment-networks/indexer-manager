@@ -178,34 +178,3 @@ func runHTTP(s *http.Server, address string, logger *zap.Logger, exit chan<- str
 	}
 	exit <- "http"
 }
-
-// attachHealthCheck basic healthcheck with basic simple readiness endpoint
-func attachHealthCheck(ctx context.Context, mux *http.ServeMux, db *sql.DB) {
-	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	})
-
-	mux.HandleFunc("/readiness", func(w http.ResponseWriter, r *http.Request) {
-		tCtx, cancel := context.WithTimeout(ctx, time.Second*3)
-		defer cancel()
-
-		t := time.Now()
-		err := db.PingContext(tCtx)
-		dur := time.Since(t)
-		status := "ok"
-		strErr := "null"
-		if err != nil {
-			status = "err"
-			strErr = `"` + err.Error() + `"`
-		}
-
-		fmt.Fprintf(w, `{"db": {"postgres": {"status": "%s" ,"time": "%s", "error": %s }}}`, status, dur.String(), strErr)
-
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-		} else {
-			w.WriteHeader(http.StatusOK)
-		}
-
-	})
-}
