@@ -122,11 +122,19 @@ ReadAll:
 	return tx.Commit()
 }
 
+const getLatestBlockQuery = `SELECT id, epoch, height, hash, time, numtxs
+							FROM public.blocks
+							WHERE
+								chain_id = $1 AND
+								network = $2
+							ORDER BY time DESC
+							LIMIT 1`
+
 // GetLatestBlock gets latest block
 func (d *Driver) GetLatestBlock(ctx context.Context, blx structs.BlockWithMeta) (out structs.Block, err error) {
 	returnBlx := structs.Block{}
 
-	row := d.db.QueryRowContext(ctx, "SELECT id, epoch, height, hash, time, numtxs FROM public.blocks WHERE chain_id = $1 AND network = $2 ORDER BY time DESC LIMIT 1", blx.ChainID, blx.Network)
+	row := d.db.QueryRowContext(ctx, getLatestBlockQuery, blx.ChainID, blx.Network)
 	if row == nil {
 		return out, params.ErrNotFound
 	}
@@ -143,13 +151,71 @@ type orderPair struct {
 	PreHeight uint64
 }
 
+const (
+	blockContinuityCheckLowerRangeQuery = `
+	SELECT height
+	FROM blocks
+	WHERE
+		chain_id = $1 AND
+		network = $2  AND
+		height >= $3  AND
+		height <= $4
+	ORDER BY height ASC
+	LIMIT 1`
+
+	blockContinuityCheckUpperRangeQuery = `
+	SELECT height
+	FROM blocks
+	WHERE
+		chain_id = $1 AND
+		network = $2  AND
+		height >= $3  AND
+		height <= $4
+	ORDER BY height DESC
+	LIMIT 1`
+
+	blockContinuityCheckPreviousBlockPresent = `
+	SELECT height, pre_height
+	FROM
+		(	SELECT
+				height,
+				lag(height) over (order by height) as pre_height
+			FROM blocks
+			WHERE
+				chain_id = $1 AND
+				network = $2 AND
+				height >= $3
+			ORDER BY height ASC
+		) AS ss
+	WHERE
+		height != pre_height+1;`
+
+	blockContinuityCheckPreviousBlockPresentRange = `
+	SELECT height, pre_height
+	FROM
+		(	SELECT
+				height,
+				lag(height) over (order by height) as pre_height
+			FROM blocks
+			WHERE
+				chain_id = $1 AND
+				network = $2 AND
+				height >= $3 AND
+				height <= $4
+			ORDER BY height ASC
+		) AS ss
+	WHERE height != pre_height+1;
+	`
+)
+
 // BlockContinuityCheck check data consistency between given ranges in network / chain
 func (d *Driver) BlockContinuityCheck(ctx context.Context, blx structs.BlockWithMeta, startHeight, endHeight uint64) ([][2]uint64, error) {
 	pairs := [][2]uint64{}
 
+	// get the range before and after (if applies)
 	if endHeight > 0 {
 		// start - X
-		row := d.db.QueryRowContext(ctx, "SELECT height FROM blocks WHERE chain_id = $1 AND network = $2  height >= $3 AND height <= $4 ORDER BY height ASC LIMIT 1", blx.ChainID, blx.Network, startHeight, endHeight)
+		row := d.db.QueryRowContext(ctx, blockContinuityCheckLowerRangeQuery, blx.ChainID, blx.Network, startHeight, endHeight)
 		var height uint64
 
 		if err := row.Scan(&height); err != nil {
@@ -163,7 +229,7 @@ func (d *Driver) BlockContinuityCheck(ctx context.Context, blx structs.BlockWith
 		}
 
 		//   X - end
-		row = d.db.QueryRowContext(ctx, "SELECT height FROM blocks WHERE chain_id = $1 AND network = $2 AND height >= $3 AND height <= $4 ORDER BY height DESC LIMIT 1", blx.ChainID, blx.Network, startHeight, endHeight)
+		row = d.db.QueryRowContext(ctx, blockContinuityCheckUpperRangeQuery, blx.ChainID, blx.Network, startHeight, endHeight)
 
 		if err := row.Scan(&height); err != nil {
 			if err == sql.ErrNoRows { // no record exists
@@ -182,9 +248,9 @@ func (d *Driver) BlockContinuityCheck(ctx context.Context, blx structs.BlockWith
 	)
 
 	if endHeight == 0 {
-		rows, err = d.db.QueryContext(ctx, "SELECT height, pre_height FROM (SELECT height, lag(height) over (order by height) as pre_height FROM blocks WHERE chain_id = $1 AND network = $2 AND height >= $3 ORDER BY height ASC) as ss WHERE height != pre_height+1;", blx.ChainID, blx.Network, startHeight)
+		rows, err = d.db.QueryContext(ctx, blockContinuityCheckPreviousBlockPresent, blx.ChainID, blx.Network, startHeight)
 	} else {
-		rows, err = d.db.QueryContext(ctx, "SELECT height, pre_height FROM (SELECT height, lag(height) over (order by height) as pre_height FROM blocks WHERE chain_id = $1 AND network = $2 AND height >= $3 AND height <= $4 ORDER BY height ASC) as ss WHERE height != pre_height+1;", blx.ChainID, blx.Network, startHeight, endHeight)
+		rows, err = d.db.QueryContext(ctx, blockContinuityCheckPreviousBlockPresentRange, blx.ChainID, blx.Network, startHeight, endHeight)
 	}
 
 	switch {
@@ -207,16 +273,22 @@ func (d *Driver) BlockContinuityCheck(ctx context.Context, blx structs.BlockWith
 	return pairs, nil
 }
 
-// BlockTransactionCheck check if every block has correct, corresponding number of transactions
-func (d *Driver) BlockTransactionCheck(ctx context.Context, blx structs.BlockWithMeta, startHeight, endHeight uint64) ([]uint64, error) {
-	q := `SELECT t.height, count(t.hash) AS c, b.numtxs
+const blockTransactionCheckQuery = `
+	SELECT t.height, count(t.hash) AS c, b.numtxs
 	FROM transaction_events AS t
 	LEFT JOIN blocks AS b ON (t.height = b.height)
-	WHERE t.chain_id = $1 AND t.network = $2 AND t.height >= $3 AND t.height <= $4
+	WHERE
+		t.chain_id = $1 AND
+		t.network = $2 AND
+		t.height >= $3 AND
+		t.height <= $4
 	GROUP BY t.height,b.numtxs
 	HAVING count(t.hash) != b.numtxs`
 
-	rows, err := d.db.QueryContext(ctx, q, blx.ChainID, blx.Network, startHeight, endHeight)
+// BlockTransactionCheck check if every block has correct, corresponding number of transactions
+func (d *Driver) BlockTransactionCheck(ctx context.Context, blx structs.BlockWithMeta, startHeight, endHeight uint64) ([]uint64, error) {
+
+	rows, err := d.db.QueryContext(ctx, blockTransactionCheckQuery, blx.ChainID, blx.Network, startHeight, endHeight)
 
 	switch {
 	case err == sql.ErrNoRows:

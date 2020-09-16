@@ -365,13 +365,22 @@ func (d *Driver) GetTransactions(ctx context.Context, tsearch params.Transaction
 	return txs, nil
 }
 
+const getLatestTransactionQuery = `SELECT id, version, epoch, height, hash, block_hash, time
+									FROM public.transaction_events
+									WHERE
+										chain_id = $1 AND
+										network = $2 AND
+										epoch = $3
+									ORDER BY time DESC
+									LIMIT 1`
+
 // GetLatestTransaction gets latest transaction from database
 func (d *Driver) GetLatestTransaction(ctx context.Context, in structs.TransactionWithMeta) (out structs.Transaction, err error) {
 	tx := structs.Transaction{}
 
 	d.Flush()
 
-	row := d.db.QueryRowContext(ctx, "SELECT id, version, epoch, height, hash, block_hash, time FROM public.transaction_events WHERE chain_id = $1 AND network = $2 AND epoch = $3 ORDER BY time DESC LIMIT 1", in.ChainID, in.Network, in.Transaction.Epoch)
+	row := d.db.QueryRowContext(ctx, getLatestTransactionQuery, in.ChainID, in.Network, in.Transaction.Epoch)
 	if row == nil {
 		return out, params.ErrNotFound
 	}
