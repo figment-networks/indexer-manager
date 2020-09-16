@@ -28,7 +28,6 @@ func init() {
 }
 
 func main() {
-
 	// Initialize configuration
 	cfg, err := initConfig(configFlags.configPath)
 	if err != nil {
@@ -41,7 +40,7 @@ func main() {
 	}
 	defer db.Close()
 
-	log.Println("getting current directory")
+	log.Println("Getting current directory")
 	dir, err := os.Getwd()
 	if err != nil {
 		log.Fatal(err)

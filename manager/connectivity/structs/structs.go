@@ -139,8 +139,6 @@ func (aw *Await) Send(tr *TaskResponse) (bool, error) {
 }
 
 func (aw *Await) Close() {
-
-	//	log.Println("CLOSING AWAIT")
 	aw.Lock()
 	defer aw.Unlock()
 	if aw.State != StreamOffline {
@@ -148,18 +146,16 @@ func (aw *Await) Close() {
 	}
 	aw.State = StreamOffline
 
-DRAIN:
+Drain:
 	for {
 		select {
 		case <-aw.Resp:
 		default:
-			break DRAIN
+			break Drain
 		}
 	}
 	close(aw.Resp)
 	aw.Resp = nil
-
-	//log.Println("CLOSED AWAIT")
 }
 
 type IndexerClienter interface {
@@ -236,16 +232,13 @@ func (sa *StreamAccess) Recv(tr *TaskResponse) error {
 
 	sa.respLock.RLock()
 	defer sa.respLock.RUnlock()
-	//	if sa.State != StreamOnline {
-	//		return ErrStreamNotOnline
-	//	}
 
 	sa.mapLock.Lock()
 	resAwait, ok := sa.ResponseMap[tr.ID]
 	sa.mapLock.Unlock()
 
 	if !ok {
-		return errors.New("No such requests registred")
+		return errors.New("No such requests registered")
 	}
 
 	all, err := resAwait.Send(tr)
@@ -267,7 +260,6 @@ func (sa *StreamAccess) Recv(tr *TaskResponse) error {
 }
 
 func (sa *StreamAccess) Req(tr TaskRequest, aw *Await) error {
-
 	sa.reqLock.RLock()
 	defer sa.reqLock.RUnlock()
 
@@ -285,7 +277,6 @@ func (sa *StreamAccess) Req(tr TaskRequest, aw *Await) error {
 }
 
 func (sa *StreamAccess) Ping(ctx context.Context) (time.Duration, error) {
-
 	resp := make(chan ClientResponse, 1) //(lukanus): this can be only closed after write
 
 	select {

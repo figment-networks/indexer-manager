@@ -38,7 +38,7 @@ type ResultBlock struct {
 	BlockMeta BlockMeta `json:"block_meta"`
 }
 
-// ResultBlock is result of fetching block
+// ResultBlockchain is result of fetching block
 type ResultBlockchain struct {
 	LastHeight string      `json:"last_height"`
 	BlockMetas []BlockMeta `json:"block_metas"`
@@ -143,7 +143,6 @@ type kvHolder struct {
 // to be able to parse it later more easily
 // thats fulfillment of json.Unmarshaler inferface
 func (lea *LogEventsAttributes) UnmarshalJSON(b []byte) error {
-
 	dec := json.NewDecoder(bytes.NewReader(b))
 	kc := &kvHolder{}
 	for dec.More() {

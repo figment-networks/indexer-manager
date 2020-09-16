@@ -30,7 +30,6 @@ type BlockErrorPair struct {
 
 // GetBlock fetches most recent block from chain
 func (c Client) GetBlock(ctx context.Context, params structs.HeightHash) (block structs.Block, er error) {
-
 	var ok bool
 	if params.Height != 0 {
 		block, ok = c.Sbc.Get(params.Height)
@@ -57,7 +56,7 @@ func (c Client) GetBlock(ctx context.Context, params structs.HeightHash) (block 
 	}
 	req.URL.RawQuery = q.Encode()
 
-	err = c.rateLimitter.Wait(ctx)
+	err = c.rateLimiter.Wait(ctx)
 	if err != nil {
 		return block, err
 	}
@@ -98,7 +97,6 @@ func (c Client) GetBlock(ctx context.Context, params structs.HeightHash) (block 
 
 // GetBlockAsync the async version of get block
 func (c Client) GetBlockAsync(ctx context.Context, in chan uint64, out chan<- BlockErrorPair) {
-
 	for height := range in {
 		req, err := http.NewRequest(http.MethodGet, c.baseURL+"/block", nil)
 		if err != nil {
@@ -118,7 +116,7 @@ func (c Client) GetBlockAsync(ctx context.Context, in chan uint64, out chan<- Bl
 		q.Add("height", strconv.FormatUint(height, 10))
 		req.URL.RawQuery = q.Encode()
 
-		err = c.rateLimitter.Wait(ctx)
+		err = c.rateLimiter.Wait(ctx)
 		if err != nil {
 			out <- BlockErrorPair{
 				Height: height,
@@ -201,7 +199,7 @@ func (c Client) GetBlocksMeta(ctx context.Context, params structs.HeightRange, b
 	}
 	req.URL.RawQuery = q.Encode()
 
-	err = c.rateLimitter.Wait(ctx)
+	err = c.rateLimiter.Wait(ctx)
 	if err != nil {
 		end <- err
 		return

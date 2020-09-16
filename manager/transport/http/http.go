@@ -70,7 +70,6 @@ func (hc *HubbleConnector) InsertTransactions(w http.ResponseWriter, req *http.R
 
 // GetTransactions is http handler for GetTransactions method
 func (hc *HubbleConnector) GetTransactions(w http.ResponseWriter, req *http.Request) {
-
 	strHeight := req.URL.Query().Get("height")
 	intHeight, _ := strconv.Atoi(strHeight)
 
@@ -114,7 +113,6 @@ func (hc *HubbleConnector) GetTransactions(w http.ResponseWriter, req *http.Requ
 
 // SearchTransactions is http handler for SearchTransactions method
 func (hc *HubbleConnector) SearchTransactions(w http.ResponseWriter, req *http.Request) {
-
 	ct := req.Header.Get("Content-Type")
 
 	network := ""
@@ -180,7 +178,6 @@ func (hc *HubbleConnector) SearchTransactions(w http.ResponseWriter, req *http.R
 
 // ScrapeLatest is http handler for ScrapeLatest method
 func (hc *HubbleConnector) ScrapeLatest(w http.ResponseWriter, req *http.Request) {
-
 	ct := req.Header.Get("Content-Type")
 
 	ldReq := &shared.LatestDataRequest{}
@@ -214,7 +211,6 @@ type MissingTransactionsResponse struct {
 
 // CheckMissingTransactions is http handler for CheckMissingTransactions method
 func (hc *HubbleConnector) CheckMissingTransactions(w http.ResponseWriter, req *http.Request) {
-
 	strHeight := req.URL.Query().Get("start_height")
 	intHeight, _ := strconv.ParseUint(strHeight, 10, 64)
 
@@ -245,7 +241,6 @@ func (hc *HubbleConnector) CheckMissingTransactions(w http.ResponseWriter, req *
 
 // GetRunningTransactions gets currently running transactions
 func (hc *HubbleConnector) GetRunningTransactions(w http.ResponseWriter, req *http.Request) {
-
 	run, err := hc.cli.GetRunningTransactions(req.Context())
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -262,7 +257,6 @@ func (hc *HubbleConnector) GetRunningTransactions(w http.ResponseWriter, req *ht
 
 // GetMissingTransactions is http handler for GetMissingTransactions method
 func (hc *HubbleConnector) GetMissingTransactions(w http.ResponseWriter, req *http.Request) {
-
 	nv := client.NetworkVersion{Network: "cosmos", Version: "0.0.1", ChainID: "cosmoshub-3"}
 
 	strHeight := req.URL.Query().Get("start_height")
@@ -310,7 +304,6 @@ func (hc *HubbleConnector) GetMissingTransactions(w http.ResponseWriter, req *ht
 
 // AttachToHandler attaches handlers to http server's mux
 func (hc *HubbleConnector) AttachToHandler(mux *http.ServeMux) {
-
 	mux.HandleFunc("/transactions", hc.GetTransactions)
 	mux.HandleFunc("/transactions/", hc.GetTransaction)
 	mux.HandleFunc("/transactions_search", hc.SearchTransactions)

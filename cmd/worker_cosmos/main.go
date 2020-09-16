@@ -42,7 +42,6 @@ func init() {
 }
 
 func main() {
-
 	ctx, cancel := context.WithCancel(context.Background())
 	// Initialize configuration
 	cfg, err := initConfig(configFlags.configPath)
@@ -118,14 +117,14 @@ func main() {
 	go runGRPC(grpcServer, cfg.Port, logger.GetLogger(), exit)
 	go runHTTP(s, cfg.HTTPPort, logger.GetLogger(), exit)
 
-RUN_LOOP:
+RunLoop:
 	for {
 		select {
 		case <-osSig:
 			cancel()
 			grpcServer.GracefulStop()
 			s.Shutdown(ctx)
-			break RUN_LOOP
+			break RunLoop
 		case k := <-exit:
 			cancel()
 			if k == "grpc" { // (lukanus): when grpc is finished, stop http and vice versa
@@ -133,7 +132,7 @@ RUN_LOOP:
 			} else {
 				grpcServer.GracefulStop()
 			}
-			break RUN_LOOP
+			break RunLoop
 		}
 	}
 

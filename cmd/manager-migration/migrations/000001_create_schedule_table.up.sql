@@ -4,7 +4,7 @@ CREATE TABLE IF NOT EXISTS schedule
 (
     id          uuid DEFAULT uuid_generate_v4(),
 
-    runID       uuid NOT NULL,
+    run_id       uuid NOT NULL,
 
     network     VARCHAR(100)  NOT NULL,
     chain_id    VARCHAR(100)  NOT NULL,
@@ -16,4 +16,4 @@ CREATE TABLE IF NOT EXISTS schedule
     PRIMARY KEY (id)
 );
 
-CREATE INDEX idx_sch_runID on schedule(runID);
+CREATE INDEX idx_sch_run_id on schedule(run_id);

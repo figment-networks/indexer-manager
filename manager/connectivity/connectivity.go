@@ -270,13 +270,13 @@ func (m *Manager) Send(trs []structs.TaskRequest) (*structs.Await, error) {
 		var err error
 		var failedID string
 		// (lukanus): if thats only one worker failure, try few times
-	RETRY_LOOP:
+	RetryLoop:
 		for i := 0; i < 3; i++ {
 			t.ID = uuids[requestNumber]
 			failedID, err = w.SendNext(t, resp)
 
 			if failedID == "" && err == nil {
-				break RETRY_LOOP
+				break RetryLoop
 			}
 
 			if !errors.Is(err, ErrNoWorkersAvailable) {
@@ -302,7 +302,7 @@ func (m *Manager) Send(trs []structs.TaskRequest) (*structs.Await, error) {
 					err = w.SendToWoker(failedID, t, resp)
 
 					if err == nil {
-						break RETRY_LOOP
+						break RetryLoop
 					}
 					log.Printf("Error Retrying: %s %+v ", failedID, err)
 				}

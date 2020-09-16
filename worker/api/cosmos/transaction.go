@@ -69,7 +69,7 @@ func (c *Client) SearchTx(ctx context.Context, r structs.HeightRange, blocks map
 
 	// (lukanus): do not block initial calls
 	if r.EndHeight != 0 && r.StartHeight != 0 {
-		err = c.rateLimitter.Wait(ctx)
+		err = c.rateLimiter.Wait(ctx)
 		if err != nil {
 			fin <- err.Error()
 			return

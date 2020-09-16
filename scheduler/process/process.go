@@ -18,7 +18,7 @@ type Runner interface {
 type Running struct {
 	Name string
 
-	CancelF context.CancelFunc
+	CancelFunc context.CancelFunc
 }
 
 type Scheduler struct {
@@ -35,18 +35,17 @@ func NewScheduler(logger *zap.Logger) *Scheduler {
 }
 
 func (s *Scheduler) Run(ctx context.Context, name string, d time.Duration, network, chainID, version string, r Runner) {
-
 	cCtx, cancel := context.WithCancel(ctx)
 	tckr := time.NewTicker(d)
 
 	s.runlock.Lock()
 	s.running[name] = Running{
-		Name:    name,
-		CancelF: cancel,
+		Name:       name,
+		CancelFunc: cancel,
 	}
 	s.runlock.Unlock()
 
-RUN_LOOP:
+RunLoop:
 	for {
 		select {
 		case <-tckr.C:
@@ -56,16 +55,16 @@ RUN_LOOP:
 				if errors.As(err, &rErr) {
 					if !rErr.IsRecoverable() {
 						tckr.Stop()
-						break RUN_LOOP
+						break RunLoop
 					}
 				}
 			}
 		case <-cCtx.Done():
 			tckr.Stop()
-			break RUN_LOOP
+			break RunLoop
 		case <-ctx.Done():
 			tckr.Stop()
-			break RUN_LOOP
+			break RunLoop
 		}
 	}
 
@@ -75,13 +74,11 @@ RUN_LOOP:
 }
 
 func (s *Scheduler) Stop(ctx context.Context, name string) {
-
 	s.runlock.Lock()
 	defer s.runlock.Unlock()
 
 	r, ok := s.running[name]
 	if ok {
-		r.CancelF()
+		r.CancelFunc()
 	}
-
 }

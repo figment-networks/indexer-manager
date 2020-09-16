@@ -24,8 +24,7 @@ func NewDriver(db *sql.DB) *Driver {
 }
 
 func (d *Driver) GetConfigs(ctx context.Context, runID uuid.UUID) (rcs []structures.RunConfig, err error) {
-
-	rows, err := d.db.QueryContext(ctx, "SELECT id, runID, network, chain_id, version, duration, kind FROM schedule WHERE runID = $1", runID)
+	rows, err := d.db.QueryContext(ctx, "SELECT id, run_id, network, chain_id, version, duration, kind FROM schedule WHERE run_id = $1", runID)
 	switch {
 	case err == sql.ErrNoRows:
 		return nil, params.ErrNotFound
@@ -47,8 +46,7 @@ func (d *Driver) GetConfigs(ctx context.Context, runID uuid.UUID) (rcs []structu
 }
 
 func (d *Driver) MarkRunning(ctx context.Context, runID, configID uuid.UUID) error {
-
-	res, err := d.db.ExecContext(ctx, "UPDATE schedule SET runID = $1 WHERE id = $2 ", runID, configID)
+	res, err := d.db.ExecContext(ctx, "UPDATE schedule SET run_id = $1 WHERE id = $2 ", runID, configID)
 	if err != nil {
 		return err
 	}
@@ -65,8 +63,7 @@ func (d *Driver) MarkRunning(ctx context.Context, runID, configID uuid.UUID) err
 }
 
 func (d *Driver) AddConfig(ctx context.Context, rc structures.RunConfig) (err error) {
-
-	row := d.db.QueryRowContext(ctx, "SELECT runID, duration FROM schedule WHERE kind = $1 AND version = $2 AND network = $3 AND chain_id = $4 ", rc.Kind, rc.Version, rc.Network, rc.ChainID)
+	row := d.db.QueryRowContext(ctx, "SELECT run_id, duration FROM schedule WHERE kind = $1 AND version = $2 AND network = $3 AND chain_id = $4 ", rc.Kind, rc.Version, rc.Network, rc.ChainID)
 
 	var rID uuid.UUID
 	var duration time.Duration
@@ -77,7 +74,7 @@ func (d *Driver) AddConfig(ctx context.Context, rc structures.RunConfig) (err er
 				return err
 			}
 
-			res, err := d.db.ExecContext(ctx, "INSERT INTO schedule (runID, network, version, chain_id, duration, kind) VALUES ($1, $2, $3, $4, $5, $6)", rc.RunID, rc.Network, rc.Version, rc.ChainID, rc.Duration, rc.Kind)
+			res, err := d.db.ExecContext(ctx, "INSERT INTO schedule (run_id, network, version, chain_id, duration, kind) VALUES ($1, $2, $3, $4, $5, $6)", rc.RunID, rc.Network, rc.Version, rc.ChainID, rc.Duration, rc.Kind)
 			if err != nil {
 				return err
 			}
@@ -95,7 +92,7 @@ func (d *Driver) AddConfig(ctx context.Context, rc structures.RunConfig) (err er
 		}
 
 		if (duration > 0 && duration != rc.Duration) || rc.RunID != rID {
-			res, err := d.db.ExecContext(ctx, "UPDATE schedule SET duration = $1, runID = $2  WHERE network = $3 AND version = $4 AND chain_id = $5 AND kind = $6", rc.Duration, rc.RunID, rc.Network, rc.Version, rc.ChainID, rc.Kind)
+			res, err := d.db.ExecContext(ctx, "UPDATE schedule SET duration = $1, run_id = $2  WHERE network = $3 AND version = $4 AND chain_id = $5 AND kind = $6", rc.Duration, rc.RunID, rc.Network, rc.Version, rc.ChainID, rc.Kind)
 			if err != nil {
 				return err
 			}

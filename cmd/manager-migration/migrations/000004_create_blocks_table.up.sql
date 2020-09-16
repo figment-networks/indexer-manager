@@ -1,5 +1,3 @@
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-
 CREATE TABLE IF NOT EXISTS blocks
 (
     id         uuid DEFAULT uuid_generate_v4(),

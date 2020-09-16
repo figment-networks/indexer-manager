@@ -136,14 +136,14 @@ func main() {
 
 	go runHTTP(s, cfg.Address, logger.GetLogger(), exit)
 
-RUN_LOOP:
+RunLoop:
 	for {
 		select {
 		case <-osSig:
 			s.Shutdown(ctx)
-			break RUN_LOOP
+			break RunLoop
 		case <-exit:
-			break RUN_LOOP
+			break RunLoop
 		}
 	}
 }
@@ -181,7 +181,6 @@ func runHTTP(s *http.Server, address string, logger *zap.Logger, exit chan<- str
 
 // attachHealthCheck basic healthcheck with basic simple readiness endpoint
 func attachHealthCheck(ctx context.Context, mux *http.ServeMux, db *sql.DB) {
-
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})

@@ -92,7 +92,7 @@ func (c *Client) Run(ctx context.Context, logger *zap.Logger, stream *structs.St
 
 	go Recv(id, logger, taskStream, stream, pingCh, receiverClosed)
 
-CONTROLRPC:
+ControlRPC:
 	for {
 		select {
 		case cT := <-stream.ClientControl:
@@ -125,10 +125,10 @@ CONTROLRPC:
 			delete(pings, resp.ID)
 		case <-ctx.Done():
 			logger.Debug("[GRPC] Context Done", zap.Stringer("id", id))
-			break CONTROLRPC
+			break ControlRPC
 		case <-receiverClosed:
 			logger.Debug("[GRPC] ReceiverClosed", zap.Stringer("id", id))
-			break CONTROLRPC
+			break ControlRPC
 		case req := <-stream.RequestListener:
 			//log.Printf("SENDING REQUEST %s  - %+v", id, req)
 			if err := taskStream.Send(&indexer.TaskRequest{
@@ -139,7 +139,7 @@ CONTROLRPC:
 			}); err != nil {
 				if err == io.EOF {
 					logger.Debug("[GRPC] Stream io.EOF", zap.Stringer("id", id))
-					break CONTROLRPC
+					break ControlRPC
 				}
 
 				logger.Error("[GRPC] Error sending TaskResponse", zap.Stringer("id", id), zap.Error(err))

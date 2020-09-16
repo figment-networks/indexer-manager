@@ -38,7 +38,6 @@ func (d *Driver) StoreBlock(bl structs.BlockWithMeta) error {
 
 // flush buffer of blocks into database
 func flushBlocks(ctx context.Context, d *Driver) error {
-
 	qBuilder := strings.Builder{}
 	qBuilder.WriteString(insertHead)
 
@@ -50,7 +49,7 @@ func flushBlocks(ctx context.Context, d *Driver) error {
 
 	va := d.blPool.Get()
 	defer d.blPool.Put(va)
-READ_ALL:
+ReadAll:
 	for {
 		select {
 		case block := <-d.blBuff:
@@ -97,10 +96,10 @@ READ_ALL:
 
 			// (lukanus): do not exceed alloc
 			if i == d.blPool.count-1 {
-				break READ_ALL
+				break ReadAll
 			}
 		default:
-			break READ_ALL
+			break ReadAll
 		}
 	}
 

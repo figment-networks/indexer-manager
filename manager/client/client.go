@@ -159,7 +159,7 @@ func (hc *Client) GetTransactions(ctx context.Context, nv NetworkVersion, height
 	dec := json.NewDecoder(buff)
 
 	var receivedFinals uint64
-WAIT_FOR_ALL_DATA:
+WaitForAllData:
 	for {
 		select {
 		case <-ctx.Done():
@@ -198,7 +198,7 @@ WAIT_FOR_ALL_DATA:
 
 			if receivedFinals == times {
 				hc.logger.Info("[Client] Received All for", zap.Any("request", req))
-				break WAIT_FOR_ALL_DATA
+				break WaitForAllData
 			}
 		}
 	}
@@ -320,7 +320,7 @@ func (hc *Client) ScrapeLatest(ctx context.Context, ldr shared.LatestDataRequest
 	dec := json.NewDecoder(buff)
 
 	ldResp = shared.LatestDataResponse{}
-WAIT_FOR_ALL_DATA:
+WaitForAllData:
 	for {
 		select {
 		case <-ctx.Done():
@@ -354,7 +354,7 @@ WAIT_FOR_ALL_DATA:
 			}
 
 			if response.Final {
-				break WAIT_FOR_ALL_DATA
+				break WaitForAllData
 			}
 		}
 	}
@@ -446,7 +446,6 @@ func (hc *Client) GetRunningTransactions(ctx context.Context) (run []Run, err er
 // GetMissingTransactions gets missing transactions for given height range using CheckMissingTransactions.
 // This may run very very long (aka synchronize entire chain). For that kind of operations async parameter got added and runner was created.
 func (hc *Client) GetMissingTransactions(ctx context.Context, nv NetworkVersion, heightRange shared.HeightRange, window uint64, async bool, force bool) (run *Run, err error) {
-
 	if !async {
 		return nil, hc.getMissingTransactions(ctx, nv, heightRange, window, nil)
 	}
@@ -473,7 +472,6 @@ func (hc *Client) GetMissingTransactions(ctx context.Context, nv NetworkVersion,
 
 // getMissingTransactions scrape missing transactions based on height
 func (hc *Client) getMissingTransactions(ctx context.Context, nv NetworkVersion, heightRange shared.HeightRange, window uint64, progress *Run) (err error) {
-
 	timer := metrics.NewTimer(callDurationGetMissing)
 	defer timer.ObserveDuration()
 
@@ -583,7 +581,6 @@ func getRanges(in []uint64) (ranges [][2]uint64) {
 
 // groupRanges Groups ranges to fit the window of X records
 func groupRanges(ranges [][2]uint64, window uint64) (out [][2]uint64) {
-
 	pregroup := [][2]uint64{}
 
 	// (lukanus): first slice all the bigger ranges to get max(window)
@@ -591,7 +588,7 @@ func groupRanges(ranges [][2]uint64, window uint64) (out [][2]uint64) {
 		diff := r[1] - r[0]
 		if diff > window {
 			current := r[0]
-		SLICE_DIFF:
+		SliceDiff:
 			for {
 				next := current + window
 				if next <= r[1] {
@@ -601,7 +598,7 @@ func groupRanges(ranges [][2]uint64, window uint64) (out [][2]uint64) {
 				}
 
 				pregroup = append(pregroup, [2]uint64{current, r[1]})
-				break SLICE_DIFF
+				break SliceDiff
 			}
 		} else {
 			pregroup = append(pregroup, r)

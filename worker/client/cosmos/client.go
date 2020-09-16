@@ -123,7 +123,6 @@ func (ic *IndexerClient) Run(ctx context.Context, client *api.Client, stream *cS
 // GetTransactions gets new transactions and blocks from cosmos for given range
 // it slice requests for batch up to the `bigPage` count
 func (ic *IndexerClient) GetTransactions(ctx context.Context, tr cStructs.TaskRequest, stream *cStructs.StreamAccess, client *api.Client) {
-
 	timer := metrics.NewTimer(getTransactionDuration)
 	defer timer.ObserveDuration()
 
@@ -417,15 +416,15 @@ func sendResp(ctx context.Context, id uuid.UUID, out chan cStructs.OutResp, logg
 
 	var contextDone bool
 
-SEND_LOOP:
+SendLoop:
 	for {
 		select {
 		case <-ctx.Done():
 			contextDone = true
-			break SEND_LOOP
+			break SendLoop
 		case t, ok := <-out:
 			if !ok && t.Type == "" {
-				break SEND_LOOP
+				break SendLoop
 			}
 			b.Reset()
 

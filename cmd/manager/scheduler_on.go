@@ -25,7 +25,6 @@ import (
 )
 
 func attachScheduler(ctx context.Context, db *sql.DB, mux *http.ServeMux, cfg config.Config, logger *zap.Logger, client client.SchedulerContractor) error {
-
 	logger.Info("[Manager-Scheduler] Adding scheduler ")
 	d := schedulerPostgres.NewDriver(db)
 

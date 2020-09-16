@@ -74,7 +74,7 @@ func flushTransactions(ctx context.Context, d *Driver) error {
 	defer d.txPool.Put(va)
 	deduplicate := map[uint64]bool{}
 
-READ_ALL:
+ReadAll:
 	for {
 		select {
 		case transaction := <-d.txBuff:
@@ -170,11 +170,11 @@ READ_ALL:
 
 			// (lukanus): do not exceed allocw
 			if i == d.txPool.count-1 {
-				break READ_ALL
+				break ReadAll
 			}
 
 		default:
-			break READ_ALL
+			break ReadAll
 		}
 	}
 
@@ -208,11 +208,11 @@ func uniqueEntries(in, out []string) []string {
 			continue
 		}
 		var exists bool
-	INNER:
+	Inner:
 		for _, re := range out {
 			if r == re {
 				exists = true
-				break INNER
+				break Inner
 			}
 		}
 		if !exists {

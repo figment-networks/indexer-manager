@@ -23,7 +23,6 @@ func NewLastDataInternalTransport(sc SchedulerContractor) *LastDataInternalTrans
 }
 
 func (ld *LastDataInternalTransport) GetLastData(ctx context.Context, ldReq structs.LatestDataRequest) (ldr structs.LatestDataResponse, err error) {
-
 	ldr, err = ld.sc.ScrapeLatest(ctx, ldReq)
 	if err != nil {
 		return ldr, &structures.RunError{Contents: fmt.Errorf("error getting response from ScrapeLatest:  %w", err)}

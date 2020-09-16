@@ -28,7 +28,6 @@ func NewLastDataHTTPTransport(dest *destination.Scheme) *LastDataHTTPTransport {
 }
 
 func (ld LastDataHTTPTransport) GetLastData(ctx context.Context, ldReq structs.LatestDataRequest) (ldr structs.LatestDataResponse, err error) {
-
 	t, ok := ld.dest.Get(destination.NVCKey{Network: ldReq.Network, Version: ldReq.Version, ChainID: ldReq.ChainID})
 	if !ok {
 		return ldr, &structures.RunError{Contents: fmt.Errorf("error getting response:  %w", structures.ErrNoWorkersAvailable)}

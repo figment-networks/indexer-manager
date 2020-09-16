@@ -31,7 +31,6 @@ func (c *Client) Name() string {
 }
 
 func (c *Client) Run(ctx context.Context, network, chainID, version string) error {
-
 	latest, err := c.store.GetLatest(ctx, RunnerName, network, chainID, version)
 	if err != nil && err != structures.ErrDoesNotExists {
 		return &structures.RunError{Contents: fmt.Errorf("error getting data from store GetLatest [%s]:  %w", RunnerName, err)}

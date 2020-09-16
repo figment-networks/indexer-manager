@@ -29,7 +29,6 @@ func NewIndexerServer(client cStructs.IndexerClienter, logger *zap.Logger) *Inde
 // TaskRPC is fullfilment of TaskRPC endpoint from grpc.
 // it receives new stream requests and creates the second stream, afterwards just controls incoming mesasges
 func (is *IndexerServer) TaskRPC(taskStream indexer.IndexerService_TaskRPCServer) error {
-
 	ctx := taskStream.Context()
 	receiverClosed := make(chan error)
 	defer close(receiverClosed)
@@ -108,13 +107,13 @@ func Send(taskStream indexer.IndexerService_TaskRPCServer, accessCh *cStructs.St
 	defer logger.Sync()
 
 	ctx := taskStream.Context()
-CONTROLRPC:
+ControlRPC:
 	for {
 		select {
 		case <-ctx.Done():
-			break CONTROLRPC
+			break ControlRPC
 		case <-receiverClosed:
-			break CONTROLRPC
+			break ControlRPC
 		case resp := <-accessCh.ResponseListener:
 			tr := &indexer.TaskResponse{
 				Version: resp.Version,
@@ -139,12 +138,11 @@ CONTROLRPC:
 					responseMetric.WithLabels(resp.Type, "").Inc()
 				}
 
-				continue CONTROLRPC
+				continue ControlRPC
 			}
 			if err == io.EOF {
-
 				logger.Debug("[GRPC] io.EOF")
-				break CONTROLRPC
+				break ControlRPC
 			}
 			responseMetric.WithLabels(resp.Type, "send_error").Inc()
 			logger.Error("[GRPC] Error sending TaskResponse", zap.Error(err))

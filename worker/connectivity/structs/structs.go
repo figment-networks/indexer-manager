@@ -35,7 +35,6 @@ type StreamAccess struct {
 
 // NewStreamAccess is StreamAccess constructor
 func NewStreamAccess() *StreamAccess {
-
 	responsesCh := TaskResponseChanPool.Get()
 	sID, _ := uuid.NewRandom()
 

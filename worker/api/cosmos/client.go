@@ -25,8 +25,8 @@ type Client struct {
 	cdc        *codec.Codec
 	logger     *zap.Logger
 
-	rateLimitter *rate.Limiter
-	Sbc          *SimpleBlockCache
+	rateLimiter *rate.Limiter
+	Sbc         *SimpleBlockCache
 }
 
 // NewClient returns a new client for a given endpoint
@@ -37,16 +37,16 @@ func NewClient(url, key string, logger *zap.Logger, c *http.Client, reqPerSecLim
 		}
 	}
 
-	rateLimitter := rate.NewLimiter(rate.Limit(reqPerSecLimit), reqPerSecLimit)
+	rateLimiter := rate.NewLimiter(rate.Limit(reqPerSecLimit), reqPerSecLimit)
 
 	cli := &Client{
-		logger:       logger,
-		baseURL:      url, //tendermint rpc url
-		key:          key,
-		httpClient:   c,
-		rateLimitter: rateLimitter,
-		cdc:          makeCodec(),
-		Sbc:          NewSimpleBlockCache(400),
+		logger:      logger,
+		baseURL:     url, //tendermint rpc url
+		key:         key,
+		httpClient:  c,
+		rateLimiter: rateLimiter,
+		cdc:         makeCodec(),
+		Sbc:         NewSimpleBlockCache(400),
 	}
 	return cli
 }

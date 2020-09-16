@@ -128,14 +128,14 @@ func main() {
 
 	go runHTTP(s, cfg.Address, logger.GetLogger(), exit)
 
-RUN_LOOP:
+RunLoop:
 	for {
 		select {
 		case <-osSig:
 			s.Shutdown(ctx)
-			break RUN_LOOP
+			break RunLoop
 		case <-exit:
-			break RUN_LOOP
+			break RunLoop
 		}
 	}
 }
