@@ -45,6 +45,7 @@ type SimpleWorkerInfo struct {
 type WorkerInfo struct {
 	NodeSelfID     string           `json:"node_id"`
 	Type           string           `json:"type"`
+	ChainID        string           `json:"chain_id"`
 	State          StreamState      `json:"state"`
 	ConnectionInfo WorkerConnection `json:"connection"`
 	LastCheck      time.Time        `json:"last_check"`
@@ -53,6 +54,7 @@ type WorkerInfo struct {
 type WorkerConnection struct {
 	Version   string          `json:"version"`
 	Type      string          `json:"type"`
+	ChainID   string          `json:"chain_id"`
 	Addresses []WorkerAddress `json:"addresses"`
 }
 

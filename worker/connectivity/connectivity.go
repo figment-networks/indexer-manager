@@ -1,11 +1,12 @@
 package connectivity
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -22,19 +23,21 @@ type Address struct {
 // WorkerConnections is connection controller for worker
 type WorkerConnections struct {
 	network                 string
+	chainID                 string
 	version                 string
-	workerid                string
+	workerID                string
 	workerAccessibleAddress string
 	managerAddresses        map[string]Address
 	managerAddressesLock    sync.RWMutex
 }
 
 // NewWorkerConnections is WorkerConnections constructor
-func NewWorkerConnections(id, address, network, version string) *WorkerConnections {
+func NewWorkerConnections(id, address, network, chainID, version string) *WorkerConnections {
 	return &WorkerConnections{
 		network:                 network,
 		version:                 version,
-		workerid:                id,
+		workerID:                id,
+		chainID:                 chainID,
 		workerAccessibleAddress: address,
 		managerAddresses:        make(map[string]Address),
 	}
@@ -59,15 +62,43 @@ func (wc *WorkerConnections) RemoveManager(managerAddress string) {
 	delete(wc.managerAddresses, managerAddress)
 }
 
+type WorkerResponse struct {
+	ID           string                 `json:"id"`
+	Kind         string                 `json:"kind"`
+	ChainID      string                 `json:"chainID"`
+	Connectivity WorkerInfoConnectivity `json:"connectivity"`
+}
+
+type WorkerInfoConnectivity struct {
+	Version string `json:"version"`
+	Type    string `json:"type"`
+	Address string `json:"address"`
+}
+
+func (wc *WorkerConnections) gerWorkerInfo() WorkerResponse {
+	wr := WorkerResponse{
+		ID:      wc.workerID,
+		Kind:    wc.network,
+		ChainID: wc.chainID,
+		Connectivity: WorkerInfoConnectivity{
+			Version: wc.version,
+			Type:    "grpc",
+			Address: wc.workerAccessibleAddress,
+		},
+	}
+
+	return wr
+}
+
 // Run controls the registration of worker in manager. Every tick it sends it's identity (with address and network type) to every configured address.
 func (wc *WorkerConnections) Run(ctx context.Context, logger *zap.Logger, dur time.Duration) {
 	defer logger.Sync()
 
 	tckr := time.NewTicker(dur)
-
 	client := &http.Client{}
 
-	readr := strings.NewReader(fmt.Sprintf(`{"id":"%s","kind":"%s", "connectivity": {"version": "%s", "type":"grpc", "address": "%s" }}`, wc.workerid, wc.network, wc.version, wc.workerAccessibleAddress))
+	wInfo, _ := json.Marshal(wc.gerWorkerInfo())
+	readr := bytes.NewReader(wInfo)
 
 	for {
 		select {

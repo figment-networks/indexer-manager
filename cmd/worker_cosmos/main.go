@@ -80,7 +80,7 @@ func main() {
 
 	logger.Info(fmt.Sprintf("Self-hostname (%s) is %s:%s ", workerRunID.String(), hostname, cfg.Port))
 
-	c := connectivity.NewWorkerConnections(workerRunID.String(), hostname+":"+cfg.Port, "cosmos", "0.0.1")
+	c := connectivity.NewWorkerConnections(workerRunID.String(), hostname+":"+cfg.Port, "cosmos", cfg.ChainID, "0.0.1")
 	for _, m := range managers {
 		c.AddManager(m + "/client_ping")
 	}

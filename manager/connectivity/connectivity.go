@@ -84,7 +84,7 @@ func (m *Manager) Register(id, kind string, connInfo structs.WorkerConnection) e
 
 	w, ok := n.workers[id]
 	if !ok {
-		// (lukanus): check if the node is not previously registred under old selfID
+		// (lukanus): check if the node is not previously registered under old selfID
 		for _, work := range n.workers {
 			if work.Type == kind {
 				for _, oldAddr := range work.ConnectionInfo.Addresses {
@@ -331,6 +331,7 @@ func makeUUIDs(count int) []uuid.UUID {
 type PingInfo struct {
 	ID           string           `json:"id"`
 	Kind         string           `json:"kind"`
+	ChainID      string           `json:"chainID"`
 	Connectivity ConnectivityInfo `json:"connectivity"`
 }
 type ConnectivityInfo struct {
@@ -380,9 +381,11 @@ func (m *Manager) AttachToMux(mux *http.ServeMux) {
 		if fwd != "" {
 			ipTo = net.ParseIP(fwd)
 		}
+
 		m.Register(pi.ID, pi.Kind, structs.WorkerConnection{
 			Version: pi.Connectivity.Version,
 			Type:    pi.Connectivity.Type,
+			ChainID: pi.ChainID,
 			Addresses: []structs.WorkerAddress{{
 				IP:      ipTo,
 				Address: pi.Connectivity.Address,
