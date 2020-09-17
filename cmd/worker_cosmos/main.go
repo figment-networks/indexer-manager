@@ -14,11 +14,13 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
 	"go.uber.org/zap"
 	grpc "google.golang.org/grpc"
 
 	"github.com/figment-networks/cosmos-indexer/cmd/worker_cosmos/config"
 	"github.com/figment-networks/cosmos-indexer/cmd/worker_cosmos/logger"
+	api "github.com/figment-networks/cosmos-indexer/worker/api/cosmos"
 	cli "github.com/figment-networks/cosmos-indexer/worker/client/cosmos"
 	"github.com/figment-networks/cosmos-indexer/worker/connectivity"
 	grpcIndexer "github.com/figment-networks/cosmos-indexer/worker/transport/grpc"
@@ -91,8 +93,8 @@ func main() {
 
 	grpcServer := grpc.NewServer()
 
-	// 33  per second is < 2000 minute
-	workerClient := cli.NewIndexerClient(ctx, logger.GetLogger(), cfg.TendermintRPCAddr, cfg.DatahubKey, uint64(cfg.BigPage), uint64(cfg.MaximumHeightsToGet), int(cfg.RequestsPerSecond))
+	apiClient := api.NewClient(cfg.TendermintRPCAddr, cfg.DatahubKey, logger.GetLogger(), nil, int(cfg.RequestsPerSecond))
+	workerClient := cli.NewIndexerClient(ctx, logger.GetLogger(), apiClient, uint64(cfg.BigPage), uint64(cfg.MaximumHeightsToGet))
 
 	worker := grpcIndexer.NewIndexerServer(workerClient, logger.GetLogger())
 	grpcProtoIndexer.RegisterIndexerServiceServer(grpcServer, worker)

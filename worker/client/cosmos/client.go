@@ -30,9 +30,6 @@ var (
 
 // IndexerClient is implementation of a client (main worker code)
 type IndexerClient struct {
-	cosmosEndpoint string
-	cosmosKey      string
-
 	httpClient *api.Client
 
 	logger  *zap.Logger
@@ -44,7 +41,7 @@ type IndexerClient struct {
 }
 
 // NewIndexerClient is IndexerClient constructor
-func NewIndexerClient(ctx context.Context, logger *zap.Logger, cosmosEndpoint, cosmosKey string, bigPage, maximumHeightsToGet uint64, reqPerSecLimit int) *IndexerClient {
+func NewIndexerClient(ctx context.Context, logger *zap.Logger, cClient *api.Client, bigPage, maximumHeightsToGet uint64) *IndexerClient {
 	getTransactionDuration = endpointDuration.WithLabels("getTransactions")
 	getLatestDuration = endpointDuration.WithLabels("getLatest")
 	getBlockDuration = endpointDuration.WithLabels("getBlock")
@@ -52,9 +49,7 @@ func NewIndexerClient(ctx context.Context, logger *zap.Logger, cosmosEndpoint, c
 
 	return &IndexerClient{
 		logger:              logger,
-		cosmosEndpoint:      cosmosEndpoint,
-		cosmosKey:           cosmosKey,
-		httpClient:          api.NewClient(cosmosEndpoint, cosmosKey, logger, nil, reqPerSecLimit),
+		httpClient:          cClient,
 		bigPage:             bigPage,
 		maximumHeightsToGet: maximumHeightsToGet,
 		streams:             make(map[uuid.UUID]*cStructs.StreamAccess),
