@@ -78,14 +78,14 @@ func (ic *IndexerClient) RegisterStream(ctx context.Context, stream *cStructs.St
 
 	// Limit workers not to create new goroutines over and over again
 	for i := 0; i < 20; i++ {
-		go ic.Run(ctx, ic.httpClient, stream)
+		go ic.Run(ctx, stream)
 	}
 
 	return nil
 }
 
 // Run listens on the stream events (new tasks)
-func (ic *IndexerClient) Run(ctx context.Context, client *api.Client, stream *cStructs.StreamAccess) {
+func (ic *IndexerClient) Run(ctx context.Context, stream *cStructs.StreamAccess) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -100,9 +100,9 @@ func (ic *IndexerClient) Run(ctx context.Context, client *api.Client, stream *cS
 			nCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 			switch taskRequest.Type {
 			case structs.ReqIDGetTransactions:
-				ic.GetTransactions(nCtx, taskRequest, stream, client)
+				ic.GetTransactions(nCtx, taskRequest, stream, ic.httpClient)
 			case structs.ReqIDLatestData:
-				ic.GetLatest(nCtx, taskRequest, stream, client)
+				ic.GetLatest(nCtx, taskRequest, stream, ic.httpClient)
 			default:
 				stream.Send(cStructs.TaskResponse{
 					Id:    taskRequest.Id,
