@@ -110,7 +110,9 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		c.AddSchedules(ctx, rcs)
+		if len(rcs) > 0 {
+			c.AddSchedules(ctx, rcs)
+		}
 	}
 
 	s := &http.Server{

@@ -237,9 +237,9 @@ func rawToTransaction(ctx context.Context, c *Client, in []TxResponse, blocks ma
 							Text: attr.Amount,
 						}
 
-						if len(sliced) == 2 {
-							sub.Amount.Currency = sliced[1]
-							sub.Amount.Numeric, _ = strconv.ParseFloat(sliced[0], 64)
+						if len(sliced) == 3 {
+							sub.Amount.Currency = sliced[2]
+							sub.Amount.Numeric, _ = strconv.ParseFloat(sliced[1], 64)
 						} else {
 							sub.Amount.Numeric, _ = strconv.ParseFloat(attr.Amount, 64)
 						}

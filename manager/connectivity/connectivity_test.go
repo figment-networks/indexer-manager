@@ -38,11 +38,11 @@ func TestManager_Register(t *testing.T) {
 					State:      structs.StreamUnknown,
 					NodeSelfID: "asdf",
 					Type:       "cosmos",
-					ConnectionInfo: structs.WorkerConnection{
+					ConnectionInfo: []structs.WorkerConnection{{
 						Version:   "0.0.1",
 						Type:      "asdf",
 						Addresses: []structs.WorkerAddress{{Address: "something.test"}},
-					},
+					}},
 				},
 			},
 		},

@@ -72,10 +72,12 @@ func (c *Core) AddSchedules(ctx context.Context, rcs []structures.RunConfig) err
 	defer c.runLock.Unlock()
 
 	for _, r := range rcs {
-		r.RunID = c.ID
-		err := c.store.AddConfig(ctx, r)
-		if err != nil && !errors.Is(err, params.ErrAlreadyRegistred) {
-			return fmt.Errorf("Add Config errored: %w", err)
+		if r.Kind != "" && r.Network != "" {
+			r.RunID = c.ID
+			err := c.store.AddConfig(ctx, r)
+			if err != nil && !errors.Is(err, params.ErrAlreadyRegistred) {
+				return fmt.Errorf("Add Config errored: %w", err)
+			}
 		}
 	}
 

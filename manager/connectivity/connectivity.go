@@ -87,14 +87,16 @@ func (m *Manager) Register(id, kind string, connInfo structs.WorkerConnection) e
 		// (lukanus): check if the node is not previously registered under old selfID
 		for _, work := range n.workers {
 			if work.Type == kind {
-				for _, oldAddr := range work.ConnectionInfo.Addresses {
-					for _, newAddr := range connInfo.Addresses {
-						if (newAddr.Address != "" && newAddr.Address == oldAddr.Address) ||
-							(!newAddr.IP.IsUnspecified() && newAddr.IP.Equal(oldAddr.IP)) {
-							// Same Address!
-							m.logger.Info("[Manager] Node under the same address previously registered. Removing.", zap.Any("connection_info", oldAddr))
-							if err := m.Unregister(work.NodeSelfID, work.Type, work.ConnectionInfo.Version); err != nil {
-								m.logger.Error("[Manager] Error unregistring node.", zap.Error(err), zap.Any("connection_info", oldAddr))
+				for _, infos := range work.ConnectionInfo {
+					for _, oldAddr := range infos.Addresses {
+						for _, newAddr := range connInfo.Addresses {
+							if (newAddr.Address != "" && newAddr.Address == oldAddr.Address) ||
+								(!newAddr.IP.IsUnspecified() && newAddr.IP.Equal(oldAddr.IP)) {
+								// Same Address!
+								m.logger.Info("[Manager] Node under the same address previously registered. Removing.", zap.Any("connection_info", oldAddr))
+								if err := m.Unregister(work.NodeSelfID, work.Type, infos.Version); err != nil {
+									m.logger.Error("[Manager] Error unregistring node.", zap.Error(err), zap.Any("connection_info", oldAddr))
+								}
 							}
 						}
 					}
@@ -105,7 +107,7 @@ func (m *Manager) Register(id, kind string, connInfo structs.WorkerConnection) e
 		w = &structs.WorkerInfo{
 			NodeSelfID:     id,
 			Type:           kind,
-			ConnectionInfo: connInfo,
+			ConnectionInfo: []structs.WorkerConnection{connInfo},
 			State:          structs.StreamUnknown,
 		}
 		n.workers[id] = w
@@ -192,13 +194,17 @@ func (m *Manager) GetAllWorkers() map[string]WorkerNetworkStatic {
 		for kv, w := range netw.workers {
 			wis := WorkerInfoStatic{WorkerInfo: *w}
 			m.nextWorkersLock.RLock()
-			netWorker, ok := m.nextWorkers[structs.WorkerCompositeKey{Network: k, Version: wis.ConnectionInfo.Version}]
-			if ok {
-				wis.TaskWorkerInfo, ok = netWorker.GetWorker(kv)
-				allWorkers := netWorker.GetWorkers()
-				wif.Active = allWorkers.Active
-				wif.All = allWorkers.All
+
+			for _, ci := range wis.ConnectionInfo {
+				netWorker, ok := m.nextWorkers[structs.WorkerCompositeKey{Network: k, Version: ci.Version}]
+				if ok {
+					wis.TaskWorkerInfo, ok = netWorker.GetWorker(kv)
+					allWorkers := netWorker.GetWorkers()
+					wif.Active = allWorkers.Active
+					wif.All = allWorkers.All
+				}
 			}
+
 			m.nextWorkersLock.RUnlock()
 			wif.Workers[kv] = wis
 		}

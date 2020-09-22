@@ -96,7 +96,7 @@ func (hc *Connector) GetTransactions(w http.ResponseWriter, req *http.Request) {
 	if hash != "" {
 		hr.Hash = hash
 	}
-	transactions, err := hc.cli.GetTransactions(ctx, nv, hr, 1000, true)
+	transactions, err := hc.cli.GetTransactions(ctx, nv, hr, 1000, false)
 
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)

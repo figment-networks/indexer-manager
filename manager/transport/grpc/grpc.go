@@ -50,21 +50,23 @@ func (c *Client) Run(ctx context.Context, logger *zap.Logger, stream *structs.St
 	var dialErr error
 	var connectedTo string
 	// (lukanus): try every possibility
-	for _, address := range stream.WorkerInfo.ConnectionInfo.Addresses {
-		if address.Address != "" {
-			connectedTo = address.Address
-			conn, dialErr = grpc.Dial(address.Address, grpc.WithInsecure())
-		} else {
-			connectedTo = address.IP.String()
-			conn, dialErr = grpc.Dial(address.IP.String(), grpc.WithInsecure())
-		}
+	for _, ci := range stream.WorkerInfo.ConnectionInfo {
+		for _, address := range ci.Addresses {
+			if address.Address != "" {
+				connectedTo = address.Address
+				conn, dialErr = grpc.Dial(address.Address, grpc.WithInsecure())
+			} else {
+				connectedTo = address.IP.String()
+				conn, dialErr = grpc.Dial(address.IP.String(), grpc.WithInsecure())
+			}
 
-		if dialErr != nil {
-			errSet = append(errSet, dialErr)
-		}
+			if dialErr != nil {
+				errSet = append(errSet, dialErr)
+			}
 
-		if dialErr == nil && conn != nil {
-			break
+			if dialErr == nil && conn != nil {
+				break
+			}
 		}
 	}
 
