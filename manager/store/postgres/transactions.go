@@ -41,13 +41,16 @@ func (d *Driver) StoreTransactions(txs []structs.TransactionWithMeta) error {
 }
 
 const (
-	txInsertHead = `INSERT INTO public.transaction_events("network", "chain_id", "version", "epoch", "height", "hash", "block_hash", "time", "type", "parties", "senders", "recipients", "amount", "fee", "gas_wanted", "gas_used", "memo", "data") VALUES `
+	txInsertHead = `INSERT INTO public.transaction_events("network", "chain_id", "version", "epoch", "height", "hash", "block_hash", "time", "type", "parties", "senders", "recipients", "amount", "fee", "gas_wanted", "gas_used", "memo", "data", "raw") VALUES `
 	txInsertFoot = ` ON CONFLICT (network, chain_id, epoch, hash)
 	DO UPDATE SET height = EXCLUDED.height,
 	time = EXCLUDED.time,
 	type = EXCLUDED.type,
 	parties = EXCLUDED.parties,
+	senders = EXCLUDED.senders,
+	recipients = EXCLUDED.recipients,
 	data = EXCLUDED.data,
+	raw = EXCLUDED.raw,
 	amount = EXCLUDED.amount,
 	block_hash = EXCLUDED.block_hash,
 	gas_wanted = EXCLUDED.gas_wanted,
@@ -100,22 +103,22 @@ ReadAll:
 			for _, ev := range t.Events {
 				for _, sub := range ev.Sub {
 					if len(sub.Recipient) > 0 {
-						parties = uniqueEntries(sub.Recipient, parties)
-						recipients = uniqueEntries(sub.Recipient, recipients)
+						parties = uniqueEntriesEvTransfer(sub.Recipient, parties)
+						recipients = uniqueEntriesEvTransfer(sub.Recipient, recipients)
 					}
 					if len(sub.Sender) > 0 {
-						parties = uniqueEntries(sub.Sender, parties)
-						senders = uniqueEntries(sub.Recipient, senders)
+						parties = uniqueEntriesEvTransfer(sub.Sender, parties)
+						senders = uniqueEntriesEvTransfer(sub.Recipient, senders)
 					}
 
 					if len(sub.Validator) > 0 {
-						for _, v := range sub.Validator {
-							parties = uniqueEntries(v, parties)
+						for _, accounts := range sub.Validator {
+							parties = uniqueEntriesAccount(accounts, parties)
 						}
 					}
 
 					if len(sub.Feeder) > 0 {
-						parties = uniqueEntries(sub.Feeder, parties)
+						parties = uniqueEntriesAccount(sub.Feeder, parties)
 					}
 
 					if sub.Error != nil {
@@ -132,18 +135,18 @@ ReadAll:
 				qBuilder.WriteString(`,`)
 			}
 			qBuilder.WriteString(`(`)
-			for j := 1; j < 19; j++ {
+			for j := 1; j < 20; j++ {
 				qBuilder.WriteString(`$`)
-				current := i*18 + j
+				current := i*19 + j
 				qBuilder.WriteString(strconv.Itoa(current))
-				if current == 1 || math.Mod(float64(current), 18) != 0 {
+				if current == 1 || math.Mod(float64(current), 19) != 0 {
 					qBuilder.WriteString(`,`)
 				}
 			}
 
 			qBuilder.WriteString(`)`)
 
-			base := i * 18
+			base := i * 19
 			va[base] = transaction.Network
 			va[base+1] = t.ChainID
 			va[base+2] = transaction.Version
@@ -162,9 +165,10 @@ ReadAll:
 			va[base+15] = t.GasUsed
 			va[base+16] = strings.Map(removeCharacters, t.Memo)
 			va[base+17] = buff.String()
+			va[base+18] = t.Raw
 			i++
 
-			last = base + 17
+			last = base + 18
 
 			buff.Reset()
 
@@ -194,7 +198,7 @@ ReadAll:
 	return tx.Commit()
 }
 
-// Removes ASCII hex 0-7 causingf utf-8 error in db
+// Removes ASCII hex 0-7 causing utf-8 error in db
 func removeCharacters(r rune) rune {
 	if r < 7 {
 		return -1
@@ -217,6 +221,40 @@ func uniqueEntries(in, out []string) []string {
 		}
 		if !exists {
 			out = append(out, r)
+		}
+	}
+	return out
+}
+
+func uniqueEntriesEvTransfer(in []structs.EventTransfer, out []string) []string {
+	for _, r := range in { // (lukanus): faster than a map :)
+		var exists bool
+	Inner:
+		for _, re := range out {
+			if r.Account.ID == re {
+				exists = true
+				break Inner
+			}
+		}
+		if !exists {
+			out = append(out, r.Account.ID)
+		}
+	}
+	return out
+}
+
+func uniqueEntriesAccount(in []structs.Account, out []string) []string {
+	for _, r := range in { // (lukanus): faster than a map :)
+		var exists bool
+	Inner:
+		for _, re := range out {
+			if r.ID == re {
+				exists = true
+				break Inner
+			}
+		}
+		if !exists {
+			out = append(out, r.ID)
 		}
 	}
 	return out
@@ -325,7 +363,11 @@ func (d *Driver) GetTransactions(ctx context.Context, tsearch params.Transaction
 	}
 
 	qBuilder := strings.Builder{}
-	qBuilder.WriteString("SELECT id, version, epoch, height, hash, block_hash, time, gas_wanted, gas_used, memo, data FROM public.transaction_events WHERE ")
+	qBuilder.WriteString("SELECT id, version, epoch, height, hash, block_hash, time, gas_wanted, gas_used, memo, data")
+	if tsearch.WithRaw {
+		qBuilder.WriteString(", raw ")
+	}
+	qBuilder.WriteString(" FROM public.transaction_events WHERE ")
 	for i, par := range parts {
 		if i != 0 {
 			qBuilder.WriteString(" AND ")
@@ -356,9 +398,17 @@ func (d *Driver) GetTransactions(ctx context.Context, tsearch params.Transaction
 	defer rows.Close()
 	for rows.Next() {
 		tx := structs.Transaction{}
-		if err := rows.Scan(&tx.ID, &tx.Version, &tx.Epoch, &tx.Height, &tx.Hash, &tx.BlockHash, &tx.Time, &tx.GasWanted, &tx.GasUsed, &tx.Memo, &tx.Events); err != nil {
+		var err error
+		if tsearch.WithRaw {
+			err = rows.Scan(&tx.ID, &tx.Version, &tx.Epoch, &tx.Height, &tx.Hash, &tx.BlockHash, &tx.Time, &tx.GasWanted, &tx.GasUsed, &tx.Memo, &tx.Events, &tx.Raw)
+		} else {
+			err = rows.Scan(&tx.ID, &tx.Version, &tx.Epoch, &tx.Height, &tx.Hash, &tx.BlockHash, &tx.Time, &tx.GasWanted, &tx.GasUsed, &tx.Memo, &tx.Events)
+		}
+
+		if err != nil {
 			return nil, err
 		}
+
 		txs = append(txs, tx)
 	}
 

@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
+	"math/big"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -203,46 +205,69 @@ func rawToTransaction(ctx context.Context, c *Client, in []TxResponse, blocks ma
 					sub.Module = attr.Module
 					sub.Action = attr.Action
 
-					if len(attr.Sender) > 0 {
-						sub.Sender = attr.Sender
-					}
+					// if len(attr.Sender) > 0 {
+					// 	sub.Sender = append(sub.Sender, attr.Sender...)
+					// }
 
-					if len(attr.Recipient) > 0 {
-						sub.Recipient = attr.Recipient
-					}
-
-					if len(attr.Withdraw) > 0 {
-						sub.Withdraw = attr.Withdraw
-					}
-
-					if len(attr.Validator) > 0 {
-						sub.Validator = attr.Validator
-					}
-
-					if len(attr.Validator) > 0 {
-						for k, v := range attr.Others {
-							logger.Info("[COSMOS-API] Found unknown event attribute ", zap.String("key", k), zap.Strings("values", v))
-						}
-					}
+					// if len(attr.Recipient) > 0 {
+					// 	sub.Recipient = append(sub.Recipient, attr.Recipient...)
+					// }
 
 					if attr.CompletionTime != "" {
 						cTime, _ := time.Parse(time.RFC3339Nano, attr.CompletionTime)
 						sub.Completion = &cTime
 					}
 
-					if attr.Amount != "" {
-						sliced := getCurrency(attr.Amount)
+					if len(attr.Withdraw) > 0 {
+						for k, v := range attr.Withdraw {
+							w, ok := sub.Withdraw[k]
+							if !ok {
+								w = []shared.Account{}
+							}
+							for _, withdrawID := range v {
+								w = append(w, shared.Account{ID: withdrawID})
+							}
+							sub.Withdraw[k] = w
+						}
+					}
 
-						sub.Amount = &shared.TransactionAmount{
-							Text: attr.Amount,
+					if len(attr.Validator) > 0 {
+						for k, v := range attr.Validator {
+							w, ok := sub.Validator[k]
+							if !ok {
+								w = []shared.Account{}
+							}
+
+							for _, validatorID := range v {
+								w = append(w, shared.Account{ID: validatorID})
+							}
+							sub.Validator[k] = w
+						}
+					}
+
+					for _, amount := range attr.Amount {
+						sliced := getCurrency(amount)
+
+						am := shared.TransactionAmount{
+							Text: amount,
 						}
 
 						if len(sliced) == 3 {
-							sub.Amount.Currency = sliced[2]
-							sub.Amount.Numeric, _ = strconv.ParseFloat(sliced[1], 64)
+							am.Currency = sliced[2]
+							c, exp, err := getCoin(sliced[1])
+							if err != nil {
+								am.Numeric = c
+								am.Exp = exp
+							}
+
 						} else {
-							sub.Amount.Numeric, _ = strconv.ParseFloat(attr.Amount, 64)
+							c, exp, err := getCoin(amount)
+							if err != nil {
+								am.Numeric = c
+								am.Exp = exp
+							}
 						}
+						sub.Amount = append(sub.Amount, am)
 					}
 					ev.Attributes[atk] = nil
 				}
@@ -277,4 +302,22 @@ func rawToTransaction(ctx context.Context, c *Client, in []TxResponse, blocks ma
 
 func getCurrency(in string) []string {
 	return curencyRegex.FindStringSubmatch(in)
+}
+
+func getCoin(s string) (number big.Int, exp int32, err error) {
+
+	s = strings.Replace(s, ",", ".", -1)
+	strs := strings.Split(s, `.`)
+	if len(strs) == 1 {
+		i := big.Int{}
+		i.SetString(strs[0], 10)
+		return i, 0, nil
+	}
+	if len(strs) == 2 {
+		i := big.Int{}
+		i.SetString(strs[0]+strs[1], 10)
+		return i, int32(len(strs[1])), nil
+	}
+
+	return number, 0, errors.New("Impossible to parse ")
 }

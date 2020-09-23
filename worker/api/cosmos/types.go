@@ -124,7 +124,7 @@ type LogEvents struct {
 type LogEventsAttributes struct {
 	Module         string
 	Action         string
-	Amount         string
+	Amount         []string
 	Sender         []string
 	Validator      map[string][]string
 	Withdraw       map[string][]string
@@ -182,7 +182,7 @@ func (lea *LogEventsAttributes) UnmarshalJSON(b []byte) error {
 		case "completion_time":
 			lea.CompletionTime = kc.Value
 		case "amount":
-			lea.Amount = kc.Value
+			lea.Amount = append(lea.Amount, kc.Value)
 		default:
 			if lea.Others == nil {
 				lea.Others = map[string][]string{}

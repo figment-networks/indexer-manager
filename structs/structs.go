@@ -3,6 +3,7 @@ package structs
 import (
 	"encoding/json"
 	"errors"
+	"math/big"
 	"time"
 
 	"github.com/google/uuid"
@@ -42,14 +43,15 @@ type Transaction struct {
 	ChainID string    `json:"chain_id,omitempty"`
 	Time    time.Time `json:"time,omitempty"`
 
-	Fee       []TransactionFee `json:"transaction_fee,omitempty"`
-	GasWanted uint64           `json:"gas_wanted,omitempty"`
-	GasUsed   uint64           `json:"gas_used,omitempty"`
+	Fee       []TransactionAmount `json:"transaction_fee,omitempty"`
+	GasWanted uint64              `json:"gas_wanted,omitempty"`
+	GasUsed   uint64              `json:"gas_used,omitempty"`
 
 	Memo string `json:"memo,omitempty"`
 
 	Version string            `json:"version"`
 	Events  TransactionEvents `json:"events,omitempty"`
+	Raw     []byte            `json:"raw,omitempty"`
 }
 
 type TransactionEvent struct {
@@ -70,16 +72,13 @@ func (te *TransactionEvents) Scan(value interface{}) error {
 	return json.Unmarshal(b, &te)
 }
 
-type TransactionFee struct {
-	Text     string  `json:"text,omitempty"`
-	Numeric  float64 `json:"numeric,omitempty"`
-	Currency string  `json:"currency,omitempty"`
-}
-
 type TransactionAmount struct {
-	Text     string  `json:"text,omitempty"`
-	Numeric  float64 `json:"numeric,omitempty"`
-	Currency string  `json:"currency,omitempty"`
+	Text     string `json:"text,omitempty"`
+	Currency string `json:"currency,omitempty"`
+
+	// decimal implementation (numeric * 10 ^ exp)
+	Numeric big.Int `json:"numeric,omitempty"`
+	Exp     int32   `json:"exp,omitempty"`
 }
 
 type SubsetEvent struct {
@@ -87,18 +86,28 @@ type SubsetEvent struct {
 	Action string `json:"action,omitempty"`
 	Module string `json:"module,omitempty"`
 
-	Sender    []string            `json:"sender,omitempty"`
-	Recipient []string            `json:"recipient,omitempty"`
-	Validator map[string][]string `json:"validator,omitempty"`
-	Feeder    []string            `json:"feeder,omitempty"`
-	Withdraw  map[string][]string `json:"withdraw,omitempty"`
+	Sender    []EventTransfer `json:"sender,omitempty"`
+	Recipient []EventTransfer `json:"recipient,omitempty"`
+
+	Validator map[string][]Account `json:"validator,omitempty"`
+	Feeder    []Account            `json:"feeder,omitempty"`
+	Withdraw  map[string][]Account `json:"withdraw,omitempty"`
 
 	Nonce      int        `json:"nonce,omitempty"`
 	Completion *time.Time `json:"completion,omitempty"`
 
 	Error *SubsetEventError `json:"error,omitempty"`
 
-	Amount *TransactionAmount `json:"amount,omitempty"`
+	Amount []TransactionAmount `json:"amount,omitempty"`
+}
+
+type EventTransfer struct {
+	Account Account             `json:"account,omitempty"`
+	Amounts []TransactionAmount `json:"amounts,omitempty"`
+}
+
+type Account struct {
+	ID string `json:"id"`
 }
 
 type SubsetEventError struct {

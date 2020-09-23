@@ -29,4 +29,6 @@ type TransactionSearch struct {
 	Network string `json:"network"`
 	ChainID string `json:"chain_id"`
 	Epoch   string `json:"epoch"`
+
+	WithRaw bool `json:"with_raw"`
 }

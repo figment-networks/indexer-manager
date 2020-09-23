@@ -23,7 +23,7 @@ func NewDriver(ctx context.Context, db *sql.DB) *Driver {
 	return &Driver{
 		db:     db,
 		txBuff: make(chan structs.TransactionWithMeta, 20),
-		txPool: NewValuesPool(20, 18, 20),
+		txPool: NewValuesPool(20, 19, 20),
 		blBuff: make(chan structs.BlockWithMeta, 20),
 		blPool: NewValuesPool(20, 8, 20),
 	}

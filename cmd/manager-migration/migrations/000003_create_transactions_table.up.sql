@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS transaction_events
     gas_used  DECIMAL(65, 0)    NOT NULL,
 
     data    JSONB,
+    raw     BYTEA,
     memo    TEXT,
 
     PRIMARY KEY (id)
