@@ -77,8 +77,8 @@ type TransactionAmount struct {
 	Currency string `json:"currency,omitempty"`
 
 	// decimal implementation (numeric * 10 ^ exp)
-	Numeric big.Int `json:"numeric,omitempty"`
-	Exp     int32   `json:"exp,omitempty"`
+	Numeric *big.Int `json:"numeric,omitempty"`
+	Exp     int32    `json:"exp,omitempty"`
 }
 
 type SubsetEvent struct {
@@ -89,16 +89,14 @@ type SubsetEvent struct {
 	Sender    []EventTransfer `json:"sender,omitempty"`
 	Recipient []EventTransfer `json:"recipient,omitempty"`
 
-	Validator map[string][]Account `json:"validator,omitempty"`
-	Feeder    []Account            `json:"feeder,omitempty"`
-	Withdraw  map[string][]Account `json:"withdraw,omitempty"`
+	Node map[string][]Account `json:"node,omitempty"`
 
 	Nonce      int        `json:"nonce,omitempty"`
 	Completion *time.Time `json:"completion,omitempty"`
 
 	Error *SubsetEventError `json:"error,omitempty"`
 
-	Amount []TransactionAmount `json:"amount,omitempty"`
+	Amount map[string]TransactionAmount `json:"amount,omitempty"`
 }
 
 type EventTransfer struct {
@@ -107,9 +105,16 @@ type EventTransfer struct {
 }
 
 type Account struct {
-	ID string `json:"id"`
+	ID      string          `json:"id"`
+	Details *AccountDetails `json:"detail,omitempty"`
 }
 
+type AccountDetails struct {
+	Description string `json:"description,omitempty"`
+	Contact     string `json:"contact,omitempty"`
+	Name        string `json:"name,omitempty"`
+	Website     string `json:"website,omitempty"`
+}
 type SubsetEventError struct {
 	Message string `json:"message,omitempty"`
 }
@@ -155,4 +160,6 @@ type TransactionSearch struct {
 	Network string `json:"network"`
 	ChainID string `json:"chain_id"`
 	Epoch   string `json:"epoch"`
+
+	WithRaw bool `json:"with_raw"`
 }

@@ -136,6 +136,231 @@ func (c *Client) SearchTx(ctx context.Context, r structs.HeightRange, blocks map
 	return
 }
 
+/*
+
+
+func rawToTransaction(c *Client, txRaw TxResponse, txLog []LogFormat, blocks map[uint64]shared.Block) (cStruct.OutResp, error) {
+	timer := metrics.NewTimer(transactionConversionDuration)
+	defer timer.ObserveDuration()
+
+	tx := &auth.StdTx{}
+	txReader := strings.NewReader(txRaw.TxData)
+	base64Dec := base64.NewDecoder(base64.StdEncoding, txReader)
+
+	_, err := c.cdc.UnmarshalBinaryLengthPrefixedReader(base64Dec, tx, 0)
+	if err != nil {
+		c.logger.Error("[TERRA-API] Problem decoding raw transaction (cdc) ", zap.Error(err))
+	}
+	hInt, err := strconv.ParseUint(txRaw.Height, 10, 64)
+	if err != nil {
+		c.logger.Error("[TERRA-API] Problem parsing height", zap.Error(err))
+	}
+
+	outTX := cStruct.OutResp{Type: "Transaction"}
+	block := blocks[hInt]
+
+	trans := shared.Transaction{
+		Hash:      txRaw.Hash,
+		Memo:      tx.GetMemo(),
+		Time:      block.Time,
+		BlockHash: block.Hash,
+		ChainID:   block.ChainID,
+		Height:    hInt,
+	}
+	trans.GasWanted, err = strconv.ParseUint(txRaw.TxResult.GasWanted, 10, 64)
+	if err != nil {
+		outTX.Error = err
+	}
+	trans.GasUsed, err = strconv.ParseUint(txRaw.TxResult.GasUsed, 10, 64)
+	if err != nil {
+		outTX.Error = err
+	}
+
+	txReader.Seek(0, 0)
+
+	trans.Raw = make([]byte, txReader.Len())
+	txReader.Read(trans.Raw)
+
+	for _, coin := range tx.Fee.Amount {
+		trans.Fee = append(trans.Fee, shared.TransactionAmount{
+			Text:     coin.Amount.String(),
+			Numeric:  *coin.Amount.BigInt(),
+			Currency: coin.Denom,
+		})
+	}
+
+	presentIndexes := map[string]bool{}
+
+	for index, msg := range tx.Msgs {
+		tev := shared.TransactionEvent{
+			ID: strconv.Itoa(index),
+		}
+
+		switch msg.Route() {
+		case "bank":
+			switch msg.Type() {
+			case "multisend":
+				tev.Kind = "multisend"
+				ev, err := mapBankMultisendToSub(msg)
+				if err != nil {
+					c.logger.Error("[TERRA-API] Problem decoding bank/multisend transaction ", zap.Error(err))
+					continue
+				}
+				tev.Sub = append(tev.Sub, ev)
+			case "send":
+				tev.Kind = "send"
+				ev, err := mapBankSendToSub(msg)
+				if err != nil {
+					c.logger.Error("[TERRA-API] Problem decoding bank/send transaction ", zap.Error(err))
+					continue
+				}
+				tev.Sub = append(tev.Sub, ev)
+			default:
+				c.logger.Error("[TERRA-API] Unknown bank message Type ", zap.Error(err), zap.String("type", msg.Type()), zap.String("route", msg.Route()))
+			}
+		case "oracle":
+			switch msg.Type() {
+			case "exchangeratevote":
+				tev.Kind = "exchangeratevote"
+				ev, err := mapOracleExchangeRateVoteToSub(msg)
+				if err != nil {
+					c.logger.Error("[TERRA-API] Problem decoding bank/multisend transaction ", zap.Error(err))
+					continue
+				}
+				tev.Sub = append(tev.Sub, ev)
+			case "exchangerateprevote":
+				tev.Kind = "exchangerateprevote"
+				ev, err := mapOracleExchangeRatePrevoteToSub(msg)
+				if err != nil {
+					c.logger.Error("[TERRA-API] Problem decoding bank/multisend transaction ", zap.Error(err))
+					continue
+				}
+				tev.Sub = append(tev.Sub, ev)
+
+			default:
+				c.logger.Error("[TERRA-API] Unknown oracle message Type ", zap.Error(err), zap.String("type", msg.Type()), zap.String("route", msg.Route()))
+			}
+
+		default:
+			c.logger.Error("[TERRA-API] Unknown oracle message Route ", zap.Error(err), zap.String("route", msg.Route()))
+		}
+
+		presentIndexes[tev.ID] = true
+		trans.Events = append(trans.Events, tev)
+	}
+
+	for _, logf := range txLog {
+		msgIndex := strconv.FormatFloat(logf.MsgIndex, 'f', -1, 64)
+		_, ok := presentIndexes[msgIndex]
+		if ok {
+			continue
+		}
+
+		tev := shared.TransactionEvent{
+			ID: msgIndex,
+		}
+		for _, ev := range logf.Events {
+			sub := shared.SubsetEvent{
+				Type: ev.Type,
+			}
+			for atk, attr := range ev.Attributes {
+				sub.Module = attr.Module
+				sub.Action = attr.Action
+
+				if len(attr.Sender) > 0 {
+					for _, senderID := range attr.Sender {
+						sub.Sender = append(sub.Sender, shared.EventTransfer{Account: shared.Account{ID: senderID}})
+					}
+				}
+				if len(attr.Recipient) > 0 {
+					for _, recipientID := range attr.Recipient {
+						sub.Recipient = append(sub.Recipient, shared.EventTransfer{Account: shared.Account{ID: recipientID}})
+					}
+				}
+
+				if len(attr.Feeder) > 0 {
+					for _, feederID := range attr.Feeder {
+						sub.Feeder = append(sub.Feeder, shared.Account{ID: feederID})
+					}
+				}
+
+				if len(attr.Withdraw) > 0 {
+					for k, v := range attr.Withdraw {
+						w, ok := sub.Withdraw[k]
+						if !ok {
+							w = []shared.Account{}
+						}
+						for _, withdrawID := range v {
+							w = append(w, shared.Account{ID: withdrawID})
+						}
+						sub.Withdraw[k] = w
+					}
+				}
+
+				if len(attr.Validator) > 0 {
+					for k, v := range attr.Validator {
+						w, ok := sub.Validator[k]
+						if !ok {
+							w = []shared.Account{}
+						}
+
+						for _, validatorID := range v {
+							w = append(w, shared.Account{ID: validatorID})
+						}
+						sub.Validator[k] = w
+					}
+				}
+
+				for _, amount := range attr.Amount {
+					sliced := getCurrency(amount)
+
+					am := shared.TransactionAmount{
+						Text: amount,
+					}
+
+					if len(sliced) == 3 {
+						am.Currency = sliced[2]
+						c, exp, err := getCoin(sliced[1])
+						if err != nil {
+							am.Numeric = c
+							am.Exp = exp
+						}
+
+					} else {
+						c, exp, err := getCoin(amount)
+						if err != nil {
+							am.Numeric = c
+							am.Exp = exp
+						}
+					}
+					sub.Amount = append(sub.Amount, am)
+				}
+				ev.Attributes[atk] = nil
+			}
+			tev.Sub = append(tev.Sub, sub)
+
+		}
+		logf.Events = nil
+		trans.Events = append(trans.Events, tev)
+
+	}
+		if txErr.Message != "" {
+			tev := shared.TransactionEvent{
+				Sub: []shared.SubsetEvent{{
+					Module: txErr.Codespace,
+					Error:  &shared.SubsetEventError{Message: txErr.Message},
+				}},
+			}
+			trans.Events = append(trans.Events, tev)
+		}
+
+	outTX.Payload = trans
+
+	return outTX, nil
+}
+
+
+*/
 // transform raw data from cosmos into transaction format with augmentation from blocks
 func rawToTransaction(ctx context.Context, c *Client, in []TxResponse, blocks map[uint64]shared.Block, out chan cStruct.OutResp, logger *zap.Logger, cdc *codec.Codec) error {
 	readr := strings.NewReader("")
@@ -158,8 +383,8 @@ func rawToTransaction(ctx context.Context, c *Client, in []TxResponse, blocks ma
 				continue
 			}
 		}
-
-		base64Dec := base64.NewDecoder(base64.StdEncoding, strings.NewReader(txRaw.TxData))
+		txReader := strings.NewReader(txRaw.TxData)
+		base64Dec := base64.NewDecoder(base64.StdEncoding, txReader)
 		_, err = cdc.UnmarshalBinaryLengthPrefixedReader(base64Dec, tx, 0)
 		if err != nil {
 			logger.Error("[COSMOS-API] Problem decoding raw transaction (cdc) ", zap.Error(err))
@@ -193,9 +418,94 @@ func rawToTransaction(ctx context.Context, c *Client, in []TxResponse, blocks ma
 			outTX.Error = err
 		}
 
-		for _, logf := range lf {
+		txReader.Seek(0, 0)
+		trans.Raw = make([]byte, txReader.Len())
+		txReader.Read(trans.Raw)
+
+		presentIndexes := map[string]bool{}
+
+		for index, msg := range tx.Msgs {
 			tev := shared.TransactionEvent{
-				ID: strconv.FormatFloat(logf.MsgIndex, 'f', -1, 64),
+				ID: strconv.Itoa(index),
+			}
+
+			var ev shared.SubsetEvent
+			var err error
+
+			switch msg.Route() {
+			case "bank":
+				switch msg.Type() {
+				case "multisend":
+					tev.Kind = "multisend"
+					ev, err = mapBankMultisendToSub(msg)
+				case "send":
+					tev.Kind = "send"
+					ev, err = mapBankSendToSub(msg)
+				default:
+					c.logger.Error("[TERRA-API] Unknown bank message Type ", zap.Error(err), zap.String("type", msg.Type()), zap.String("route", msg.Route()))
+				}
+			case "distribution":
+				switch msg.Type() {
+				case "withdraw_validator_commission":
+					tev.Kind = "withdraw_validator_commission"
+					ev, err = mapDistributionWithdrawValidatorCommissionToSub(msg)
+				case "set_withdraw_address":
+					tev.Kind = "set_withdraw_address"
+					ev, err = mapDistributionSetWithdrawAddressToSub(msg)
+				case "withdraw_delegator_reward":
+					tev.Kind = "withdraw_delegator_reward"
+					ev, err = mapDistributionWithdrawDelegatorRewardToSub(msg)
+				case "fund_community_pool":
+					tev.Kind = "fund_community_pool"
+					ev, err = mapDistributionFundCommunityPoolToSub(msg)
+				default:
+					c.logger.Error("[TERRA-API] Unknown distribution message Type ", zap.Error(err), zap.String("type", msg.Type()), zap.String("route", msg.Route()))
+				}
+			case "staking":
+				switch msg.Type() {
+				case "begin_unbonding":
+					tev.Kind = "begin_unbonding"
+					ev, err = mapStakingUndelegateToSub(msg)
+				case "edit_validator":
+					tev.Kind = "edit_validator"
+					ev, err = mapStakingEditValidatorToSub(msg)
+				case "create_validator":
+					tev.Kind = "create_validator"
+					ev, err = mapStakingCreateValidatorToSub(msg)
+				case "delegate":
+					tev.Kind = "delegate"
+					ev, err = mapStakingDelegateToSub(msg)
+				case "begin_redelegate":
+					tev.Kind = "begin_redelegate"
+					ev, err = mapStakingBeginRedelegateToSub(msg)
+				default:
+					c.logger.Error("[TERRA-API] Unknown staking message Type ", zap.Error(err), zap.String("type", msg.Type()), zap.String("route", msg.Route()))
+				}
+			default:
+				c.logger.Error("[TERRA-API] Unknown message Route ", zap.Error(err), zap.String("route", msg.Route()))
+			}
+
+			if ev.Type != "" {
+				tev.Sub = append(tev.Sub, ev)
+			}
+
+			if err != nil {
+				c.logger.Error("[TERRA-API] Problem decoding   transaction ", zap.Error(err), zap.String("type", msg.Type()), zap.String("route", msg.Route()))
+			}
+
+			presentIndexes[tev.ID] = true
+			trans.Events = append(trans.Events, tev)
+		}
+
+		for _, logf := range lf {
+			msgIndex := strconv.FormatFloat(logf.MsgIndex, 'f', -1, 64)
+			_, ok := presentIndexes[msgIndex]
+			if ok {
+				continue
+			}
+
+			tev := shared.TransactionEvent{
+				ID: msgIndex,
 			}
 			for _, ev := range logf.Events {
 				sub := shared.SubsetEvent{
@@ -205,35 +515,43 @@ func rawToTransaction(ctx context.Context, c *Client, in []TxResponse, blocks ma
 					sub.Module = attr.Module
 					sub.Action = attr.Action
 
-					// if len(attr.Sender) > 0 {
-					// 	sub.Sender = append(sub.Sender, attr.Sender...)
-					// }
-
-					// if len(attr.Recipient) > 0 {
-					// 	sub.Recipient = append(sub.Recipient, attr.Recipient...)
-					// }
-
+					if len(attr.Sender) > 0 {
+						for _, senderID := range attr.Sender {
+							sub.Sender = append(sub.Sender, shared.EventTransfer{Account: shared.Account{ID: senderID}})
+						}
+					}
+					if len(attr.Recipient) > 0 {
+						for _, recipientID := range attr.Recipient {
+							sub.Recipient = append(sub.Recipient, shared.EventTransfer{Account: shared.Account{ID: recipientID}})
+						}
+					}
 					if attr.CompletionTime != "" {
 						cTime, _ := time.Parse(time.RFC3339Nano, attr.CompletionTime)
 						sub.Completion = &cTime
 					}
-
-					if len(attr.Withdraw) > 0 {
-						for k, v := range attr.Withdraw {
-							w, ok := sub.Withdraw[k]
-							if !ok {
-								w = []shared.Account{}
+					/*
+						if len(attr.Withdraw) > 0 {
+							if sub.Withdraw == nil {
+								sub.Withdraw = make(map[string][]shared.Account)
 							}
-							for _, withdrawID := range v {
-								w = append(w, shared.Account{ID: withdrawID})
+							for k, v := range attr.Withdraw {
+								w, ok := sub.Withdraw[k]
+								if !ok {
+									w = []shared.Account{}
+								}
+								for _, withdrawID := range v {
+									w = append(w, shared.Account{ID: withdrawID})
+								}
+								sub.Withdraw[k] = w
 							}
-							sub.Withdraw[k] = w
-						}
-					}
+						}*/
 
 					if len(attr.Validator) > 0 {
+						if sub.Node == nil {
+							sub.Node = make(map[string][]shared.Account)
+						}
 						for k, v := range attr.Validator {
-							w, ok := sub.Validator[k]
+							w, ok := sub.Node[k]
 							if !ok {
 								w = []shared.Account{}
 							}
@@ -241,33 +559,35 @@ func rawToTransaction(ctx context.Context, c *Client, in []TxResponse, blocks ma
 							for _, validatorID := range v {
 								w = append(w, shared.Account{ID: validatorID})
 							}
-							sub.Validator[k] = w
+							sub.Node[k] = w
 						}
 					}
 
-					for _, amount := range attr.Amount {
+					for index, amount := range attr.Amount {
 						sliced := getCurrency(amount)
 
 						am := shared.TransactionAmount{
 							Text: amount,
 						}
 
+						var (
+							c       *big.Int
+							exp     int32
+							coinErr error
+						)
+
 						if len(sliced) == 3 {
 							am.Currency = sliced[2]
-							c, exp, err := getCoin(sliced[1])
-							if err != nil {
-								am.Numeric = c
-								am.Exp = exp
-							}
-
+							c, exp, coinErr = getCoin(sliced[1])
 						} else {
-							c, exp, err := getCoin(amount)
-							if err != nil {
-								am.Numeric = c
-								am.Exp = exp
-							}
+							c, exp, coinErr = getCoin(amount)
 						}
-						sub.Amount = append(sub.Amount, am)
+
+						if coinErr != nil {
+							am.Numeric.Set(c)
+							am.Exp = exp
+						}
+						sub.Amount[strconv.Itoa(index)] = am
 					}
 					ev.Attributes[atk] = nil
 				}
@@ -304,17 +624,17 @@ func getCurrency(in string) []string {
 	return curencyRegex.FindStringSubmatch(in)
 }
 
-func getCoin(s string) (number big.Int, exp int32, err error) {
+func getCoin(s string) (number *big.Int, exp int32, err error) {
 
 	s = strings.Replace(s, ",", ".", -1)
 	strs := strings.Split(s, `.`)
 	if len(strs) == 1 {
-		i := big.Int{}
+		i := &big.Int{}
 		i.SetString(strs[0], 10)
 		return i, 0, nil
 	}
 	if len(strs) == 2 {
-		i := big.Int{}
+		i := &big.Int{}
 		i.SetString(strs[0]+strs[1], 10)
 		return i, int32(len(strs[1])), nil
 	}

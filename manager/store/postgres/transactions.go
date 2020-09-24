@@ -111,14 +111,10 @@ ReadAll:
 						senders = uniqueEntriesEvTransfer(sub.Recipient, senders)
 					}
 
-					if len(sub.Validator) > 0 {
-						for _, accounts := range sub.Validator {
+					if len(sub.Node) > 0 {
+						for _, accounts := range sub.Node {
 							parties = uniqueEntriesAccount(accounts, parties)
 						}
-					}
-
-					if len(sub.Feeder) > 0 {
-						parties = uniqueEntriesAccount(sub.Feeder, parties)
 					}
 
 					if sub.Error != nil {

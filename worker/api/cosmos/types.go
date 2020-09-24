@@ -160,17 +160,18 @@ func (lea *LogEventsAttributes) UnmarshalJSON(b []byte) error {
 				v = []string{}
 			}
 			lea.Validator[kc.Key] = append(v, kc.Value)
-
-		case "withdraw_address":
-			if lea.Withdraw == nil {
-				lea.Withdraw = map[string][]string{}
-			}
-			// for now it's only address
-			v, ok := lea.Withdraw["address"]
-			if !ok {
-				v = []string{}
-			}
-			lea.Withdraw[kc.Key] = append(v, kc.Value)
+			/*
+				case "withdraw_address":
+					if lea.Withdraw == nil {
+						lea.Withdraw = map[string][]string{}
+					}
+					// for now it's only address
+					v, ok := lea.Withdraw["address"]
+					if !ok {
+						v = []string{}
+					}
+					lea.Withdraw[kc.Key] = append(v, kc.Value)
+			*/
 		case "sender":
 			lea.Sender = append(lea.Sender, kc.Value)
 		case "recipient":
