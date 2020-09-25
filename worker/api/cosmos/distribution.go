@@ -17,7 +17,7 @@ func mapDistributionWithdrawValidatorCommissionToSub(msg sdk.Msg) (se shared.Sub
 	}
 
 	return shared.SubsetEvent{
-		Type:   "withdraw_validator_commission",
+		Type:   []string{"withdraw_validator_commission"},
 		Module: "distribution",
 		Node:   map[string][]shared.Account{"validator": {{ID: wvc.ValidatorAddress.String()}}},
 		Recipient: []shared.EventTransfer{{
@@ -33,7 +33,7 @@ func mapDistributionSetWithdrawAddressToSub(msg sdk.Msg) (se shared.SubsetEvent,
 	}
 
 	return shared.SubsetEvent{
-		Type:   "set_withdraw_address",
+		Type:   []string{"set_withdraw_address"},
 		Module: "distribution",
 		Node: map[string][]shared.Account{
 			"delegator": {{ID: swa.DelegatorAddress.String()}},
@@ -48,7 +48,7 @@ func mapDistributionWithdrawDelegatorRewardToSub(msg sdk.Msg) (se shared.SubsetE
 		return se, errors.New("Not a withdraw_validator_commission type")
 	}
 	return shared.SubsetEvent{
-		Type:   "withdraw_delegator_reward",
+		Type:   []string{"withdraw_delegator_reward"},
 		Module: "distribution",
 		Node: map[string][]shared.Account{
 			"delegator": {{ID: wdr.DelegatorAddress.String()}},
@@ -69,7 +69,7 @@ func mapDistributionFundCommunityPoolToSub(msg sdk.Msg) (se shared.SubsetEvent, 
 
 	evt, err := distributionProduceEvTx(fcp.Depositor, fcp.Amount)
 	return shared.SubsetEvent{
-		Type:   "fund_community_pool",
+		Type:   []string{"fund_community_pool"},
 		Module: "distribution",
 		Node: map[string][]shared.Account{
 			"depositor": {{ID: fcp.Depositor.String()}},

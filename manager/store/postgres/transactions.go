@@ -121,7 +121,7 @@ ReadAll:
 						types = uniqueEntry("error", types)
 					}
 
-					types = uniqueEntry(sub.Type, types)
+					types = uniqueEntries(sub.Type, types)
 				}
 			}
 
@@ -293,6 +293,12 @@ func (d *Driver) GetTransactions(ctx context.Context, tsearch params.Transaction
 		i++
 	}
 
+	if tsearch.Hash != "" {
+		parts = append(parts, "hash = $"+strconv.Itoa(i))
+		data = append(data, tsearch.Hash)
+		i++
+	}
+
 	if tsearch.BlockHash != "" {
 		parts = append(parts, "block_hash = $"+strconv.Itoa(i))
 		data = append(data, tsearch.BlockHash)
@@ -323,20 +329,22 @@ func (d *Driver) GetTransactions(ctx context.Context, tsearch params.Transaction
 		i++
 	}
 
-	if tsearch.Account != "" {
-		parts = append(parts, "$"+strconv.Itoa(i)+"=ANY(parties)")
-		data = append(data, tsearch.Account) // (lukanus): one would be filled
+	if len(tsearch.Account) > 0 {
+		//parts = append(parts, "$"+strconv.Itoa(i)+"=ANY(parties)")
+		parts = append(parts, "parties @> $"+strconv.Itoa(i))
+		data = append(data, tsearch.Account)
 		i++
 	}
 
-	if tsearch.Sender != "" {
-		parts = append(parts, "$"+strconv.Itoa(i)+"=ANY(senders)")
+	if len(tsearch.Sender) > 0 {
+		parts = append(parts, "senders @> $"+strconv.Itoa(i))
 		data = append(data, tsearch.Sender)
 		i++
 	}
 
-	if tsearch.Receiver != "" {
-		parts = append(parts, "$"+strconv.Itoa(i)+"=ANY(recipients)")
+	if len(tsearch.Receiver) > 0 {
+		//parts = append(parts, "$"+strconv.Itoa(i)+"=ANY(recipients)")
+		parts = append(parts, "recipients @> $"+strconv.Itoa(i))
 		data = append(data, tsearch.Receiver)
 		i++
 	}
@@ -347,15 +355,15 @@ func (d *Driver) GetTransactions(ctx context.Context, tsearch params.Transaction
 		i++
 	}
 
-	if !tsearch.StartTime.IsZero() {
+	if !tsearch.AfterTime.IsZero() {
 		parts = append(parts, "time >= $"+strconv.Itoa(i))
-		data = append(data, tsearch.StartTime)
+		data = append(data, tsearch.AfterTime)
 		i++
 	}
 
-	if !tsearch.EndTime.IsZero() {
+	if !tsearch.BeforeTime.IsZero() {
 		parts = append(parts, "time <= $"+strconv.Itoa(i))
-		data = append(data, tsearch.EndTime)
+		data = append(data, tsearch.BeforeTime)
 	}
 
 	qBuilder := strings.Builder{}
@@ -392,9 +400,9 @@ func (d *Driver) GetTransactions(ctx context.Context, tsearch params.Transaction
 	}
 
 	defer rows.Close()
+
 	for rows.Next() {
 		tx := structs.Transaction{}
-		var err error
 		if tsearch.WithRaw {
 			err = rows.Scan(&tx.ID, &tx.Version, &tx.Epoch, &tx.Height, &tx.Hash, &tx.BlockHash, &tx.Time, &tx.GasWanted, &tx.GasUsed, &tx.Memo, &tx.Events, &tx.Raw)
 		} else {

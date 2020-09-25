@@ -9,57 +9,51 @@ import (
 	"github.com/google/uuid"
 )
 
-type HeightRange struct {
-	Epoch       string
-	Hash        string
-	StartHeight uint64
-	EndHeight   uint64
-}
-
-type HeightHash struct {
-	Epoch  string
-	Height uint64
-	Hash   string
-}
-
-type TransactionWithMeta struct {
-	Network     string      `json:"network,omitempty"`
-	Version     string      `json:"version,omitempty"`
-	ChainID     string      `json:"chain_id,omitempty"`
-	Transaction Transaction `json:"transaction,omitempty"`
-}
+//go:generate swagger generate spec --scan-models -o swagger.json
 
 // Transaction contains the blockchain transaction details
+// swagger:model
 type Transaction struct {
-	ID        uuid.UUID  `json:"id,omitempty"`
+	// ID of transaction assigned on database write
+	ID uuid.UUID `json:"id,omitempty"`
+	// Created at
 	CreatedAt *time.Time `json:"created_at,omitempty"`
+	// Updated at
 	UpdatedAt *time.Time `json:"updated_at,omitempty"`
 
-	Hash      string `json:"hash,omitempty"`
+	// Hash of the transaction
+	Hash string `json:"hash,omitempty"`
+	// BlockHash - hash of the block of transaction
 	BlockHash string `json:"block_hash,omitempty"`
+	// Height - height of the block of transaction
+	Height uint64 `json:"height,omitempty"`
 
-	Height  uint64    `json:"height,omitempty"`
-	Epoch   string    `json:"epoch,omitempty"`
-	ChainID string    `json:"chain_id,omitempty"`
-	Time    time.Time `json:"time,omitempty"`
+	Epoch string `json:"epoch,omitempty"`
+	// ChainID - chain id of transacion
+	ChainID string `json:"chain_id,omitempty"`
+	// Time - time of transaction
+	Time time.Time `json:"time,omitempty"`
 
-	Fee       []TransactionAmount `json:"transaction_fee,omitempty"`
-	GasWanted uint64              `json:"gas_wanted,omitempty"`
-	GasUsed   uint64              `json:"gas_used,omitempty"`
-
+	// Fee - Fees for transaction (if applies)
+	Fee []TransactionAmount `json:"transaction_fee,omitempty"`
+	// GasWanted
+	GasWanted uint64 `json:"gas_wanted,omitempty"`
+	// GasUsed
+	GasUsed uint64 `json:"gas_used,omitempty"`
+	// Memo - the description attached to transactions
 	Memo string `json:"memo,omitempty"`
 
-	Version string            `json:"version"`
-	Events  TransactionEvents `json:"events,omitempty"`
-	Raw     []byte            `json:"raw,omitempty"`
+	// Version - Version of transaction record
+	Version string `json:"version"`
+	// Events - Transaction contents
+	Events TransactionEvents `json:"events,omitempty"`
+
+	// Raw - Raw transaction bytes
+	Raw []byte `json:"raw,omitempty"`
 }
 
-type TransactionEvent struct {
-	ID   string        `json:"id,omitempty"`
-	Kind string        `json:"kind,omitempty"`
-	Sub  []SubsetEvent `json:"sub,omitempty"`
-}
-
+// TransactionEvents - a set of TransactionEvent
+// swagger:model
 type TransactionEvents []TransactionEvent
 
 func (te *TransactionEvents) Scan(value interface{}) error {
@@ -72,49 +66,80 @@ func (te *TransactionEvents) Scan(value interface{}) error {
 	return json.Unmarshal(b, &te)
 }
 
+// TransactionEvent part of transaction contents
+// swagger:model
+type TransactionEvent struct {
+	// ID UniqueID of event
+	ID string `json:"id,omitempty"`
+	// The Kind of event
+	Kind string `json:"kind,omitempty"`
+	// Subcontents of event
+	Sub []SubsetEvent `json:"sub,omitempty"`
+}
+
+// TransactionAmount structure holding amount information with decimal implementation (numeric * 10 ^ exp)
+// swagger:model
 type TransactionAmount struct {
-	Text     string `json:"text,omitempty"`
+	// Textual representation of Amount
+	Text string `json:"text,omitempty"`
+	// The currency in what amount is returned (if applies)
 	Currency string `json:"currency,omitempty"`
 
-	// decimal implementation (numeric * 10 ^ exp)
+	// Numeric part of the amount
 	Numeric *big.Int `json:"numeric,omitempty"`
-	Exp     int32    `json:"exp,omitempty"`
+	// Exponential part of amount obviously 0 by default
+	Exp int32 `json:"exp,omitempty"`
 }
 
+// SubsetEvent - structure storing main contents of transacion
+// swagger:model
 type SubsetEvent struct {
-	Type   string `json:"type,omitempty"`
-	Action string `json:"action,omitempty"`
+	// Type of transaction
+	Type   []string `json:"type,omitempty"`
+	Action string   `json:"action,omitempty"`
+	// Collection from where transaction came from
 	Module string `json:"module,omitempty"`
-
-	Sender    []EventTransfer `json:"sender,omitempty"`
+	// List of sender accounts with optional amounts
+	Sender []EventTransfer `json:"sender,omitempty"`
+	// List of recipient accounts with optional amounts
 	Recipient []EventTransfer `json:"recipient,omitempty"`
-
+	// The list of all accounts that took part in the subsetevent
 	Node map[string][]Account `json:"node,omitempty"`
-
-	Nonce      int        `json:"nonce,omitempty"`
+	// Transaction nonce
+	Nonce string `json:"nonce,omitempty"`
+	// Completion time
 	Completion *time.Time `json:"completion,omitempty"`
-
-	Error *SubsetEventError `json:"error,omitempty"`
-
+	// List of Amounts
 	Amount map[string]TransactionAmount `json:"amount,omitempty"`
+	// Optional error if occurred
+	Error *SubsetEventError `json:"error,omitempty"`
 }
 
+// EventTransfer - Account and Amounts pair
+// swagger:model
 type EventTransfer struct {
 	Account Account             `json:"account,omitempty"`
 	Amounts []TransactionAmount `json:"amounts,omitempty"`
 }
 
+// Account - Extended Account information
+// swagger:model
 type Account struct {
-	ID      string          `json:"id"`
+	// Unique account identifier
+	ID string `json:"id"`
+	// External optional account details (if applies)
 	Details *AccountDetails `json:"detail,omitempty"`
 }
 
+// AccountDetails External optional account details (if applies)
 type AccountDetails struct {
 	Description string `json:"description,omitempty"`
 	Contact     string `json:"contact,omitempty"`
 	Name        string `json:"name,omitempty"`
 	Website     string `json:"website,omitempty"`
 }
+
+// SubsetEventError  error structure for event
 type SubsetEventError struct {
 	Message string `json:"message,omitempty"`
 }
@@ -142,24 +167,25 @@ type Block struct {
 }
 
 type TransactionSearch struct {
-	Height    uint64    `json:"height"`
-	Type      []string  `json:"type"`
-	BlockHash string    `json:"block_hash"`
-	Account   string    `json:"account"`
-	Sender    string    `json:"sender"`
-	Receiver  string    `json:"receiver"`
-	Memo      string    `json:"memo"`
-	StartTime time.Time `json:"start_time"`
-	EndTime   time.Time `json:"end_time"`
-	Limit     uint64    `json:"limit"`
-	Offset    uint64    `json:"offset"`
-
-	AfterHeight  uint64 `form:"after_id"`
-	BeforeHeight uint64 `form:"before_id"`
-
 	Network string `json:"network"`
 	ChainID string `json:"chain_id"`
 	Epoch   string `json:"epoch"`
+
+	Height     uint64    `json:"height"`
+	Type       []string  `json:"type"`
+	BlockHash  string    `json:"block_hash"`
+	Hash       string    `json:"hash"`
+	Account    []string  `json:"account"`
+	Sender     []string  `json:"sender"`
+	Receiver   []string  `json:"receiver"`
+	Memo       string    `json:"memo"`
+	BeforeTime time.Time `json:"before_time"`
+	AfterTime  time.Time `json:"after_time"`
+	Limit      uint64    `json:"limit"`
+	Offset     uint64    `json:"offset"`
+
+	AfterHeight  uint64 `form:"after_id"`
+	BeforeHeight uint64 `form:"before_id"`
 
 	WithRaw bool `json:"with_raw"`
 }

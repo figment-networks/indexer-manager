@@ -36,7 +36,7 @@ type ClientContractor interface {
 	SchedulerContractor
 	ControllContractor
 
-	SearchTransactions(ctx context.Context, nv NetworkVersion, ts shared.TransactionSearch) ([]shared.Transaction, error)
+	SearchTransactions(ctx context.Context, ts shared.TransactionSearch) ([]shared.Transaction, error)
 	GetTransaction(ctx context.Context, nv NetworkVersion, id string) ([]shared.Transaction, error)
 	GetTransactions(ctx context.Context, nv NetworkVersion, heightRange shared.HeightRange, batchLimit uint64, silent bool) ([]shared.Transaction, error)
 }
@@ -210,13 +210,13 @@ WaitForAllData:
 }
 
 // SearchTransactions is the search
-func (hc *Client) SearchTransactions(ctx context.Context, nv NetworkVersion, ts shared.TransactionSearch) ([]shared.Transaction, error) {
+func (hc *Client) SearchTransactions(ctx context.Context, ts shared.TransactionSearch) ([]shared.Transaction, error) {
 	timer := metrics.NewTimer(callDurationSearchTransactions)
 	defer timer.ObserveDuration()
 
 	return hc.storeEng.GetTransactions(ctx, params.TransactionSearch{
-		Network:      nv.Network,
-		ChainID:      nv.ChainID,
+		Network:      ts.Network,
+		ChainID:      ts.ChainID,
 		Epoch:        ts.Epoch,
 		Height:       ts.Height,
 		Type:         ts.Type,
@@ -225,12 +225,13 @@ func (hc *Client) SearchTransactions(ctx context.Context, nv NetworkVersion, ts 
 		Sender:       ts.Sender,
 		Receiver:     ts.Receiver,
 		Memo:         ts.Memo,
-		StartTime:    ts.StartTime,
-		EndTime:      ts.EndTime,
+		AfterTime:    ts.AfterTime,
+		BeforeTime:   ts.BeforeTime,
 		AfterHeight:  ts.AfterHeight,
 		BeforeHeight: ts.BeforeHeight,
 		Limit:        ts.Limit,
 		Offset:       ts.Offset,
+		WithRaw:      ts.WithRaw,
 	})
 }
 

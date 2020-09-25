@@ -3,6 +3,7 @@ package http
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"strconv"
@@ -13,21 +14,89 @@ import (
 	shared "github.com/figment-networks/cosmos-indexer/structs"
 )
 
+//go:generate swagger generate spec --scan-models -o swagger.json
+
+type ValidationError struct {
+	Msg string `json:"error"`
+}
+
+func (ve ValidationError) Error() string {
+	return fmt.Sprintf("Bad Request: %s", ve.Msg)
+}
+
 // TransactionSearch - A set of fields used as params for search
+// swagger:model
 type TransactionSearch struct {
+	// Network identifier to search in
+	//
+	// required: true
+	// example: cosmos
 	Network string `json:"network"`
-	//	AfterID   uint     `form:"after_id"`
-	//	BeforeID  uint     `form:"before_id"`
-	Height    uint64   `json:"height"`
-	Type      []string `json:"type"`
-	BlockHash string   `json:"block_hash"`
-	Account   string   `json:"account"`
-	Sender    string   `json:"sender"`
-	Receiver  string   `json:"receiver"`
-	Memo      string   `json:"memo"`
-	StartTime string   `json:"start_time"`
-	EndTime   string   `json:"end_time"`
-	Limit     uint     `json:"limit"`
+	// ChainID to search in
+	//
+	// required: true
+	// example: cosmoshub-3
+	ChainID string `json:"chain_id"`
+	// Epoch of transaction
+	//
+	// required: true
+	Epoch string `json:"epoch"`
+	// Height of the transactions to get
+	//
+	// min: 0
+	Height uint64 `json:"height"`
+	// AfterHeight gets all transaction bigger than given height
+	// Has to be bigger than BeforeHeight
+	//
+	// min: 0
+	AfterHeight uint64 `json:"after_height"`
+	// BeforeHeight gets all transaction lower than given height
+	// Has to be lesser than AfterHeight
+	//
+	// min: 0
+	BeforeHeight uint64 `json:"before_height"`
+	// Type - the list of types of transactions
+	//
+	// items.pattern: \w+
+	// items.unique: true
+	Type []string `json:"type"`
+	// BlockHash - the hash of block to get transaction from
+	BlockHash string `json:"block_hash"`
+	// Hash - the hash of transaction
+	Hash string `json:"hash"`
+	// Account - the account identifier to look for
+	// This searches for all accounts id which exists in transaction including senders, recipients, validators, feeders etc etc
+	//
+	// items.pattern: \w+
+	// items.unique: true
+	Account []string `json:"account"`
+	// Sender looks for transactions that includes given accountIDs
+	//
+	// items.pattern: \w+
+	// items.unique: true
+	Sender []string `json:"sender"`
+	// Receiver looks for transactions that includes given accountIDs
+	//
+	// items.pattern: \w+
+	// items.unique: true
+	Receiver []string `json:"receiver"`
+	// Memo sets full text search for memo field
+	Memo string `json:"memo"`
+	// The time of transaction (if not given by chain API, the same as block)
+	AfterTime time.Time `json:"after_time"`
+	// The time of transaction (if not given by chain API, the same as block)
+	BeforeTime time.Time `json:"before_time"`
+	// Limit of how many requests to get in one request
+	//
+	// default: 100
+	// max: 1000
+	Limit uint64 `json:"limit"`
+	// Offset the offset number or
+	Offset uint64 `json:"offset"`
+
+	// WithRaw - include base64 raw request in search response
+	// default: false
+	WithRaw bool `json:"with_raw"`
 }
 
 // Connector is main HTTP connector for manager
@@ -38,13 +107,6 @@ type Connector struct {
 // NewConnector is  Connector constructor
 func NewConnector(cli client.ClientContractor) *Connector {
 	return &Connector{cli}
-}
-
-// GetTransaction is http handler for GetTransaction method
-func (hc *Connector) GetTransaction(w http.ResponseWriter, req *http.Request) {
-	nv := client.NetworkVersion{Network: "cosmos", Version: "0.0.1"}
-	hc.cli.GetTransaction(req.Context(), nv, "")
-	w.WriteHeader(http.StatusNotImplemented)
 }
 
 // InsertTransactions is http handler for InsertTransactions method
@@ -113,66 +175,64 @@ func (hc *Connector) GetTransactions(w http.ResponseWriter, req *http.Request) {
 
 // SearchTransactions is http handler for SearchTransactions method
 func (hc *Connector) SearchTransactions(w http.ResponseWriter, req *http.Request) {
-	ct := req.Header.Get("Content-Type")
 
-	network := ""
-	ts := &shared.TransactionSearch{}
+	ct := req.Header.Get("Content-Type")
+	enc := json.NewEncoder(w)
+
+	ts := &TransactionSearch{}
 	if strings.Contains(ct, "json") {
 		dec := json.NewDecoder(req.Body)
 		err := dec.Decode(ts)
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
-			w.Write([]byte(err.Error()))
+			enc.Encode(ValidationError{Msg: "Invalid json request " + err.Error()})
 			return
 		}
-		if ts.Network != "" {
-			network = ts.Network
-		}
-
-	} else if strings.Contains(ct, "form") {
-		err := req.ParseForm()
-		if err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			w.Write([]byte(err.Error()))
-			return
-		}
-		ts.Height, _ = strconv.ParseUint(req.Form.Get("height"), 10, 64)
-		ts.Account = req.Form.Get("account")
-		ts.Sender = req.Form.Get("sender")
-		ts.Receiver = req.Form.Get("receiver")
-		ts.BlockHash = req.Form.Get("block_hash")
-		ts.Memo = req.Form.Get("memo")
-		ts.Sender = req.Form.Get("sender")
-		ts.Receiver = req.Form.Get("receiver")
-
-		ts.AfterHeight, _ = strconv.ParseUint(req.Form.Get("after_height"), 10, 64)
-		ts.BeforeHeight, _ = strconv.ParseUint(req.Form.Get("before_height"), 10, 64)
-		ts.Limit, _ = strconv.ParseUint(req.Form.Get("limit"), 10, 64)
-
-		network = req.Form.Get("network")
+	} else {
+		w.WriteHeader(http.StatusNotAcceptable)
+		enc.Encode(ValidationError{Msg: "Not supported content type"})
 	}
-
-	if network == "" {
-		network = "cosmos"
+	// (lukanus): enforce 100 limit by default
+	if ts.Limit == 0 {
+		ts.Limit = 100
 	}
-
-	if ts.ChainID == "" {
-
+	if err := validateSearchParams(ts); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		enc.Encode(ValidationError{Msg: err.Error()})
+		return
 	}
 
 	ctx, cancel := context.WithTimeout(req.Context(), 1*time.Minute)
 	defer cancel()
 
-	transactions, err := hc.cli.SearchTransactions(ctx, client.NetworkVersion{Network: network, ChainID: ts.ChainID, Version: "0.0.1"}, *ts)
+	transactions, err := hc.cli.SearchTransactions(ctx, shared.TransactionSearch{
+		Network:      ts.Network,
+		ChainID:      ts.ChainID,
+		Epoch:        ts.Epoch,
+		Height:       ts.Height,
+		Type:         ts.Type,
+		Hash:         ts.Hash,
+		BlockHash:    ts.BlockHash,
+		Account:      ts.Account,
+		Sender:       ts.Sender,
+		Receiver:     ts.Receiver,
+		Memo:         ts.Memo,
+		BeforeTime:   ts.BeforeTime,
+		AfterTime:    ts.AfterTime,
+		Limit:        ts.Limit,
+		Offset:       ts.Offset,
+		AfterHeight:  ts.AfterHeight,
+		BeforeHeight: ts.BeforeHeight,
+		WithRaw:      ts.WithRaw,
+	})
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(err.Error()))
+		enc.Encode(ValidationError{Msg: err.Error()})
 		return
 	}
 
 	w.Header().Add("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	enc := json.NewEncoder(w)
 	enc.Encode(transactions)
 }
 
@@ -304,10 +364,9 @@ func (hc *Connector) GetMissingTransactions(w http.ResponseWriter, req *http.Req
 
 // AttachToHandler attaches handlers to http server's mux
 func (c *Connector) AttachToHandler(mux *http.ServeMux) {
-	mux.HandleFunc("/transactions", c.GetTransactions)
-	mux.HandleFunc("/transactions/", c.GetTransaction)
 	mux.HandleFunc("/transactions_search", c.SearchTransactions)
 
+	mux.HandleFunc("/transactions", c.GetTransactions)
 	mux.HandleFunc("/transactions_insert/", c.InsertTransactions)
 	mux.HandleFunc("/scrape_latest", c.ScrapeLatest)
 
@@ -315,4 +374,59 @@ func (c *Connector) AttachToHandler(mux *http.ServeMux) {
 	mux.HandleFunc("/get_missing", c.GetMissingTransactions)
 	mux.HandleFunc("/get_running", c.GetRunningTransactions)
 
+}
+
+func validateSearchParams(ts *TransactionSearch) error {
+
+	if ts.Network == "" {
+		return ValidationError{Msg: "network parameter is mandatory"}
+	}
+
+	if ts.ChainID == "" {
+		return ValidationError{Msg: "chain_id parameter is mandatory"}
+	}
+
+	if ts.Height > 0 &&
+		(ts.AfterHeight > 0 || ts.BeforeHeight > 0) {
+		return ValidationError{Msg: `When height parameter is set following parameters has to be empty ["after_height","before_height"]`}
+	}
+
+	if ts.AfterHeight > 0 && ts.AfterHeight >= ts.BeforeHeight {
+		return ValidationError{Msg: "before_height has to be bigger than after_height"}
+	}
+
+	for _, ty := range ts.Type {
+		if ty == "" {
+			return ValidationError{Msg: "given type cannot be an empty string"}
+		}
+	}
+
+	for _, ac := range ts.Account {
+		if ac == "" {
+			return ValidationError{Msg: "given account cannot be an empty string"}
+		}
+	}
+
+	for _, ac := range ts.Sender {
+		if ac == "" {
+			return ValidationError{Msg: "given sender cannot be an empty string"}
+		}
+	}
+
+	for _, ac := range ts.Receiver {
+		if ac == "" {
+			return ValidationError{Msg: "given receiver cannot be an empty string"}
+		}
+	}
+
+	if !ts.AfterTime.IsZero() && ts.AfterTime.Before(ts.BeforeTime) {
+		return ValidationError{Msg: "after_time has to be after than before_time "}
+	}
+
+	if ts.Limit > 1000 {
+		return ValidationError{Msg: "limit has to be smaller than 1000"}
+
+	}
+
+	return nil
 }

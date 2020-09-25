@@ -17,7 +17,7 @@ func mapBankMultisendToSub(msg sdk.Msg) (se shared.SubsetEvent, er error) {
 	}
 
 	se = shared.SubsetEvent{
-		Type:   "multisend",
+		Type:   []string{"multisend"},
 		Module: "bank",
 	}
 	for _, i := range multisend.Inputs {
@@ -47,7 +47,7 @@ func mapBankSendToSub(msg sdk.Msg) (se shared.SubsetEvent, er error) {
 	}
 
 	se = shared.SubsetEvent{
-		Type:   "send",
+		Type:   []string{"send"},
 		Module: "bank",
 	}
 

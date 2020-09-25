@@ -13,13 +13,14 @@ type TransactionSearch struct {
 	Height    uint64   `json:"height"`
 	Type      []string `json:"type"`
 	BlockHash string   `json:"block_hash"`
-	Account   string   `json:"account"`
-	Sender    string   `json:"sender"`
-	Receiver  string   `json:"receiver"`
+	Hash      string   `json:"hash"`
+	Account   []string `json:"account"`
+	Sender    []string `json:"sender"`
+	Receiver  []string `json:"receiver"`
 	Memo      string   `json:"memo"`
 
-	StartTime time.Time `json:"start_time"`
-	EndTime   time.Time `json:"end_time"`
+	AfterTime  time.Time `json:"before_time"`
+	BeforeTime time.Time `json:"after_time"`
 
 	AfterHeight  uint64 `json:"after_height"`
 	BeforeHeight uint64 `json:"before_height"`

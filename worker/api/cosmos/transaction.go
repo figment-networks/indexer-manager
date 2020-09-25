@@ -485,7 +485,7 @@ func rawToTransaction(ctx context.Context, c *Client, in []TxResponse, blocks ma
 				c.logger.Error("[TERRA-API] Unknown message Route ", zap.Error(err), zap.String("route", msg.Route()))
 			}
 
-			if ev.Type != "" {
+			if len(ev.Type) > 0 {
 				tev.Sub = append(tev.Sub, ev)
 			}
 
@@ -509,7 +509,7 @@ func rawToTransaction(ctx context.Context, c *Client, in []TxResponse, blocks ma
 			}
 			for _, ev := range logf.Events {
 				sub := shared.SubsetEvent{
-					Type: ev.Type,
+					Type: []string{ev.Type},
 				}
 				for atk, attr := range ev.Attributes {
 					sub.Module = attr.Module

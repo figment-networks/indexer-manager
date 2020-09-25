@@ -16,7 +16,7 @@ func mapStakingUndelegateToSub(msg sdk.Msg) (se shared.SubsetEvent, err error) {
 	}
 
 	return shared.SubsetEvent{
-		Type:   "begin_unbonding",
+		Type:   []string{"begin_unbonding"},
 		Module: "staking",
 		Node: map[string][]shared.Account{
 			"delegator": {{ID: u.DelegatorAddress.String()}},
@@ -38,7 +38,7 @@ func mapStakingDelegateToSub(msg sdk.Msg) (se shared.SubsetEvent, err error) {
 		return se, errors.New("Not a delegate type")
 	}
 	return shared.SubsetEvent{
-		Type:   "delegate",
+		Type:   []string{"delegate"},
 		Module: "staking",
 		Node: map[string][]shared.Account{
 			"delegator": {{ID: d.DelegatorAddress.String()}},
@@ -61,7 +61,7 @@ func mapStakingBeginRedelegateToSub(msg sdk.Msg) (se shared.SubsetEvent, err err
 	}
 
 	return shared.SubsetEvent{
-		Type:   "begin_redelegate",
+		Type:   []string{"begin_redelegate"},
 		Module: "staking",
 		Node: map[string][]shared.Account{
 			"delegator":             {{ID: br.DelegatorAddress.String()}},
@@ -84,7 +84,7 @@ func mapStakingCreateValidatorToSub(msg sdk.Msg) (se shared.SubsetEvent, err err
 		return se, errors.New("Not a create_validator type")
 	}
 	return shared.SubsetEvent{
-		Type:   "create_validator",
+		Type:   []string{"create_validator"},
 		Module: "distribution",
 		Node: map[string][]shared.Account{
 			"delegator": {{ID: ev.DelegatorAddress.String()}},
@@ -131,7 +131,7 @@ func mapStakingEditValidatorToSub(msg sdk.Msg) (se shared.SubsetEvent, err error
 		return se, errors.New("Not a edit_validator type")
 	}
 	return shared.SubsetEvent{
-		Type:   "edit_validator",
+		Type:   []string{"edit_validator"},
 		Module: "distribution",
 		Node: map[string][]shared.Account{
 			"validator": {
