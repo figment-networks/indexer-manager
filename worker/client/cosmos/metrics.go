@@ -30,7 +30,7 @@ var (
 		Namespace: "indexers",
 		Subsystem: "worker_client_cosmos",
 		Name:      "responses_sent",
-		Desc:      "Reponses to be sent from client",
+		Desc:      "Responses to be sent from client",
 		Tags:      []string{"type", "final"},
 	})
 )

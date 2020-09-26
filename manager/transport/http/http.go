@@ -277,23 +277,32 @@ func (hc *Connector) CheckMissingTransactions(w http.ResponseWriter, req *http.R
 	endHeight := req.URL.Query().Get("end_height")
 	intEndHeight, _ := strconv.ParseUint(endHeight, 10, 64)
 
+	w.Header().Add("Content-Type", "application/json")
+
 	if intHeight == 0 || intEndHeight == 0 {
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("start_height and end_height query params are not set properly"))
+		w.Write([]byte(`{"error":"start_height and end_height query params are not set properly"}`))
+		return
+	}
+
+	network := req.URL.Query().Get("network")
+	chainID := req.URL.Query().Get("chain_id")
+
+	if network == "" || chainID == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(`{"error":"network and chain_id parameters are required"}`))
 		return
 	}
 
 	var err error
 	mtr := MissingTransactionsResponse{}
-	nv := client.NetworkVersion{Network: "cosmos", Version: "0.0.1", ChainID: "cosmoshub-3"}
-	mtr.MissingBlocks, mtr.MissingTransactions, err = hc.cli.CheckMissingTransactions(req.Context(), nv, shared.HeightRange{StartHeight: intHeight, EndHeight: intEndHeight}, 1000)
+	mtr.MissingBlocks, mtr.MissingTransactions, err = hc.cli.CheckMissingTransactions(req.Context(), client.NetworkVersion{Network: network, Version: "0.0.1", ChainID: chainID}, shared.HeightRange{StartHeight: intHeight, EndHeight: intEndHeight}, 1000)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(err.Error()))
 		return
 	}
 
-	w.Header().Add("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	enc := json.NewEncoder(w)
 	enc.Encode(mtr)
@@ -317,7 +326,6 @@ func (hc *Connector) GetRunningTransactions(w http.ResponseWriter, req *http.Req
 
 // GetMissingTransactions is http handler for GetMissingTransactions method
 func (hc *Connector) GetMissingTransactions(w http.ResponseWriter, req *http.Request) {
-	nv := client.NetworkVersion{Network: "cosmos", Version: "0.0.1", ChainID: "cosmoshub-3"}
 
 	strHeight := req.URL.Query().Get("start_height")
 	intHeight, _ := strconv.ParseUint(strHeight, 10, 64)
@@ -329,6 +337,15 @@ func (hc *Connector) GetMissingTransactions(w http.ResponseWriter, req *http.Req
 
 	force := (req.URL.Query().Get("force") != "")
 
+	network := req.URL.Query().Get("network")
+	chainID := req.URL.Query().Get("chain_id")
+
+	if network == "" || chainID == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(`{"error":"network and chain_id parameters are required"}`))
+		return
+	}
+
 	if intHeight == 0 || intEndHeight == 0 {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("start_height and end_height query params are not set properly"))
@@ -336,7 +353,7 @@ func (hc *Connector) GetMissingTransactions(w http.ResponseWriter, req *http.Req
 	}
 
 	if async == "" {
-		_, err := hc.cli.GetMissingTransactions(req.Context(), nv,
+		_, err := hc.cli.GetMissingTransactions(req.Context(), client.NetworkVersion{Network: network, Version: "0.0.1", ChainID: chainID},
 			shared.HeightRange{StartHeight: intHeight, EndHeight: intEndHeight}, 1000, false, force)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
@@ -347,7 +364,7 @@ func (hc *Connector) GetMissingTransactions(w http.ResponseWriter, req *http.Req
 		return
 	}
 
-	run, err := hc.cli.GetMissingTransactions(req.Context(), nv,
+	run, err := hc.cli.GetMissingTransactions(req.Context(), client.NetworkVersion{Network: network, Version: "0.0.1", ChainID: chainID},
 		shared.HeightRange{StartHeight: intHeight, EndHeight: intEndHeight}, 1000, true, force)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
