@@ -130,7 +130,7 @@ func mapStakingEditValidatorToSub(msg sdk.Msg) (se shared.SubsetEvent, err error
 	if !ok {
 		return se, errors.New("Not a edit_validator type")
 	}
-	return shared.SubsetEvent{
+	sev := shared.SubsetEvent{
 		Type:   []string{"edit_validator"},
 		Module: "distribution",
 		Node: map[string][]shared.Account{
@@ -146,14 +146,23 @@ func mapStakingEditValidatorToSub(msg sdk.Msg) (se shared.SubsetEvent, err error
 				},
 			},
 		},
-		Amount: map[string]shared.TransactionAmount{
-			"self_delegation_min": {
+	}
+
+	if ev.MinSelfDelegation != nil || ev.CommissionRate != nil {
+		sev.Amount = map[string]shared.TransactionAmount{}
+		if ev.MinSelfDelegation != nil {
+			sev.Amount["self_delegation_min"] = shared.TransactionAmount{
 				Text:    ev.MinSelfDelegation.String(),
 				Numeric: ev.MinSelfDelegation.BigInt(),
-			},
-			"commission_rate": {
+			}
+		}
+
+		if ev.CommissionRate != nil {
+			sev.Amount["commission_rate"] = shared.TransactionAmount{
 				Text:    ev.CommissionRate.String(),
 				Numeric: ev.CommissionRate.Int,
-			}},
-	}, err
+			}
+		}
+	}
+	return sev, err
 }

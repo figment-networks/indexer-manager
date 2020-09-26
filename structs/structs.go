@@ -57,7 +57,6 @@ type Transaction struct {
 type TransactionEvents []TransactionEvent
 
 func (te *TransactionEvents) Scan(value interface{}) error {
-
 	b, ok := value.([]byte)
 	if !ok {
 		return errors.New("type assertion to []byte failed")
@@ -113,6 +112,8 @@ type SubsetEvent struct {
 	Amount map[string]TransactionAmount `json:"amount,omitempty"`
 	// Optional error if occurred
 	Error *SubsetEventError `json:"error,omitempty"`
+	// Set of additional parameters attached to transaction (used as last resort)
+	Additional map[string][]string `json:"additional,omitempty"`
 }
 
 // EventTransfer - Account and Amounts pair
@@ -132,6 +133,7 @@ type Account struct {
 }
 
 // AccountDetails External optional account details (if applies)
+// swagger:model
 type AccountDetails struct {
 	Description string `json:"description,omitempty"`
 	Contact     string `json:"contact,omitempty"`
@@ -140,6 +142,7 @@ type AccountDetails struct {
 }
 
 // SubsetEventError  error structure for event
+// swagger:model
 type SubsetEventError struct {
 	Message string `json:"message,omitempty"`
 }

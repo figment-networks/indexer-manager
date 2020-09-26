@@ -18,6 +18,8 @@ const (
 	StreamOffline
 )
 
+var ErrStreamIsNotOnline = errors.New("Stream is not Online")
+
 // StreamAccess creates a proxy between code and transport level.
 // The extra layer serves a function of access manager.
 // Requests and Responses are processed by different goroutines, that doesn't need to know about connection state.
@@ -52,7 +54,7 @@ func (sa *StreamAccess) Send(tr TaskResponse) error {
 	defer sa.respLock.RUnlock()
 
 	if sa.State != StreamOnline {
-		return errors.New("Stream is not Online")
+		return ErrStreamIsNotOnline
 	}
 
 	sa.ResponseListener <- tr
@@ -65,7 +67,7 @@ func (sa *StreamAccess) Req(tr TaskRequest) error {
 	sa.reqLock.RLock()
 	defer sa.reqLock.RUnlock()
 	if sa.State != StreamOnline {
-		return errors.New("Stream is not Online")
+		return ErrStreamIsNotOnline
 	}
 
 	sa.RequestListener <- tr

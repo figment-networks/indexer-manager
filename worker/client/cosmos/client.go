@@ -399,8 +399,8 @@ func getRange(ctx context.Context, logger *zap.Logger, client *api.Client, hr st
 	return nil
 }
 
-// sendResp sends responses to out channel preparing
-func sendResp(ctx context.Context, id uuid.UUID, out chan cStructs.OutResp, logger *zap.Logger, stream *cStructs.StreamAccess, fin chan bool) {
+// sendResp constructs protocol response and send it out to transport
+func sendResp(ctx context.Context, id uuid.UUID, in <-chan cStructs.OutResp, logger *zap.Logger, stream *cStructs.StreamAccess, fin chan bool) {
 	b := &bytes.Buffer{}
 	enc := json.NewEncoder(b)
 	order := uint64(0)
@@ -413,7 +413,7 @@ SendLoop:
 		case <-ctx.Done():
 			contextDone = true
 			break SendLoop
-		case t, ok := <-out:
+		case t, ok := <-in:
 			if !ok && t.Type == "" {
 				break SendLoop
 			}
