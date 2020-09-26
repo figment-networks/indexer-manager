@@ -18,7 +18,7 @@ func mapGovDepositToSub(msg sdk.Msg) (se shared.SubsetEvent, er error) {
 
 	evt := shared.SubsetEvent{
 		Type:       []string{"deposit"},
-		Module:     "got",
+		Module:     "gov",
 		Node:       map[string][]shared.Account{"depositor": {{ID: dep.Depositor.String()}}},
 		Additional: map[string][]string{"proposalID": {strconv.FormatUint(dep.ProposalID, 10)}},
 	}
@@ -56,7 +56,7 @@ func mapGovVoteToSub(msg sdk.Msg) (se shared.SubsetEvent, er error) {
 
 	return shared.SubsetEvent{
 		Type:   []string{"vote"},
-		Module: "got",
+		Module: "gov",
 		Node:   map[string][]shared.Account{"voter": {{ID: vote.Voter.String()}}},
 		Additional: map[string][]string{
 			"proposalID": {strconv.FormatUint(vote.ProposalID, 10)},
@@ -73,7 +73,7 @@ func mapGovSubmitProposalToSub(msg sdk.Msg) (se shared.SubsetEvent, er error) {
 
 	evt := shared.SubsetEvent{
 		Type:   []string{"submit_proposal"},
-		Module: "got",
+		Module: "gov",
 		Node:   map[string][]shared.Account{"proposer": {{ID: sp.Proposer.String()}}},
 	}
 
