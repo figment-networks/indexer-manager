@@ -50,7 +50,6 @@ func (c *Client) SearchTx(ctx context.Context, r structs.HeightRange, blocks map
 	}
 
 	q := req.URL.Query()
-
 	s := strings.Builder{}
 
 	s.WriteString(`"`)
@@ -314,23 +313,6 @@ func rawToTransaction(ctx context.Context, c *Client, in []TxResponse, blocks ma
 						cTime, _ := time.Parse(time.RFC3339Nano, attr.CompletionTime)
 						sub.Completion = &cTime
 					}
-					/*
-						if len(attr.Withdraw) > 0 {
-							if sub.Withdraw == nil {
-								sub.Withdraw = make(map[string][]shared.Account)
-							}
-							for k, v := range attr.Withdraw {
-								w, ok := sub.Withdraw[k]
-								if !ok {
-									w = []shared.Account{}
-								}
-								for _, withdrawID := range v {
-									w = append(w, shared.Account{ID: withdrawID})
-								}
-								sub.Withdraw[k] = w
-							}
-						}*/
-
 					if len(attr.Validator) > 0 {
 						if sub.Node == nil {
 							sub.Node = make(map[string][]shared.Account)
@@ -386,7 +368,9 @@ func rawToTransaction(ctx context.Context, c *Client, in []TxResponse, blocks ma
 
 		if txErr.Message != "" {
 			tev := shared.TransactionEvent{
+				Kind: "error",
 				Sub: []shared.SubsetEvent{{
+					Type:   []string{"error"},
 					Module: txErr.Codespace,
 					Error:  &shared.SubsetEventError{Message: txErr.Message},
 				}},

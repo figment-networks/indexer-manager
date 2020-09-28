@@ -96,7 +96,7 @@ Worker also need some basic config:
     CHAIN_ID=cosmoshub-3
 ```
 Where
-    - `TENDERMINT_RPC_ADDR` is a http address to RPC endpoint
+    - `TENDERMINT_RPC_ADDR` is a http address to node's RPC endpoint
     - `MANAGERS` a comma-separated list of manager ip:port addresses that worker will connect to. In this case only one
 
 After running both binaries worker should successfully register itself to the manager.
@@ -105,13 +105,16 @@ After running both binaries worker should successfully register itself to the ma
 `Lastdata` synchronization initially takes up to the last 1000 unscraped heights before starting scraping live. To initially synchronize chain with heights before this 1000. You need to manually start the process by calling the `/check_missing` and/or `/get_missing` endpoints.
 
 To check missing transactions simply call manager as:
+
 ```GET http://0.0.0.0:8085/check_missing?start_height=1&end_height=3500000&network=cosmos&chain_id=cosmoshub-3```
+
 Where `start_height`/`end_height` is range *existing* in chain.
 
-To start scraping the `get_missing` endpoint is prepared to run big queries asynchronously.
+The `get_missing` endpoint is prepared to run big queries asynchronously. It is running as goroutines and it's not persisting any state. In case of process crush rerun operation. It should start with consistency check and start again from the highest height it didn't have.
+To start scraping, make following request within *existing* range.
 
-To start scraping run following within *existing* range.
 ```GET http://0.0.0.0:8085/get_missing?force=true&async=true&start_height=1&end_height=3500000&network=cosmos&chain_id=cosmoshub-3```
+
 Where
     - `force` indicate the start/restart of scraping process. The next call without this parameter will return current state of scraping
     - `async` runs scraping process as goroutine. otherwise the process will die on any network timeout.
@@ -119,3 +122,21 @@ Where
 ### Transaction Search
 Transaction Search is available by making a post request on `/transaction_search`.
 The detailed description of parameters and response is available in [swagger.json](./swagger.json).
+
+Current implementation allows to query entire range, however some complex queries take time.
+You can however, speed up every query by setting `after_time`, `before_time` or `after_height`, `before_height` parameters to narrow down known time/height range.
+All times are RFC3339.
+
+List of cosmos defined types (listed by modules):
+- bank:
+    `multisend` , `send`
+- slashing:
+    `unjail`
+- gov:
+    `deposit` , `vote` , `submit_proposal`
+- distribution:
+    `withdraw_validator_commission` , `set_withdraw_address` , `withdraw_delegator_reward` , `fund_community_pool`
+- staking:
+    `begin_unbonding` , `edit_validator` , `create_validator` , `delegate` , `begin_redelegate`
+- internal:
+    `error`

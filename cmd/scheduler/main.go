@@ -15,9 +15,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/figment-networks/cosmos-indexer/cmd/common/logger"
 	"github.com/figment-networks/cosmos-indexer/cmd/scheduler/config"
-	"github.com/figment-networks/cosmos-indexer/cmd/scheduler/logger"
-	"go.uber.org/zap"
 
 	"github.com/figment-networks/cosmos-indexer/scheduler/core"
 	"github.com/figment-networks/cosmos-indexer/scheduler/destination"
@@ -29,6 +28,7 @@ import (
 	"github.com/figment-networks/cosmos-indexer/scheduler/structures"
 
 	_ "github.com/lib/pq"
+	"go.uber.org/zap"
 )
 
 type flags struct {

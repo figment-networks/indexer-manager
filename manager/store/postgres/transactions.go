@@ -288,8 +288,8 @@ func (d *Driver) GetTransactions(ctx context.Context, tsearch params.Transaction
 	}
 
 	if tsearch.Epoch != "" {
-		parts = append(parts, "chain_id = $"+strconv.Itoa(i))
-		data = append(data, tsearch.ChainID)
+		parts = append(parts, "epoch = $"+strconv.Itoa(i))
+		data = append(data, tsearch.Epoch)
 		i++
 	}
 
@@ -332,20 +332,20 @@ func (d *Driver) GetTransactions(ctx context.Context, tsearch params.Transaction
 	if len(tsearch.Account) > 0 {
 		//parts = append(parts, "$"+strconv.Itoa(i)+"=ANY(parties)")
 		parts = append(parts, "parties @> $"+strconv.Itoa(i))
-		data = append(data, tsearch.Account)
+		data = append(data, pq.Array(tsearch.Account))
 		i++
 	}
 
 	if len(tsearch.Sender) > 0 {
 		parts = append(parts, "senders @> $"+strconv.Itoa(i))
-		data = append(data, tsearch.Sender)
+		data = append(data, pq.Array(tsearch.Sender))
 		i++
 	}
 
 	if len(tsearch.Receiver) > 0 {
 		//parts = append(parts, "$"+strconv.Itoa(i)+"=ANY(recipients)")
 		parts = append(parts, "recipients @> $"+strconv.Itoa(i))
-		data = append(data, tsearch.Receiver)
+		data = append(data, pq.Array(tsearch.Receiver))
 		i++
 	}
 
@@ -379,7 +379,7 @@ func (d *Driver) GetTransactions(ctx context.Context, tsearch params.Transaction
 		qBuilder.WriteString(par)
 	}
 
-	qBuilder.WriteString(" ORDER BY time DESC")
+	qBuilder.WriteString(" ORDER BY height,time DESC")
 
 	if tsearch.Limit > 0 {
 		qBuilder.WriteString(" LIMIT " + strconv.FormatUint(uint64(tsearch.Limit), 10))

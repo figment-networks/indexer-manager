@@ -148,6 +148,7 @@ func (ic *IndexerClient) GetTransactions(ctx context.Context, tr cStructs.TaskRe
 	out := make(chan cStructs.OutResp, page*2+1)
 	fin := make(chan bool, 2)
 
+	// (lukanus): in separate goroutine take transaction format wrap it in transport message and send
 	go sendResp(sCtx, tr.Id, out, ic.logger, stream, fin)
 
 	diff := hr.EndHeight - hr.StartHeight
@@ -264,7 +265,7 @@ func (ic *IndexerClient) GetLatest(ctx context.Context, tr cStructs.TaskRequest,
 
 	out := make(chan cStructs.OutResp, page)
 	fin := make(chan bool, 2)
-
+	// (lukanus): in separate goroutine take transaction format wrap it in transport message and send
 	go sendResp(sCtx, tr.Id, out, ic.logger, stream, fin)
 	for i := uint64(0); i < bigPages; i++ {
 		hr := structs.HeightRange{

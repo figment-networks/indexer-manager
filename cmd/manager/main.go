@@ -22,8 +22,8 @@ import (
 	"github.com/figment-networks/indexing-engine/metrics"
 	"github.com/figment-networks/indexing-engine/metrics/prometheusmetrics"
 
+	"github.com/figment-networks/cosmos-indexer/cmd/common/logger"
 	"github.com/figment-networks/cosmos-indexer/cmd/manager/config"
-	"github.com/figment-networks/cosmos-indexer/cmd/manager/logger"
 
 	"github.com/google/uuid"
 	_ "github.com/lib/pq"

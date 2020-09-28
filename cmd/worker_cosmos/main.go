@@ -13,13 +13,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/google/uuid"
-
-	"go.uber.org/zap"
-	grpc "google.golang.org/grpc"
-
+	"github.com/figment-networks/cosmos-indexer/cmd/common/logger"
 	"github.com/figment-networks/cosmos-indexer/cmd/worker_cosmos/config"
-	"github.com/figment-networks/cosmos-indexer/cmd/worker_cosmos/logger"
 	api "github.com/figment-networks/cosmos-indexer/worker/api/cosmos"
 	cli "github.com/figment-networks/cosmos-indexer/worker/client/cosmos"
 	"github.com/figment-networks/cosmos-indexer/worker/connectivity"
@@ -28,6 +23,10 @@ import (
 
 	"github.com/figment-networks/indexing-engine/metrics"
 	"github.com/figment-networks/indexing-engine/metrics/prometheusmetrics"
+
+	"github.com/google/uuid"
+	"go.uber.org/zap"
+	grpc "google.golang.org/grpc"
 )
 
 type flags struct {

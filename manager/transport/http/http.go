@@ -16,6 +16,7 @@ import (
 
 //go:generate swagger generate spec --scan-models -o swagger.json
 
+// ValidationError structure as formated error
 type ValidationError struct {
 	Msg string `json:"error"`
 }
@@ -110,7 +111,7 @@ func NewConnector(cli client.ClientContractor) *Connector {
 }
 
 // InsertTransactions is http handler for InsertTransactions method
-func (hc *Connector) InsertTransactions(w http.ResponseWriter, req *http.Request) {
+func (c *Connector) InsertTransactions(w http.ResponseWriter, req *http.Request) {
 	nv := client.NetworkVersion{Network: "cosmos", Version: "0.0.1"}
 	s := strings.Split(req.URL.Path, "/")
 
@@ -120,7 +121,7 @@ func (hc *Connector) InsertTransactions(w http.ResponseWriter, req *http.Request
 		nv.Network = req.URL.Path
 	}
 
-	err := hc.cli.InsertTransactions(req.Context(), nv, req.Body)
+	err := c.cli.InsertTransactions(req.Context(), nv, req.Body)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(err.Error()))
@@ -131,7 +132,7 @@ func (hc *Connector) InsertTransactions(w http.ResponseWriter, req *http.Request
 }
 
 // GetTransactions is http handler for GetTransactions method
-func (hc *Connector) GetTransactions(w http.ResponseWriter, req *http.Request) {
+func (c *Connector) GetTransactions(w http.ResponseWriter, req *http.Request) {
 	strHeight := req.URL.Query().Get("height")
 	intHeight, _ := strconv.Atoi(strHeight)
 
@@ -139,13 +140,10 @@ func (hc *Connector) GetTransactions(w http.ResponseWriter, req *http.Request) {
 	intEndHeight, _ := strconv.Atoi(endHeight)
 
 	hash := req.URL.Query().Get("hash")
-
 	network := req.URL.Query().Get("network")
-	if network == "" {
-		network = "cosmos"
-	}
+	chainID := req.URL.Query().Get("chain_id")
 
-	nv := client.NetworkVersion{Network: network, Version: "0.0.1"}
+	nv := client.NetworkVersion{Network: network, Version: "0.0.1", ChainID: chainID}
 
 	ctx, cancel := context.WithTimeout(req.Context(), 5*time.Minute)
 	defer cancel()
@@ -158,7 +156,7 @@ func (hc *Connector) GetTransactions(w http.ResponseWriter, req *http.Request) {
 	if hash != "" {
 		hr.Hash = hash
 	}
-	transactions, err := hc.cli.GetTransactions(ctx, nv, hr, 1000, false)
+	transactions, err := c.cli.GetTransactions(ctx, nv, hr, 1000, false)
 
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -174,7 +172,7 @@ func (hc *Connector) GetTransactions(w http.ResponseWriter, req *http.Request) {
 }
 
 // SearchTransactions is http handler for SearchTransactions method
-func (hc *Connector) SearchTransactions(w http.ResponseWriter, req *http.Request) {
+func (c *Connector) SearchTransactions(w http.ResponseWriter, req *http.Request) {
 
 	ct := req.Header.Get("Content-Type")
 	enc := json.NewEncoder(w)
@@ -205,7 +203,7 @@ func (hc *Connector) SearchTransactions(w http.ResponseWriter, req *http.Request
 	ctx, cancel := context.WithTimeout(req.Context(), 1*time.Minute)
 	defer cancel()
 
-	transactions, err := hc.cli.SearchTransactions(ctx, shared.TransactionSearch{
+	transactions, err := c.cli.SearchTransactions(ctx, shared.TransactionSearch{
 		Network:      ts.Network,
 		ChainID:      ts.ChainID,
 		Epoch:        ts.Epoch,
@@ -237,7 +235,7 @@ func (hc *Connector) SearchTransactions(w http.ResponseWriter, req *http.Request
 }
 
 // ScrapeLatest is http handler for ScrapeLatest method
-func (hc *Connector) ScrapeLatest(w http.ResponseWriter, req *http.Request) {
+func (c *Connector) ScrapeLatest(w http.ResponseWriter, req *http.Request) {
 	ct := req.Header.Get("Content-Type")
 
 	ldReq := &shared.LatestDataRequest{}
@@ -250,7 +248,7 @@ func (hc *Connector) ScrapeLatest(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 	}
-	ldResp, err := hc.cli.ScrapeLatest(req.Context(), *ldReq)
+	ldResp, err := c.cli.ScrapeLatest(req.Context(), *ldReq)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(err.Error()))
@@ -270,7 +268,7 @@ type MissingTransactionsResponse struct {
 }
 
 // CheckMissingTransactions is http handler for CheckMissingTransactions method
-func (hc *Connector) CheckMissingTransactions(w http.ResponseWriter, req *http.Request) {
+func (c *Connector) CheckMissingTransactions(w http.ResponseWriter, req *http.Request) {
 	strHeight := req.URL.Query().Get("start_height")
 	intHeight, _ := strconv.ParseUint(strHeight, 10, 64)
 
@@ -296,7 +294,7 @@ func (hc *Connector) CheckMissingTransactions(w http.ResponseWriter, req *http.R
 
 	var err error
 	mtr := MissingTransactionsResponse{}
-	mtr.MissingBlocks, mtr.MissingTransactions, err = hc.cli.CheckMissingTransactions(req.Context(), client.NetworkVersion{Network: network, Version: "0.0.1", ChainID: chainID}, shared.HeightRange{StartHeight: intHeight, EndHeight: intEndHeight}, 1000)
+	mtr.MissingBlocks, mtr.MissingTransactions, err = c.cli.CheckMissingTransactions(req.Context(), client.NetworkVersion{Network: network, Version: "0.0.1", ChainID: chainID}, shared.HeightRange{StartHeight: intHeight, EndHeight: intEndHeight}, 1000)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(err.Error()))
@@ -309,8 +307,8 @@ func (hc *Connector) CheckMissingTransactions(w http.ResponseWriter, req *http.R
 }
 
 // GetRunningTransactions gets currently running transactions
-func (hc *Connector) GetRunningTransactions(w http.ResponseWriter, req *http.Request) {
-	run, err := hc.cli.GetRunningTransactions(req.Context())
+func (c *Connector) GetRunningTransactions(w http.ResponseWriter, req *http.Request) {
+	run, err := c.cli.GetRunningTransactions(req.Context())
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(err.Error()))
@@ -325,7 +323,7 @@ func (hc *Connector) GetRunningTransactions(w http.ResponseWriter, req *http.Req
 }
 
 // GetMissingTransactions is http handler for GetMissingTransactions method
-func (hc *Connector) GetMissingTransactions(w http.ResponseWriter, req *http.Request) {
+func (c *Connector) GetMissingTransactions(w http.ResponseWriter, req *http.Request) {
 
 	strHeight := req.URL.Query().Get("start_height")
 	intHeight, _ := strconv.ParseUint(strHeight, 10, 64)
@@ -353,7 +351,7 @@ func (hc *Connector) GetMissingTransactions(w http.ResponseWriter, req *http.Req
 	}
 
 	if async == "" {
-		_, err := hc.cli.GetMissingTransactions(req.Context(), client.NetworkVersion{Network: network, Version: "0.0.1", ChainID: chainID},
+		_, err := c.cli.GetMissingTransactions(req.Context(), client.NetworkVersion{Network: network, Version: "0.0.1", ChainID: chainID},
 			shared.HeightRange{StartHeight: intHeight, EndHeight: intEndHeight}, 1000, false, force)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
@@ -364,7 +362,7 @@ func (hc *Connector) GetMissingTransactions(w http.ResponseWriter, req *http.Req
 		return
 	}
 
-	run, err := hc.cli.GetMissingTransactions(req.Context(), client.NetworkVersion{Network: network, Version: "0.0.1", ChainID: chainID},
+	run, err := c.cli.GetMissingTransactions(req.Context(), client.NetworkVersion{Network: network, Version: "0.0.1", ChainID: chainID},
 		shared.HeightRange{StartHeight: intHeight, EndHeight: intEndHeight}, 1000, true, force)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -436,7 +434,7 @@ func validateSearchParams(ts *TransactionSearch) error {
 		}
 	}
 
-	if !ts.AfterTime.IsZero() && ts.AfterTime.Before(ts.BeforeTime) {
+	if !ts.AfterTime.IsZero() && !ts.AfterTime.Before(ts.BeforeTime) {
 		return ValidationError{Msg: "after_time has to be after than before_time "}
 	}
 
