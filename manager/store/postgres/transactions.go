@@ -275,6 +275,8 @@ func (d *Driver) GetTransactions(ctx context.Context, tsearch params.Transaction
 	parts := []string{}
 	data := []interface{}{}
 
+	sortType := "time"
+
 	if tsearch.Network != "" {
 		parts = append(parts, "network = $"+strconv.Itoa(i))
 		data = append(data, tsearch.Network)
@@ -308,16 +310,19 @@ func (d *Driver) GetTransactions(ctx context.Context, tsearch params.Transaction
 	if tsearch.Height > 0 {
 		parts = append(parts, "height = $"+strconv.Itoa(i))
 		data = append(data, tsearch.Height)
+		sortType = "height"
 		i++
 	} else {
 		if tsearch.AfterHeight > 0 {
 			parts = append(parts, "height > $"+strconv.Itoa(i))
+			sortType = "height"
 			data = append(data, tsearch.AfterHeight)
 			i++
 		}
 
 		if tsearch.BeforeHeight > 0 {
 			parts = append(parts, "height < $"+strconv.Itoa(i))
+			sortType = "height"
 			data = append(data, tsearch.BeforeHeight)
 			i++
 		}
@@ -358,12 +363,14 @@ func (d *Driver) GetTransactions(ctx context.Context, tsearch params.Transaction
 	if !tsearch.AfterTime.IsZero() {
 		parts = append(parts, "time >= $"+strconv.Itoa(i))
 		data = append(data, tsearch.AfterTime)
+		sortType = "time"
 		i++
 	}
 
 	if !tsearch.BeforeTime.IsZero() {
 		parts = append(parts, "time <= $"+strconv.Itoa(i))
 		data = append(data, tsearch.BeforeTime)
+		sortType = "time"
 	}
 
 	qBuilder := strings.Builder{}
@@ -379,7 +386,11 @@ func (d *Driver) GetTransactions(ctx context.Context, tsearch params.Transaction
 		qBuilder.WriteString(par)
 	}
 
-	qBuilder.WriteString(" ORDER BY height,time DESC")
+	if sortType == "time" {
+		qBuilder.WriteString(" ORDER BY time DESC")
+	} else {
+		qBuilder.WriteString(" ORDER BY height DESC")
+	}
 
 	if tsearch.Limit > 0 {
 		qBuilder.WriteString(" LIMIT " + strconv.FormatUint(uint64(tsearch.Limit), 10))

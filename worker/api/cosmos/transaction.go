@@ -216,14 +216,14 @@ func rawToTransaction(ctx context.Context, c *Client, in []TxResponse, blocks ma
 				case "send":
 					ev, err = mapBankSendToSub(msg)
 				default:
-					c.logger.Error("[TERRA-API] Unknown bank message Type ", zap.Error(err), zap.String("type", msg.Type()), zap.String("route", msg.Route()))
+					c.logger.Error("[COSMOS-API] Unknown bank message Type ", zap.Error(err), zap.String("type", msg.Type()), zap.String("route", msg.Route()))
 				}
 			case "slashing":
 				switch msg.Type() {
 				case "unjail":
 					ev, err = mapSlashingUnjailToSub(msg)
 				default:
-					c.logger.Error("[TERRA-API] Unknown slashing message Type ", zap.Error(err), zap.String("type", msg.Type()), zap.String("route", msg.Route()))
+					c.logger.Error("[COSMOS-API] Unknown slashing message Type ", zap.Error(err), zap.String("type", msg.Type()), zap.String("route", msg.Route()))
 				}
 			case "gov":
 				switch msg.Type() {
@@ -234,7 +234,7 @@ func rawToTransaction(ctx context.Context, c *Client, in []TxResponse, blocks ma
 				case "submit_proposal":
 					ev, err = mapGovSubmitProposalToSub(msg)
 				default:
-					c.logger.Error("[TERRA-API] Unknown got message Type ", zap.Error(err), zap.String("type", msg.Type()), zap.String("route", msg.Route()))
+					c.logger.Error("[COSMOS-API] Unknown got message Type ", zap.Error(err), zap.String("type", msg.Type()), zap.String("route", msg.Route()))
 				}
 			case "distribution":
 				switch msg.Type() {
@@ -247,7 +247,7 @@ func rawToTransaction(ctx context.Context, c *Client, in []TxResponse, blocks ma
 				case "fund_community_pool":
 					ev, err = mapDistributionFundCommunityPoolToSub(msg)
 				default:
-					c.logger.Error("[TERRA-API] Unknown distribution message Type ", zap.Error(err), zap.String("type", msg.Type()), zap.String("route", msg.Route()))
+					c.logger.Error("[COSMOS-API] Unknown distribution message Type ", zap.Error(err), zap.String("type", msg.Type()), zap.String("route", msg.Route()))
 				}
 			case "staking":
 				switch msg.Type() {
@@ -262,10 +262,10 @@ func rawToTransaction(ctx context.Context, c *Client, in []TxResponse, blocks ma
 				case "begin_redelegate":
 					ev, err = mapStakingBeginRedelegateToSub(msg)
 				default:
-					c.logger.Error("[TERRA-API] Unknown staking message Type ", zap.Error(err), zap.String("type", msg.Type()), zap.String("route", msg.Route()))
+					c.logger.Error("[COSMOS-API] Unknown staking message Type ", zap.Error(err), zap.String("type", msg.Type()), zap.String("route", msg.Route()))
 				}
 			default:
-				c.logger.Error("[TERRA-API] Unknown message Route ", zap.Error(err), zap.String("route", msg.Route()), zap.String("type", msg.Type()))
+				c.logger.Error("[COSMOS-API] Unknown message Route ", zap.Error(err), zap.String("route", msg.Route()), zap.String("type", msg.Type()))
 			}
 
 			if len(ev.Type) > 0 {
@@ -274,7 +274,7 @@ func rawToTransaction(ctx context.Context, c *Client, in []TxResponse, blocks ma
 			}
 
 			if err != nil {
-				c.logger.Error("[TERRA-API] Problem decoding transaction ", zap.Error(err), zap.String("type", msg.Type()), zap.String("route", msg.Route()))
+				c.logger.Error("[COSMOS-API] Problem decoding transaction ", zap.Error(err), zap.String("type", msg.Type()), zap.String("route", msg.Route()))
 			}
 
 			presentIndexes[tev.ID] = true
