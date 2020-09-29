@@ -14,6 +14,7 @@ COPY .git .git
 COPY ./Makefile ./Makefile
 COPY ./manager ./manager
 COPY ./structs ./structs
+COPY ./cmd/common ./cmd/common
 COPY ./cmd/manager ./cmd/manager
 
 # Needed for embedded scheduler

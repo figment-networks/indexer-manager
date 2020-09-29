@@ -12,6 +12,7 @@ RUN go mod download
 
 COPY .git .git
 COPY ./Makefile ./Makefile
+COPY ./cmd/common ./cmd/common
 COPY ./cmd/manager-migration ./cmd/manager-migration
 
 

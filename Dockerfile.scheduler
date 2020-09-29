@@ -14,6 +14,7 @@ COPY .git .git
 COPY ./Makefile ./Makefile
 COPY ./scheduler ./scheduler
 COPY ./structs  ./structs
+COPY ./cmd/common ./cmd/common
 COPY ./cmd/scheduler ./cmd/scheduler
 
 ENV CGO_ENABLED=0

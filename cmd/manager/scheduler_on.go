@@ -25,13 +25,11 @@ import (
 )
 
 func attachScheduler(ctx context.Context, db *sql.DB, mux *http.ServeMux, cfg config.Config, logger *zap.Logger, client client.SchedulerContractor) error {
-	logger.Info("[Manager-Scheduler] Adding scheduler ")
+	logger.Info("[Manager-Scheduler] Adding scheduler...")
+
 	d := schedulerPostgres.NewDriver(db)
-
 	sch := schedulerProcess.NewScheduler(logger)
-
 	c := schedulerCore.NewCore(schedulerPersistence.CoreStorage{Driver: d}, sch, logger)
-
 	scheme := schedulerDestination.NewScheme(logger)
 	scheme.RegisterHandles(mux)
 
@@ -47,16 +45,30 @@ func attachScheduler(ctx context.Context, db *sql.DB, mux *http.ServeMux, cfg co
 			return err
 		}
 
-		rcs := []schedulerStructures.RunConfig{}
+		rcp := []schedulerStructures.RunConfigParams{}
 		dec := json.NewDecoder(file)
-		err = dec.Decode(&rcs)
+		err = dec.Decode(&rcp)
+		file.Close()
 		if err != nil {
 			return err
 		}
-		for _, rConf := range rcs {
-			rConf.Duration = rConf.Duration * time.Second
+
+		rcs := []schedulerStructures.RunConfig{}
+		for _, rConf := range rcp {
+			duration, err := time.ParseDuration(rConf.Duration)
+			if err != nil {
+				return err
+			}
+
+			rcs = append(rcs, schedulerStructures.RunConfig{
+				Network:  rConf.Network,
+				ChainID:  rConf.ChainID,
+				Kind:     rConf.Kind,
+				Version:  "0.0.1",
+				Duration: duration,
+			})
 		}
-		file.Close()
+
 		err = c.AddSchedules(ctx, rcs)
 		if err != nil {
 			return err

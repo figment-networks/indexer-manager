@@ -53,16 +53,47 @@ Worker's business logic wiring of messages to client's functions.
 
 
 ## Installation
-This system can be put together in many different ways. This readme will describe only the simplest one worker, one manager with embedded scheduler approach.
+This system can be put together in many different ways.
+This readme will describe only the simplest one worker, one manager with embedded scheduler approach.
+
+### Docker-Compose
+This repo also comes with partially preconfigured docker-compose setup.
+To run using docker-compose you need to
+- Create scheduler configuration as stated below in ./scheduler/scheduler.json (or empty structure if you don't need scraping)
+```json
+[
+    {
+        "network": "cosmos",
+        "chainID": "cosmoshub-3",
+        "version": "0.0.1",
+        "duration": "30s",
+        "kind": "lastdata"
+    }
+]
+```
+- Start docker-compose
+```bash
+    docker-comopose build
+    docker-comopose up
+```
+
+First manager would (the main api) would be available under `http://0.0.0.0:8085`
+
+Docker-compose version comes also with preconfigured prometheus and grafana, serving content on `:3000` and `:9090`
+
+Tip: To purge database simply run `docker volume rm cosmos-indexer_postgresdatabase` after fully stopping the run
 
 ### Compile
 To compile sources you need to have go 1.14.1+ installed. For Worker and Manager it's respectively
 
-```bash make build-cosmos```
-```bash make build-manager-w-scheduler```
+```bash
+    make build-cosmos
+    make build-manager-migration
+    make build-manager-w-scheduler
+```
 
 ### Running
-The mandatory env variables (or json file) for manager with embedded scheduler are:
+The mandatory env variables (or json file) for both manager with embedded scheduler and migration the parameters are:
 ```bash
     ADDRESS=0.0.0.0:8085
     DATABASE_URL=postgres://cosmos:cosmos@cosmosdatabase/cosmos?sslmode=disable
@@ -72,7 +103,14 @@ The mandatory env variables (or json file) for manager with embedded scheduler a
 Where `ADDRESS` is the ip:port string with http interface.
 It is possible to set the same parameters in json file under `--config config.json`
 
-The embedded scheduler still needs it's configuration to scrape cosmos, cosmoshub-3 for the last data, every 30s (30000000000ns) the `scheduler.json` file needs to be would be following:
+
+After setting up the database you need to run migration script it takes database from DATABASE_URL env var. (migrations are inside `cmd/manager-migration/migrations` directory)
+
+```bash
+    manager_migration_bin  --path "./path/to/migrations"
+```
+
+The embedded scheduler still needs it's configuration to scrape cosmos, cosmoshub-3 for the last data, every 30s  the `scheduler.json` file needs to be would be following:
 
 ```json
 [
@@ -80,17 +118,19 @@ The embedded scheduler still needs it's configuration to scrape cosmos, cosmoshu
         "network": "cosmos",
         "chainID": "cosmoshub-3",
         "version": "0.0.1",
-        "duration": 30000000000,
+        "duration": "30s",
         "kind": "lastdata"
     }
 ]
 ```
+Where `duration` is a `time.Duration` parsed string, so valid time units are "ns", "us" (or "µs"), "ms", "s", "m", "h". (https://golang.org/pkg/time/#ParseDuration)
+
 After setting all of it just run the binary.
 
 Worker also need some basic config:
 
 ```bash
-    MANAGERS: 0.0.0.0:8085
+    MANAGERS=0.0.0.0:8085
     TENDERMINT_RPC_ADDR=https://cosmoshub-3.address
     DATAHUB_KEY=1QAZXSW23EDCvfr45TGB
     CHAIN_ID=cosmoshub-3
@@ -102,7 +142,11 @@ Where
 After running both binaries worker should successfully register itself to the manager.
 
 ### Initial Chain Synchronization
-`Lastdata` synchronization initially takes up to the last 1000 unscraped heights before starting scraping live. To initially synchronize chain with heights before this 1000. You need to manually start the process by calling the `/check_missing` and/or `/get_missing` endpoints.
+Scheduler allows to apply many different events to be emitted periodically over time. One of such is `lastdata` which is used for getting latest records from chain.
+Running `lastdata` would effect in taking up to 1000 last heights that system haven't scraped yet.
+Every time scheduler runs, it checks fot last scrape information and starts from there. If there isn't any scraped data yet, process is starting from last block minus 1000 heights. If current height is smaller than 1000 - it starts from the first block.
+
+To synchronize with missing height range you need to manually start the process by calling the `/check_missing` and/or `/get_missing` endpoints.
 
 To check missing transactions simply call manager as:
 
@@ -110,7 +154,8 @@ To check missing transactions simply call manager as:
 
 Where `start_height`/`end_height` is range *existing* in chain.
 
-The `get_missing` endpoint is prepared to run big queries asynchronously. It is running as goroutines and it's not persisting any state. In case of process crush rerun operation. It should start with consistency check and start again from the highest height it didn't have.
+The `get_missing` endpoint is prepared to run big queries asynchronously. It is running as goroutines and it's not persisting any state. In case of process crash, just rerun operation. It should start with consistency check and begin scraping from the highest height it didn't have.
+
 To start scraping, make following request within *existing* range.
 
 ```GET http://0.0.0.0:8085/get_missing?force=true&async=true&start_height=1&end_height=3500000&network=cosmos&chain_id=cosmoshub-3```

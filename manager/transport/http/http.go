@@ -133,17 +133,27 @@ func (c *Connector) InsertTransactions(w http.ResponseWriter, req *http.Request)
 
 // GetTransactions is http handler for GetTransactions method
 func (c *Connector) GetTransactions(w http.ResponseWriter, req *http.Request) {
-	strHeight := req.URL.Query().Get("height")
-	intHeight, _ := strconv.Atoi(strHeight)
+
+	enc := json.NewEncoder(w)
+	strHeight := req.URL.Query().Get("start_height")
+	intHeight, err := strconv.Atoi(strHeight)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		enc.Encode(ValidationError{Msg: "Invalid start_height param: " + err.Error()})
+		return
+	}
 
 	endHeight := req.URL.Query().Get("end_height")
 	intEndHeight, _ := strconv.Atoi(endHeight)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		enc.Encode(ValidationError{Msg: "Invalid end_height param: " + err.Error()})
+		return
+	}
 
 	hash := req.URL.Query().Get("hash")
 	network := req.URL.Query().Get("network")
 	chainID := req.URL.Query().Get("chain_id")
-
-	nv := client.NetworkVersion{Network: network, Version: "0.0.1", ChainID: chainID}
 
 	ctx, cancel := context.WithTimeout(req.Context(), 5*time.Minute)
 	defer cancel()
@@ -156,18 +166,16 @@ func (c *Connector) GetTransactions(w http.ResponseWriter, req *http.Request) {
 	if hash != "" {
 		hr.Hash = hash
 	}
-	transactions, err := c.cli.GetTransactions(ctx, nv, hr, 1000, false)
-
+	transactions, err := c.cli.GetTransactions(ctx, client.NetworkVersion{Network: network, Version: "0.0.1", ChainID: chainID}, hr, 1000, false)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(err.Error()))
+		enc.Encode(ValidationError{Msg: "Error getting transaction: " + err.Error()})
 		return
 	}
 
 	log.Printf("Returning %d transactions", len(transactions))
 	w.Header().Add("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	enc := json.NewEncoder(w)
 	enc.Encode(transactions)
 }
 

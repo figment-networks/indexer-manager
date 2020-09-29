@@ -343,7 +343,7 @@ func getRange(ctx context.Context, logger *zap.Logger, client *api.Client, hr st
 			bhr.EndHeight = hr.EndHeight
 		}
 
-		logger.Debug("[COSMOS-CLIENT] Getting blocks for ", zap.Uint64("end", bhr.EndHeight), zap.Uint64("start", bhr.StartHeight))
+		logger.Debug("[COSMOS-CLIENT] Getting blocks", zap.Uint64("end", bhr.EndHeight), zap.Uint64("start", bhr.StartHeight))
 		go client.GetBlocksMeta(ctx, bhr, blocksAll, batchesCtrl)
 	}
 

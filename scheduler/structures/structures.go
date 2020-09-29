@@ -25,6 +25,13 @@ type RunConfig struct {
 	Kind     string        `json:"kind"`
 }
 
+type RunConfigParams struct {
+	Network  string `json:"network"`
+	ChainID  string `json:"chainID"`
+	Duration string `json:"duration"`
+	Kind     string `json:"kind"`
+}
+
 type LatestRecord struct {
 	Hash   string    `json:"hash"`
 	Height uint64    `json:"height"`
@@ -39,7 +46,7 @@ type RunError struct {
 }
 
 func (re *RunError) Error() string {
-	return fmt.Sprintf("error in runner: %w  , unrecoverable: %t", re.Contents, re.Unrecoverable)
+	return fmt.Sprintf("error in runner: %s , unrecoverable: %t", re.Contents.Error(), re.Unrecoverable)
 }
 
 func (re *RunError) IsRecoverable() bool {

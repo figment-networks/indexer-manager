@@ -14,6 +14,7 @@ COPY .git .git
 COPY ./Makefile ./Makefile
 COPY ./worker ./worker
 COPY ./structs ./structs
+COPY ./cmd/common ./cmd/common
 COPY ./cmd/worker_cosmos ./cmd/worker_cosmos
 
 ENV CGO_ENABLED=0

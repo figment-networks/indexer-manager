@@ -120,7 +120,7 @@ func (c *Core) LoadScheduler(ctx context.Context) error {
 		}
 
 		// In fact run scheduler
-		c.logger.Info(fmt.Sprintf("[Core] Running schedule %s (%s:%s) %s", runner.Name(), r.Network, r.ChainID, r.Version, r.Duration.String()))
+		c.logger.Info(fmt.Sprintf("[Core] Running schedule %s (%s:%s %s) %s", runner.Name(), r.Network, r.ChainID, r.Version, r.Duration.String()))
 		var cCtx context.Context
 		cCtx, r.CFunc = context.WithCancel(ctx)
 		go c.scheduler.Run(cCtx, s.ID.String(), r.Duration, r.Network, r.ChainID, r.Version, runner)

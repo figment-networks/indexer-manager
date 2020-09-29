@@ -5,8 +5,6 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"os"
-	"path/filepath"
 
 	"github.com/figment-networks/cosmos-indexer/cmd/manager-migration/config"
 	"github.com/golang-migrate/migrate/v4"
@@ -15,8 +13,9 @@ import (
 )
 
 type flags struct {
-	configPath string
-	version    uint
+	configPath    string
+	migrationPath string
+	version       uint
 }
 
 var configFlags = flags{}
@@ -24,6 +23,7 @@ var configFlags = flags{}
 func init() {
 	flag.StringVar(&configFlags.configPath, "config", "", "Path to config")
 	flag.UintVar(&configFlags.version, "version", 0, "Version parameter sets db changes to specified revision (up or down)")
+	flag.StringVar(&configFlags.migrationPath, "path", "./migrations", "Path to migration folder")
 	flag.Parse()
 }
 
@@ -39,15 +39,7 @@ func main() {
 		log.Fatal(err)
 	}
 	defer db.Close()
-
-	log.Println("Getting current directory")
-	dir, err := os.Getwd()
-	if err != nil {
-		log.Fatal(err)
-	}
-	srcDir := filepath.Join(dir, "migrations")
-	srcPath := fmt.Sprintf("file://%s", srcDir)
-
+	srcPath := fmt.Sprintf("file://%s", configFlags.migrationPath)
 	log.Println("Using migrations from: ", srcPath)
 
 	if configFlags.version > 0 {
