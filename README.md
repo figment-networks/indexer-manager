@@ -73,8 +73,8 @@ To run using docker-compose you need to
 ```
 - Start docker-compose
 ```bash
-    docker-comopose build
-    docker-comopose up
+    docker-compose build
+    docker-compose up
 ```
 
 First manager would (the main api) would be available under `http://0.0.0.0:8085`
