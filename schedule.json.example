@@ -2,8 +2,7 @@
     {
         "network": "cosmos",
         "chainID": "cosmoshub-3",
-        "version": "0.0.1",
-        "duration": 30000000000,
+        "duration": "30s",
         "kind": "lastdata"
     }
 ]
