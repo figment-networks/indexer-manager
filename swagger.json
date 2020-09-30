@@ -1,0 +1,529 @@
+{
+    "openapi": "3.0.n",
+    "info": {
+        "title": "TxSearch",
+        "version": "0.0.1"
+    },
+    "servers": [
+        {
+            "url": "http://0.0.0.0:8085/"
+        }
+    ],
+    "paths": {
+        "/transactions_search": {
+            "post": {
+                "description": "Basic endpoint for searching through transactions",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/TransactionSearch"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Success response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Transaction"
+                                }
+                            }
+                        }
+                    },
+                    "406": {
+                        "description": "Not acceptable content type",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorModel"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad parameters sent",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorModel"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal/Other server error while processing request",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorModel"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "components": {
+        "schemas": {
+            "ErrorModel": {
+                "type": "object",
+                "properties": {
+                    "error": {
+                        "type": "string",
+                        "example": "Something bad happened"
+                    }
+                }
+            },
+            "TransactionSearch": {
+                "description": "TransactionSearch - A set of fields used as params for search",
+                "type": "object",
+                "required": [
+                    "network",
+                    "chain_id",
+                    "epoch"
+                ],
+                "properties": {
+                    "account": {
+                        "description": "Account - the account identifier to look for\nThis searches for all accounts id which exists in transaction including senders, recipients, validators, feeders etc etc",
+                        "type": "array",
+                        "items": {
+                            "type": "string",
+                            "pattern": "\\w+",
+                            "uniqueItems": true
+                        },
+                        "x-go-name": "Account"
+                    },
+                    "after_height": {
+                        "description": "AfterHeight gets all transaction bigger than given height\nHas to be bigger than BeforeHeight",
+                        "type": "integer",
+                        "format": "uint64",
+                        "minimum": 0,
+                        "x-go-name": "AfterHeight"
+                    },
+                    "after_time": {
+                        "description": "The time of transaction (if not given by chain API, the same as block)",
+                        "type": "string",
+                        "format": "date-time",
+                        "x-go-name": "AfterTime"
+                    },
+                    "before_height": {
+                        "description": "BeforeHeight gets all transaction lower than given height\nHas to be lesser than AfterHeight",
+                        "type": "integer",
+                        "format": "uint64",
+                        "minimum": 0,
+                        "x-go-name": "BeforeHeight"
+                    },
+                    "before_time": {
+                        "description": "The time of transaction (if not given by chain API, the same as block)",
+                        "type": "string",
+                        "format": "date-time",
+                        "x-go-name": "BeforeTime"
+                    },
+                    "block_hash": {
+                        "description": "BlockHash - the hash of block to get transaction from",
+                        "type": "string",
+                        "x-go-name": "BlockHash"
+                    },
+                    "chain_id": {
+                        "description": "ChainID to search in",
+                        "type": "string",
+                        "x-go-name": "ChainID",
+                        "example": "cosmoshub-3"
+                    },
+                    "epoch": {
+                        "description": "Epoch of transaction",
+                        "type": "string",
+                        "x-go-name": "Epoch"
+                    },
+                    "hash": {
+                        "description": "Hash - the hash of transaction",
+                        "type": "string",
+                        "x-go-name": "Hash"
+                    },
+                    "height": {
+                        "description": "Height of the transactions to get",
+                        "type": "integer",
+                        "format": "uint64",
+                        "minimum": 0,
+                        "x-go-name": "Height"
+                    },
+                    "limit": {
+                        "description": "Limit of how many requests to get in one request",
+                        "type": "integer",
+                        "format": "uint64",
+                        "default": 100,
+                        "maximum": 1000,
+                        "x-go-name": "Limit"
+                    },
+                    "memo": {
+                        "description": "Memo sets full text search for memo field",
+                        "type": "string",
+                        "x-go-name": "Memo"
+                    },
+                    "network": {
+                        "description": "Network identifier to search in",
+                        "type": "string",
+                        "x-go-name": "Network",
+                        "example": "cosmos"
+                    },
+                    "offset": {
+                        "description": "Offset the offset number or",
+                        "type": "integer",
+                        "format": "uint64",
+                        "x-go-name": "Offset"
+                    },
+                    "receiver": {
+                        "description": "Receiver looks for transactions that includes given accountIDs",
+                        "type": "array",
+                        "items": {
+                            "type": "string",
+                            "pattern": "\\w+",
+                            "uniqueItems": true
+                        },
+                        "x-go-name": "Receiver"
+                    },
+                    "sender": {
+                        "description": "Sender looks for transactions that includes given accountIDs",
+                        "type": "array",
+                        "items": {
+                            "type": "string",
+                            "pattern": "\\w+",
+                            "uniqueItems": true
+                        },
+                        "x-go-name": "Sender"
+                    },
+                    "type": {
+                        "description": "Type - the list of types of transactions",
+                        "type": "array",
+                        "items": {
+                            "type": "string",
+                            "pattern": "\\w+",
+                            "uniqueItems": true
+                        },
+                        "x-go-name": "Type"
+                    },
+                    "with_raw": {
+                        "description": "WithRaw - include base64 raw request in search response",
+                        "type": "boolean",
+                        "default": false,
+                        "x-go-name": "WithRaw"
+                    }
+                },
+                "x-go-package": "github.com/figment-networks/cosmos-indexer/manager/transport/http"
+            },
+            "Account": {
+                "description": "Account - Extended Account information",
+                "type": "object",
+                "properties": {
+                    "detail": {
+                        "$ref": "#/components/schemas/AccountDetails"
+                    },
+                    "id": {
+                        "description": "Unique account identifier",
+                        "type": "string",
+                        "x-go-name": "ID"
+                    }
+                },
+                "x-go-package": "github.com/figment-networks/cosmos-indexer/structs"
+            },
+            "AccountDetails": {
+                "description": "AccountDetails External optional account details (if applies)",
+                "type": "object",
+                "properties": {
+                    "contact": {
+                        "type": "string",
+                        "x-go-name": "Contact"
+                    },
+                    "description": {
+                        "type": "string",
+                        "x-go-name": "Description"
+                    },
+                    "name": {
+                        "type": "string",
+                        "x-go-name": "Name"
+                    },
+                    "website": {
+                        "type": "string",
+                        "x-go-name": "Website"
+                    }
+                },
+                "x-go-package": "github.com/figment-networks/cosmos-indexer/structs"
+            },
+            "EventTransfer": {
+                "description": "EventTransfer - Account and Amounts pair",
+                "type": "object",
+                "properties": {
+                    "account": {
+                        "$ref": "#/components/schemas/Account"
+                    },
+                    "amounts": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/TransactionAmount"
+                        },
+                        "x-go-name": "Amounts"
+                    }
+                },
+                "x-go-package": "github.com/figment-networks/cosmos-indexer/structs"
+            },
+            "Int": {
+                "description": "Operations always take pointer arguments (*Int) rather\nthan Int values, and each unique Int value requires\nits own unique *Int pointer. To \"copy\" an Int value,\nan existing (or newly allocated) Int must be set to\na new value using the Int.Set method; shallow copies\nof Ints are not supported and may lead to errors.",
+                "type": "object",
+                "title": "An Int represents a signed multi-precision integer.\nThe zero value for an Int represents the value 0.",
+                "x-go-package": "math/big"
+            },
+            "SubsetEvent": {
+                "description": "SubsetEvent - structure storing main contents of transacion",
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "x-go-name": "Action"
+                    },
+                    "amount": {
+                        "description": "List of Amounts",
+                        "type": "object",
+                        "additionalProperties": {
+                            "$ref": "#/components/schemas/TransactionAmount"
+                        },
+                        "x-go-name": "Amount"
+                    },
+                    "completion": {
+                        "description": "Completion time",
+                        "type": "string",
+                        "format": "date-time",
+                        "x-go-name": "Completion"
+                    },
+                    "error": {
+                        "$ref": "#/components/schemas/SubsetEventError"
+                    },
+                    "module": {
+                        "description": "Collection from where transaction came from",
+                        "type": "string",
+                        "x-go-name": "Module"
+                    },
+                    "node": {
+                        "description": "The list of all accounts that took part in the subsetevent",
+                        "type": "object",
+                        "additionalProperties": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/components/schemas/Account"
+                            }
+                        },
+                        "x-go-name": "Node"
+                    },
+                    "nonce": {
+                        "description": "Transaction nonce",
+                        "type": "string",
+                        "x-go-name": "Nonce"
+                    },
+                    "recipient": {
+                        "description": "List of recipient accounts with optional amounts",
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/EventTransfer"
+                        },
+                        "x-go-name": "Recipient"
+                    },
+                    "sender": {
+                        "description": "List of sender accounts with optional amounts",
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/EventTransfer"
+                        },
+                        "x-go-name": "Sender"
+                    },
+                    "type": {
+                        "description": "Type of transaction",
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "x-go-name": "Type"
+                    }
+                },
+                "x-go-package": "github.com/figment-networks/cosmos-indexer/structs"
+            },
+            "SubsetEventError": {
+                "description": "SubsetEventError  error structure for event",
+                "type": "object",
+                "properties": {
+                    "message": {
+                        "type": "string",
+                        "x-go-name": "Message"
+                    }
+                },
+                "x-go-package": "github.com/figment-networks/cosmos-indexer/structs"
+            },
+            "Transaction": {
+                "description": "Transaction contains the blockchain transaction details",
+                "type": "object",
+                "properties": {
+                    "block_hash": {
+                        "description": "BlockHash - hash of the block of transaction",
+                        "type": "string",
+                        "x-go-name": "BlockHash"
+                    },
+                    "chain_id": {
+                        "description": "ChainID - chain id of transacion",
+                        "type": "string",
+                        "x-go-name": "ChainID"
+                    },
+                    "created_at": {
+                        "description": "Created at",
+                        "type": "string",
+                        "format": "date-time",
+                        "x-go-name": "CreatedAt"
+                    },
+                    "epoch": {
+                        "type": "string",
+                        "x-go-name": "Epoch"
+                    },
+                    "events": {
+                        "$ref": "#/components/schemas/TransactionEvents"
+                    },
+                    "gas_used": {
+                        "description": "GasUsed",
+                        "type": "integer",
+                        "format": "uint64",
+                        "x-go-name": "GasUsed"
+                    },
+                    "gas_wanted": {
+                        "description": "GasWanted",
+                        "type": "integer",
+                        "format": "uint64",
+                        "x-go-name": "GasWanted"
+                    },
+                    "hash": {
+                        "description": "Hash of the transaction",
+                        "type": "string",
+                        "x-go-name": "Hash"
+                    },
+                    "height": {
+                        "description": "Height - height of the block of transaction",
+                        "type": "integer",
+                        "format": "uint64",
+                        "x-go-name": "Height"
+                    },
+                    "id": {
+                        "$ref": "#/components/schemas/UUID"
+                    },
+                    "memo": {
+                        "description": "Memo - the description attached to transactions",
+                        "type": "string",
+                        "x-go-name": "Memo"
+                    },
+                    "raw": {
+                        "description": "Raw - Raw transaction bytes",
+                        "type": "array",
+                        "items": {
+                            "type": "integer",
+                            "format": "uint8"
+                        },
+                        "x-go-name": "Raw"
+                    },
+                    "time": {
+                        "description": "Time - time of transaction",
+                        "type": "string",
+                        "format": "date-time",
+                        "x-go-name": "Time"
+                    },
+                    "transaction_fee": {
+                        "description": "Fee - Fees for transaction (if applies)",
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/TransactionAmount"
+                        },
+                        "x-go-name": "Fee"
+                    },
+                    "updated_at": {
+                        "description": "Updated at",
+                        "type": "string",
+                        "format": "date-time",
+                        "x-go-name": "UpdatedAt"
+                    },
+                    "version": {
+                        "description": "Version - Version of transaction record",
+                        "type": "string",
+                        "x-go-name": "Version"
+                    }
+                },
+                "x-go-package": "github.com/figment-networks/cosmos-indexer/structs"
+            },
+            "TransactionAmount": {
+                "description": "TransactionAmount structure holding amount information with decimal implementation (numeric * 10 ^ exp)",
+                "type": "object",
+                "properties": {
+                    "currency": {
+                        "description": "The currency in what amount is returned (if applies)",
+                        "type": "string",
+                        "x-go-name": "Currency"
+                    },
+                    "exp": {
+                        "description": "Exponential part of amount obviously 0 by default",
+                        "type": "integer",
+                        "format": "int32",
+                        "x-go-name": "Exp"
+                    },
+                    "numeric": {
+                        "$ref": "#/components/schemas/Int"
+                    },
+                    "text": {
+                        "description": "Textual representation of Amount",
+                        "type": "string",
+                        "x-go-name": "Text"
+                    }
+                },
+                "x-go-package": "github.com/figment-networks/cosmos-indexer/structs"
+            },
+            "TransactionEvent": {
+                "description": "TransactionEvent part of transaction contents",
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "description": "ID UniqueID of event",
+                        "type": "string",
+                        "x-go-name": "ID"
+                    },
+                    "kind": {
+                        "description": "The Kind of event",
+                        "type": "string",
+                        "x-go-name": "Kind"
+                    },
+                    "sub": {
+                        "description": "Subcontents of event",
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/SubsetEvent"
+                        },
+                        "x-go-name": "Sub"
+                    }
+                },
+                "x-go-package": "github.com/figment-networks/cosmos-indexer/structs"
+            },
+            "TransactionEvents": {
+                "description": "TransactionEvents - a set of TransactionEvent",
+                "type": "array",
+                "items": {
+                    "$ref": "#/components/schemas/TransactionEvent"
+                },
+                "x-go-package": "github.com/figment-networks/cosmos-indexer/structs"
+            },
+            "UUID": {
+                "description": "A UUID is a 128 bit (16 byte) Universal Unique IDentifier as defined in RFC\n4122.",
+                "type": "array",
+                "items": {
+                    "type": "integer",
+                    "format": "uint8"
+                },
+                "x-go-package": "github.com/google/uuid"
+            }
+        }
+    }
+}

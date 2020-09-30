@@ -1,0 +1,8 @@
+[
+    {
+        "network": "cosmos",
+        "chainID": "cosmoshub-3",
+        "duration": "30s",
+        "kind": "lastdata"
+    }
+]

@@ -1,0 +1,41 @@
+# ------------------------------------------------------------------------------
+# Builder Image
+# ------------------------------------------------------------------------------
+FROM golang:1.14 AS buildManager
+
+WORKDIR /go/src/github.com/figment-networks/cosmos-indexer/
+
+COPY ./go.mod .
+COPY ./go.sum .
+
+RUN go mod download
+
+COPY .git .git
+COPY ./Makefile ./Makefile
+COPY ./manager ./manager
+COPY ./structs ./structs
+COPY ./cmd/common ./cmd/common
+COPY ./cmd/manager ./cmd/manager
+
+# Needed for embedded scheduler
+COPY ./scheduler ./scheduler
+
+ENV CGO_ENABLED=0
+ENV GOARCH=amd64
+ENV GOOS=linux
+
+RUN \
+  GO_VERSION=$(go version | awk {'print $3'}) \
+  GIT_COMMIT=$(git rev-parse HEAD) \
+  make build-manager-w-scheduler
+
+# ------------------------------------------------------------------------------
+# Target Image
+# ------------------------------------------------------------------------------
+FROM alpine:3.10 AS releaseManager
+
+WORKDIR /app/manager
+COPY --from=buildManager /go/src/github.com/figment-networks/cosmos-indexer/manager_bin /app/manager/manager
+
+RUN chmod a+x ./manager
+CMD ["./manager"]

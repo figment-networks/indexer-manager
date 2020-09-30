@@ -1,1 +1,8 @@
 .DS_store
+.vscode/launch.json
+cmd/artificial-source/data
+client.json
+*.env
+.monitoring/prometheus/data/*
+.monitoring/grafana/sessions/*
+.vscode/settings.json
