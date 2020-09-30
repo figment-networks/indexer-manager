@@ -94,6 +94,7 @@ func (hc *Client) GetTransactions(ctx context.Context, nv NetworkVersion, height
 		b, _ := json.Marshal(shared.HeightRange{Hash: heightRange.Hash})
 		req = append(req, structs.TaskRequest{
 			Network: nv.Network,
+			ChainID: nv.ChainID,
 			Version: nv.Version,
 			Type:    shared.ReqIDGetTransactions,
 			Payload: b,
@@ -114,6 +115,7 @@ func (hc *Client) GetTransactions(ctx context.Context, nv NetworkVersion, height
 
 			req = append(req, structs.TaskRequest{
 				Network: nv.Network,
+				ChainID: nv.ChainID,
 				Version: nv.Version,
 				Type:    shared.ReqIDGetTransactions,
 				Payload: b,
@@ -139,6 +141,7 @@ func (hc *Client) GetTransactions(ctx context.Context, nv NetworkVersion, height
 
 				req = append(req, structs.TaskRequest{
 					Network: nv.Network,
+					ChainID: nv.ChainID,
 					Version: nv.Version,
 					Type:    shared.ReqIDGetTransactions,
 					Payload: b,

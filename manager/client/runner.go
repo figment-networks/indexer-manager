@@ -103,7 +103,12 @@ func (r *Runner) Run() {
 		case rReq := <-r.in:
 			if rReq.Kind == "start" {
 				currentlyRunning, ok := r.checkExisting(rReq)
-				if ok || rReq.Force {
+				if ok && currentlyRunning != nil && !rReq.Force {
+					rReq.Resp <- RunResp{IsNew: false, Run: currentlyRunning, Err: nil}
+					continue
+				}
+
+				if !ok || rReq.Force {
 					nCtx, cancel := context.WithCancel(ctx)
 
 					run := NewRun(nCtx, rReq.NV, rReq.HeightRange)
@@ -114,11 +119,6 @@ func (r *Runner) Run() {
 					}
 					r.runs[rReq.NV] = append(k, run)
 					rReq.Resp <- RunResp{IsNew: true, Run: run, Err: nil}
-					continue
-				}
-
-				if !ok && !rReq.Force {
-					rReq.Resp <- RunResp{IsNew: false, Run: currentlyRunning, Err: nil}
 					continue
 				}
 
@@ -157,24 +157,19 @@ func (r *Runner) cleanup() {
 
 func (r *Runner) checkExisting(req RunReq) (currentlyRunning *Run, ok bool) {
 	current, ok := r.runs[req.NV]
-	if !ok {
-		return nil, true
-	}
-
-	for _, run := range current {
-		// totally inclusive
-		if (req.HeightRange.StartHeight >= run.HeightRange.StartHeight && req.HeightRange.StartHeight <= run.HeightRange.EndHeight) &&
-			(req.HeightRange.EndHeight <= run.HeightRange.EndHeight && req.HeightRange.EndHeight >= run.HeightRange.StartHeight) {
-			if !run.Finished {
-				currentlyRunning = run
+	if ok {
+		for _, run := range current {
+			// totally inclusive
+			if (req.HeightRange.StartHeight >= run.HeightRange.StartHeight && req.HeightRange.StartHeight <= run.HeightRange.EndHeight) &&
+				(req.HeightRange.EndHeight <= run.HeightRange.EndHeight && req.HeightRange.EndHeight >= run.HeightRange.StartHeight) {
+				return run, true
 			}
-			return currentlyRunning, false
+
+			// TODO(lukanus): support other ranges (split), this is just optimization
 		}
-
-		// TODO(lukanus): support other ranges (split), this is just optimization
-
 	}
-	return nil, true
+
+	return nil, false
 }
 
 // Run is process handler
@@ -192,6 +187,7 @@ type Run struct {
 	Success bool `json:"success"`
 
 	Finished         bool      `json:"finished"`
+	StartedTime      time.Time `json:"started_time"`
 	FinishTime       time.Time `json:"finished_time"`
 	LastProgressTime time.Time `json:"last_progress_time"`
 }
@@ -211,8 +207,11 @@ func (r *Run) Report(done shared.HeightRange, duration time.Duration, err []erro
 	r.Lock()
 	defer r.Unlock()
 
-	r.LastProgressTime = time.Now()
-	r.Progress = append(r.Progress, RunProgress{Done: done, D: duration, T: time.Now(), Errors: err})
+	now := time.Now()
+	if r.StartedTime.IsZero() {
+		r.StartedTime = now
+	}
+	r.LastProgressTime = now
 
 	if finished {
 		r.Success = true
@@ -223,7 +222,11 @@ func (r *Run) Report(done shared.HeightRange, duration time.Duration, err []erro
 		}
 
 		r.Finished = true
-		r.FinishTime = time.Now()
+		r.FinishTime = now
+	}
+
+	if !finished || err != nil {
+		r.Progress = append(r.Progress, RunProgress{Done: done, D: duration, T: time.Now(), Errors: err})
 	}
 }
 

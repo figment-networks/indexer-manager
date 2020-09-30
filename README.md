@@ -71,7 +71,7 @@ To run using docker-compose you need to
     }
 ]
 ```
-- Start docker-compose
+- Start docker-compose (If you're running that for the first time you may need to run `docker swarm init` )
 ```bash
     docker-compose build
     docker-compose up
@@ -175,12 +175,16 @@ All times are RFC3339.
 List of cosmos defined types (listed by modules):
 - bank:
     `multisend` , `send`
-- slashing:
-    `unjail`
-- gov:
-    `deposit` , `vote` , `submit_proposal`
+- crisis:
+    `verify_invariant`
 - distribution:
     `withdraw_validator_commission` , `set_withdraw_address` , `withdraw_delegator_reward` , `fund_community_pool`
+- evidence:
+    `submit_evidence`
+- gov:
+    `deposit` , `vote` , `submit_proposal`
+- slashing:
+    `unjail`
 - staking:
     `begin_unbonding` , `edit_validator` , `create_validator` , `delegate` , `begin_redelegate`
 - internal:

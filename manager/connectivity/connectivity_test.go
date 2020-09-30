@@ -13,6 +13,7 @@ func TestManager_Register(t *testing.T) {
 	type args struct {
 		id             string
 		kind           string
+		chain          string
 		connectionInfo structs.WorkerConnection
 	}
 	tests := []struct {
@@ -24,8 +25,10 @@ func TestManager_Register(t *testing.T) {
 		{name: "happy path",
 			expectedKind: "cosmos",
 			args: []args{
-				{id: "asdf",
-					kind: "cosmos",
+				{
+					id:    "asdf",
+					chain: "qwer",
+					kind:  "cosmos",
 					connectionInfo: structs.WorkerConnection{
 						Version:   "0.0.1",
 						Type:      "asdf",
@@ -53,7 +56,7 @@ func TestManager_Register(t *testing.T) {
 			m := NewManager("test", logger)
 
 			for _, a := range tt.args {
-				m.Register(a.id, a.kind, a.connectionInfo)
+				m.Register(a.id, a.kind, a.chain, a.connectionInfo)
 			}
 
 			var found bool

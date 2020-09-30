@@ -33,12 +33,14 @@ type ConnTransport interface {
 
 type WorkerCompositeKey struct {
 	Network string
+	ChainID string
 	Version string
 }
 
 type SimpleWorkerInfo struct {
 	Network string
 	Version string
+	ChainID string
 	ID      string
 }
 
@@ -54,7 +56,6 @@ type WorkerInfo struct {
 type WorkerConnection struct {
 	Version   string          `json:"version"`
 	Type      string          `json:"type"`
-	ChainID   string          `json:"chain_id"`
 	Addresses []WorkerAddress `json:"addresses"`
 }
 
@@ -66,6 +67,7 @@ type WorkerAddress struct {
 type TaskRequest struct {
 	ID      uuid.UUID
 	Network string
+	ChainID string
 	Version string
 
 	Type    string

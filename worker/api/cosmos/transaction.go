@@ -218,23 +218,12 @@ func rawToTransaction(ctx context.Context, c *Client, in []TxResponse, blocks ma
 				default:
 					c.logger.Error("[COSMOS-API] Unknown bank message Type ", zap.Error(err), zap.String("type", msg.Type()), zap.String("route", msg.Route()))
 				}
-			case "slashing":
+			case "crisis":
 				switch msg.Type() {
-				case "unjail":
-					ev, err = mapSlashingUnjailToSub(msg)
+				case "verify_invariant":
+					ev, err = mapCrisisVerifyInvariantToSub(msg)
 				default:
-					c.logger.Error("[COSMOS-API] Unknown slashing message Type ", zap.Error(err), zap.String("type", msg.Type()), zap.String("route", msg.Route()))
-				}
-			case "gov":
-				switch msg.Type() {
-				case "deposit":
-					ev, err = mapGovDepositToSub(msg)
-				case "vote":
-					ev, err = mapGovVoteToSub(msg)
-				case "submit_proposal":
-					ev, err = mapGovSubmitProposalToSub(msg)
-				default:
-					c.logger.Error("[COSMOS-API] Unknown got message Type ", zap.Error(err), zap.String("type", msg.Type()), zap.String("route", msg.Route()))
+					c.logger.Error("[COSMOS-API] Unknown crisis message Type ", zap.Error(err), zap.String("type", msg.Type()), zap.String("route", msg.Route()))
 				}
 			case "distribution":
 				switch msg.Type() {
@@ -248,6 +237,31 @@ func rawToTransaction(ctx context.Context, c *Client, in []TxResponse, blocks ma
 					ev, err = mapDistributionFundCommunityPoolToSub(msg)
 				default:
 					c.logger.Error("[COSMOS-API] Unknown distribution message Type ", zap.Error(err), zap.String("type", msg.Type()), zap.String("route", msg.Route()))
+				}
+			case "evidence":
+				switch msg.Type() {
+				case "submit_evidence":
+					ev, err = mapEvidenceSubmitEvidenceToSub(msg)
+				default:
+					c.logger.Error("[COSMOS-API] Unknown evidence message Type ", zap.Error(err), zap.String("type", msg.Type()), zap.String("route", msg.Route()))
+				}
+			case "gov":
+				switch msg.Type() {
+				case "deposit":
+					ev, err = mapGovDepositToSub(msg)
+				case "vote":
+					ev, err = mapGovVoteToSub(msg)
+				case "submit_proposal":
+					ev, err = mapGovSubmitProposalToSub(msg)
+				default:
+					c.logger.Error("[COSMOS-API] Unknown got message Type ", zap.Error(err), zap.String("type", msg.Type()), zap.String("route", msg.Route()))
+				}
+			case "slashing":
+				switch msg.Type() {
+				case "unjail":
+					ev, err = mapSlashingUnjailToSub(msg)
+				default:
+					c.logger.Error("[COSMOS-API] Unknown slashing message Type ", zap.Error(err), zap.String("type", msg.Type()), zap.String("route", msg.Route()))
 				}
 			case "staking":
 				switch msg.Type() {

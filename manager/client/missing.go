@@ -46,9 +46,6 @@ func (hc *Client) GetRunningTransactions(ctx context.Context) (run []Run, err er
 // GetMissingTransactions gets missing transactions for given height range using CheckMissingTransactions.
 // This may run very very long (aka synchronize entire chain). For that kind of operations async parameter got added and runner was created.
 func (hc *Client) GetMissingTransactions(ctx context.Context, nv NetworkVersion, heightRange shared.HeightRange, window uint64, async bool, force bool) (run *Run, err error) {
-	if !async {
-		return nil, hc.getMissingTransactions(ctx, nv, heightRange, window, nil)
-	}
 
 	hc.logger.Info("[Client] GetMissingTransactions StartProcess", zap.Any("range", heightRange), zap.Any("network", nv))
 
@@ -61,6 +58,12 @@ func (hc *Client) GetMissingTransactions(ctx context.Context, nv NetworkVersion,
 		hc.logger.Info("[Client] Already Exists", zap.Any("range", heightRange), zap.Any("progress", progress))
 		return progress, err
 	}
+
+	if !async {
+		err := hc.getMissingTransactions(ctx, nv, heightRange, window, nil)
+		return nil, err
+	}
+
 	nCtx := progress.Ctx
 	go hc.getMissingTransactions(nCtx, nv, heightRange, window, progress)
 
@@ -102,7 +105,7 @@ func (hc *Client) getMissingTransactions(ctx context.Context, nv NetworkVersion,
 			return fmt.Errorf("error getting missing transactions from missing blocks:  %w ", err)
 		}
 		if progress != nil {
-			hc.logger.Info("[Client] GetMissingTransactions missingBlocks GetTransactions Success", zap.Any("range", missingRange), zap.Any("network", nv))
+			hc.logger.Info("[Client] GetMissingTransactions missingBlocks GetTransactions success", zap.Any("range", missingRange), zap.Any("network", nv))
 			progress.Report(missingRange, time.Since(now), nil, false)
 		}
 	}

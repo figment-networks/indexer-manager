@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"net"
 	"net/http"
 	"sync"
@@ -73,7 +72,7 @@ func NewManager(id string, logger *zap.Logger) *Manager {
 }
 
 // Register new worker in Manager
-func (m *Manager) Register(id, kind string, connInfo structs.WorkerConnection) error {
+func (m *Manager) Register(id, kind, chain string, connInfo structs.WorkerConnection) error {
 	m.networkLock.Lock()
 	n, ok := m.networks[kind]
 	if !ok {
@@ -94,7 +93,7 @@ func (m *Manager) Register(id, kind string, connInfo structs.WorkerConnection) e
 								(!newAddr.IP.IsUnspecified() && newAddr.IP.Equal(oldAddr.IP)) {
 								// Same Address!
 								m.logger.Info("[Manager] Node under the same address previously registered. Removing.", zap.Any("connection_info", oldAddr))
-								if err := m.Unregister(work.NodeSelfID, work.Type, infos.Version); err != nil {
+								if err := m.Unregister(work.NodeSelfID, work.Type, work.ChainID, infos.Version); err != nil {
 									m.logger.Error("[Manager] Error unregistring node.", zap.Error(err), zap.Any("connection_info", oldAddr))
 								}
 							}
@@ -107,6 +106,7 @@ func (m *Manager) Register(id, kind string, connInfo structs.WorkerConnection) e
 		w = &structs.WorkerInfo{
 			NodeSelfID:     id,
 			Type:           kind,
+			ChainID:        chain,
 			ConnectionInfo: []structs.WorkerConnection{connInfo},
 			State:          structs.StreamUnknown,
 		}
@@ -129,13 +129,13 @@ func (m *Manager) Register(id, kind string, connInfo structs.WorkerConnection) e
 		return fmt.Errorf("Transport %s cannot be found", connInfo.Type)
 	}
 	m.nextWorkersLock.RLock()
-	g, ok := m.nextWorkers[structs.WorkerCompositeKey{Network: kind, Version: connInfo.Version}]
+	g, ok := m.nextWorkers[structs.WorkerCompositeKey{Network: kind, ChainID: chain, Version: connInfo.Version}]
 	m.nextWorkersLock.RUnlock()
 
 	if !ok {
 		g = NewRoundRobinWorkers()
 		m.nextWorkersLock.Lock()
-		m.nextWorkers[structs.WorkerCompositeKey{Network: kind, Version: connInfo.Version}] = g
+		m.nextWorkers[structs.WorkerCompositeKey{Network: kind, ChainID: chain, Version: connInfo.Version}] = g
 		m.nextWorkersLock.Unlock()
 	}
 
@@ -196,7 +196,7 @@ func (m *Manager) GetAllWorkers() map[string]WorkerNetworkStatic {
 			m.nextWorkersLock.RLock()
 
 			for _, ci := range wis.ConnectionInfo {
-				netWorker, ok := m.nextWorkers[structs.WorkerCompositeKey{Network: k, Version: ci.Version}]
+				netWorker, ok := m.nextWorkers[structs.WorkerCompositeKey{Network: k, ChainID: wis.ChainID, Version: ci.Version}]
 				if ok {
 					wis.TaskWorkerInfo, ok = netWorker.GetWorker(kv)
 					allWorkers := netWorker.GetWorkers()
@@ -216,10 +216,10 @@ func (m *Manager) GetAllWorkers() map[string]WorkerNetworkStatic {
 }
 
 // Unregister unregistring worker
-func (m *Manager) Unregister(id, kind, version string) error {
+func (m *Manager) Unregister(id, kind, chain, version string) error {
 	m.nextWorkersLock.Lock()
 	defer m.nextWorkersLock.Unlock()
-	nw := m.nextWorkers[structs.WorkerCompositeKey{Network: kind, Version: version}]
+	nw := m.nextWorkers[structs.WorkerCompositeKey{Network: kind, ChainID: chain, Version: version}]
 	return nw.Close(id)
 }
 
@@ -263,14 +263,13 @@ func (m *Manager) Send(trs []structs.TaskRequest) (*structs.Await, error) {
 
 	first := trs[0]
 	m.nextWorkersLock.RLock()
-	w, ok := m.nextWorkers[structs.WorkerCompositeKey{Network: first.Network, Version: first.Version}]
+	w, ok := m.nextWorkers[structs.WorkerCompositeKey{Network: first.Network, ChainID: first.ChainID, Version: first.Version}]
 	m.nextWorkersLock.RUnlock()
 	if !ok {
-		return nil, fmt.Errorf("No such worker for %s - %s", first.Network, first.Version)
+		return nil, fmt.Errorf("No such worker for %s - %s (%s) ", first.Network, first.ChainID, first.Version)
 	}
 
 	uuids := makeUUIDs(len(trs))
-	//resp := m.registerRequest(uuids)
 	resp := structs.NewAwait(uuids)
 	for requestNumber, t := range trs {
 		var err error
@@ -289,18 +288,17 @@ func (m *Manager) Send(trs []structs.TaskRequest) (*structs.Await, error) {
 				ctx, cancel := context.WithTimeout(context.Background(), time.Second*1)
 				defer cancel()
 
-				log.Printf("Pinging: %s  ", failedID)
+				m.logger.Debug("[MANAGER-CONNECTIVITY] Pinging", zap.String("failed_worker_id", failedID))
 				var duration time.Duration
 				duration, err = w.Ping(ctx, failedID)
 				if err != nil {
 					w.Close(failedID)
-					log.Printf("Error Pinging: %s %+v ", failedID, err)
-					//m.removeWorker(t.Network, failedID)
-					log.Printf("Reconnecting: %s  ", failedID)
+					m.logger.Warn("[MANAGER-CONNECTIVITY] Error Pinging", zap.String("failed_worker_id", failedID), zap.Error(err))
+					m.logger.Info("[MANAGER-CONNECTIVITY] Reconnecting", zap.String("failed_worker_id", failedID))
 					err = w.Reconnect(context.Background(), m.logger, failedID)
 				}
 				if err == nil {
-					log.Printf("PINGED %s SUCCESSFULLY  %s", failedID, duration.String())
+					m.logger.Info("[MANAGER-CONNECTIVITY] Pinged successfully ", zap.String("failed_worker_id", failedID), zap.Duration("ping_duration", duration))
 					err = w.BringOnline(failedID)
 				}
 
@@ -310,12 +308,12 @@ func (m *Manager) Send(trs []structs.TaskRequest) (*structs.Await, error) {
 					if err == nil {
 						break RetryLoop
 					}
-					log.Printf("Error Retrying: %s %+v ", failedID, err)
+					m.logger.Warn("[MANAGER-CONNECTIVITY] Error Retrying: %s %+v ", zap.String("failed_worker_id", failedID), zap.Error(err))
 				}
 			}
 
 			if err != nil {
-				log.Println("Retry failed: ", failedID, err)
+				m.logger.Warn("[MANAGER-CONNECTIVITY] Retry failed: ", zap.String("failed_worker_id", failedID), zap.Error(err))
 			}
 		}
 		if err != nil {
@@ -388,10 +386,9 @@ func (m *Manager) AttachToMux(mux *http.ServeMux) {
 			ipTo = net.ParseIP(fwd)
 		}
 
-		m.Register(pi.ID, pi.Kind, structs.WorkerConnection{
+		m.Register(pi.ID, pi.Kind, pi.ChainID, structs.WorkerConnection{
 			Version: pi.Connectivity.Version,
 			Type:    pi.Connectivity.Type,
-			ChainID: pi.ChainID,
 			Addresses: []structs.WorkerAddress{{
 				IP:      ipTo,
 				Address: pi.Connectivity.Address,
