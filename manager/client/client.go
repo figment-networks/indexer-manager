@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math"
 	"sort"
 
 	"github.com/figment-networks/indexing-engine/metrics"
@@ -18,6 +17,8 @@ import (
 	"github.com/figment-networks/cosmos-indexer/manager/store/params"
 	shared "github.com/figment-networks/cosmos-indexer/structs"
 )
+
+//go:generate mockgen -destination=./mocks/mock_client.go  -package=mocks github.com/figment-networks/cosmos-indexer/manager/client TaskSender
 
 // SelfCheck Flag describing should manager check anyway the latest version for network it has
 var SelfCheck = true
@@ -64,13 +65,16 @@ type Client struct {
 	runner   *Runner
 }
 
-func NewClient(storeEng store.DataStore, logger *zap.Logger) *Client {
+func NewClient(storeEng store.DataStore, logger *zap.Logger, runner *Runner) *Client {
 	c := &Client{
 		storeEng: storeEng,
 		logger:   logger,
-		runner:   NewRunner(),
 	}
-	go c.runner.Run()
+	if runner != nil {
+		c.runner = runner
+		go c.runner.Run()
+	}
+
 	return c
 }
 
@@ -123,18 +127,17 @@ func (hc *Client) GetTransactions(ctx context.Context, nv NetworkVersion, height
 		} else {
 			requestsToGetMetric.Observe(diff)
 
-			if diff > 0 {
-				times = uint64(math.Ceil(diff / float64(batchLimit)))
-			}
+			var i uint64
+			for {
+				startH := heightRange.StartHeight + i*uint64(batchLimit)
+				endH := heightRange.StartHeight + i*uint64(batchLimit) + uint64(batchLimit) - 1
 
-			for i := uint64(0); i < times; i++ {
-				endH := heightRange.StartHeight + i*batchLimit + batchLimit
 				if heightRange.EndHeight > 0 && endH > heightRange.EndHeight {
 					endH = heightRange.EndHeight
 				}
 
 				b, _ := json.Marshal(shared.HeightRange{
-					StartHeight: heightRange.StartHeight + uint64(i*batchLimit),
+					StartHeight: startH,
 					EndHeight:   endH,
 					Hash:        heightRange.Hash,
 				})
@@ -146,6 +149,11 @@ func (hc *Client) GetTransactions(ctx context.Context, nv NetworkVersion, height
 					Type:    shared.ReqIDGetTransactions,
 					Payload: b,
 				})
+
+				i++
+				if heightRange.EndHeight == endH || heightRange.EndHeight == 0 {
+					break
+				}
 			}
 		}
 	}
@@ -171,7 +179,6 @@ WaitForAllData:
 		case <-ctx.Done():
 			return nil, errors.New("Request timed out")
 		case response := <-respAwait.Resp:
-
 			hc.logger.Debug("[Client] Get Transaction received data:", zap.Any("type", response.Type), zap.Any("response", response))
 
 			if response.Error.Msg != "" {
@@ -314,6 +321,7 @@ func (hc *Client) ScrapeLatest(ctx context.Context, ldr shared.LatestDataRequest
 	respAwait, err := hc.sender.Send([]structs.TaskRequest{{
 		Network: ldr.Network,
 		Version: ldr.Version,
+		ChainID: ldr.ChainID,
 		Type:    "GetLatest",
 		Payload: taskReq,
 	}})

@@ -51,7 +51,7 @@ RunLoop:
 		case <-tckr.C:
 			if err := r.Run(cCtx, network, chainID, version); err != nil {
 				var rErr *structures.RunError
-				s.logger.Error("[Scheduler - Process] Error running  "+name, zap.Error(err))
+				s.logger.Error("[Scheduler - Process] Error running  "+name+" "+network+" "+chainID+" "+version, zap.Error(err))
 				if errors.As(err, &rErr) {
 					if !rErr.IsRecoverable() {
 						tckr.Stop()

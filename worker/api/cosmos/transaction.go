@@ -408,7 +408,6 @@ func getCurrency(in string) []string {
 }
 
 func getCoin(s string) (number *big.Int, exp int32, err error) {
-
 	s = strings.Replace(s, ",", ".", -1)
 	strs := strings.Split(s, `.`)
 	if len(strs) == 1 {

@@ -72,7 +72,8 @@ func (c *Core) AddSchedules(ctx context.Context, rcs []structures.RunConfig) err
 	defer c.runLock.Unlock()
 
 	for _, r := range rcs {
-		if r.Kind != "" && r.Network != "" {
+		if r.Kind != "" && r.Network != "" && r.ChainID != "" {
+			c.logger.Info("Adding schedule config", zap.String("kind", r.Kind), zap.String("network", r.Network), zap.String("chain", r.ChainID))
 			r.RunID = c.ID
 			err := c.store.AddConfig(ctx, r)
 			if err != nil && !errors.Is(err, params.ErrAlreadyRegistred) {
@@ -85,9 +86,12 @@ func (c *Core) AddSchedules(ctx context.Context, rcs []structures.RunConfig) err
 }
 
 func (c *Core) LoadScheduler(ctx context.Context) error {
+	defer c.logger.Sync()
+
 	c.runLock.Lock()
 	defer c.runLock.Unlock()
 	rcs, err := c.store.GetConfigs(ctx, c.ID)
+
 	if err != nil {
 		return err
 	}
@@ -97,6 +101,7 @@ func (c *Core) LoadScheduler(ctx context.Context) error {
 			c.logger.Error(fmt.Sprintf("[Core] There is no such type as %s", s.Kind))
 			continue
 		}
+
 		r, ok := c.run[s.ID]
 		if !ok {
 			r = &RunInfo{
@@ -105,7 +110,7 @@ func (c *Core) LoadScheduler(ctx context.Context) error {
 
 		} else {
 			if r.Duration != s.Duration || r.RunID != s.RunID {
-				c.logger.Info(fmt.Sprintf("[Core] Record changed reloading %s (%s:%s) %s", runner.Name(), r.Network, r.Version, r.Duration.String()))
+				c.logger.Info(fmt.Sprintf("[Core] Record changed reloading %s (%s:%s) %s in %s", runner.Name(), r.Network, r.ChainID, r.Version, r.Duration.String()))
 				if r.CFunc != nil {
 					r.CFunc()
 				}
@@ -115,12 +120,11 @@ func (c *Core) LoadScheduler(ctx context.Context) error {
 		}
 
 		if r.Status == StatusEnabled {
-			// 	c.logger.Error("[Core] Schedule already enabled")
 			continue
 		}
 
 		// In fact run scheduler
-		c.logger.Info(fmt.Sprintf("[Core] Running schedule %s (%s:%s %s) %s", runner.Name(), r.Network, r.ChainID, r.Version, r.Duration.String()))
+		c.logger.Info(fmt.Sprintf("[Core] Running schedule %s (%s:%s) %s in %s", runner.Name(), r.Network, r.ChainID, r.Version, r.Duration.String()))
 		var cCtx context.Context
 		cCtx, r.CFunc = context.WithCancel(ctx)
 		go c.scheduler.Run(cCtx, s.ID.String(), r.Duration, r.Network, r.ChainID, r.Version, runner)

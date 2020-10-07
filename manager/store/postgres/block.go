@@ -157,8 +157,8 @@ const (
 	FROM blocks
 	WHERE
 		chain_id = $1 AND
-		network = $2  AND
-		height >= $3  AND
+		network = $2 AND
+		height >= $3 AND
 		height <= $4
 	ORDER BY height ASC
 	LIMIT 1`
@@ -168,8 +168,8 @@ const (
 	FROM blocks
 	WHERE
 		chain_id = $1 AND
-		network = $2  AND
-		height >= $3  AND
+		network = $2 AND
+		height >= $3 AND
 		height <= $4
 	ORDER BY height DESC
 	LIMIT 1`
@@ -273,17 +273,13 @@ func (d *Driver) BlockContinuityCheck(ctx context.Context, blx structs.BlockWith
 	return pairs, nil
 }
 
-const blockTransactionCheckQuery = `
-	SELECT t.height, count(t.hash) AS c, b.numtxs
-	FROM transaction_events AS t
-	LEFT JOIN blocks AS b ON (t.height = b.height)
-	WHERE
-		t.chain_id = $1 AND
-		t.network = $2 AND
-		t.height >= $3 AND
-		t.height <= $4
-	GROUP BY t.height,b.numtxs
-	HAVING count(t.hash) != b.numtxs`
+const blockTransactionCheckQuery = `SELECT b.height, b.numtxs, count(t.height) AS c
+FROM blocks AS b
+LEFT JOIN transaction_events AS t ON (t.height = b.height AND t.network = b.network AND b.chain_id = t.chain_id)
+WHERE  b.chain_id = $1 AND b.network = $2  AND b.height >= $3 AND b.height <= $4
+GROUP BY b.height, b.numtxs
+HAVING count(t.hash) != b.numtxs
+ORDER BY b.height ASC`
 
 // BlockTransactionCheck check if every block has correct, corresponding number of transactions
 func (d *Driver) BlockTransactionCheck(ctx context.Context, blx structs.BlockWithMeta, startHeight, endHeight uint64) ([]uint64, error) {

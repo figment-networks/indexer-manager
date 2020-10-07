@@ -72,12 +72,12 @@ func NewManager(id string, logger *zap.Logger) *Manager {
 }
 
 // Register new worker in Manager
-func (m *Manager) Register(id, kind, chain string, connInfo structs.WorkerConnection) error {
+func (m *Manager) Register(id, network, chain string, connInfo structs.WorkerConnection) error {
 	m.networkLock.Lock()
-	n, ok := m.networks[kind]
+	n, ok := m.networks[network]
 	if !ok {
 		n = &Network{workers: make(map[string]*structs.WorkerInfo)}
-		m.networks[kind] = n
+		m.networks[network] = n
 	}
 	m.networkLock.Unlock()
 
@@ -85,7 +85,7 @@ func (m *Manager) Register(id, kind, chain string, connInfo structs.WorkerConnec
 	if !ok {
 		// (lukanus): check if the node is not previously registered under old selfID
 		for _, work := range n.workers {
-			if work.Type == kind {
+			if work.Type == network {
 				for _, infos := range work.ConnectionInfo {
 					for _, oldAddr := range infos.Addresses {
 						for _, newAddr := range connInfo.Addresses {
@@ -105,7 +105,7 @@ func (m *Manager) Register(id, kind, chain string, connInfo structs.WorkerConnec
 
 		w = &structs.WorkerInfo{
 			NodeSelfID:     id,
-			Type:           kind,
+			Type:           network,
 			ChainID:        chain,
 			ConnectionInfo: []structs.WorkerConnection{connInfo},
 			State:          structs.StreamUnknown,
@@ -115,13 +115,11 @@ func (m *Manager) Register(id, kind, chain string, connInfo structs.WorkerConnec
 
 	w.LastCheck = time.Now()
 
-	// log.Printf("STATE -  %+v, %+v  %+v ", w.State, w.LastCheck, w)
-
 	if ok && w.State != structs.StreamOffline { // (lukanus): node already registered
 		return nil
 	}
 
-	m.logger.Info("[Manager] Registering ", zap.String("type", connInfo.Type), zap.Any("connection_info", connInfo))
+	m.logger.Info("[Manager] Registering ", zap.String("type", connInfo.Type), zap.Any("connection_info", connInfo), zap.String("network", network), zap.String("chain", chain), zap.String("version", connInfo.Version))
 	m.transportsLock.RLock()
 	c, ok := m.transports[connInfo.Type]
 	m.transportsLock.RUnlock()
@@ -129,13 +127,13 @@ func (m *Manager) Register(id, kind, chain string, connInfo structs.WorkerConnec
 		return fmt.Errorf("Transport %s cannot be found", connInfo.Type)
 	}
 	m.nextWorkersLock.RLock()
-	g, ok := m.nextWorkers[structs.WorkerCompositeKey{Network: kind, ChainID: chain, Version: connInfo.Version}]
+	g, ok := m.nextWorkers[structs.WorkerCompositeKey{Network: network, ChainID: chain, Version: connInfo.Version}]
 	m.nextWorkersLock.RUnlock()
 
 	if !ok {
 		g = NewRoundRobinWorkers()
 		m.nextWorkersLock.Lock()
-		m.nextWorkers[structs.WorkerCompositeKey{Network: kind, ChainID: chain, Version: connInfo.Version}] = g
+		m.nextWorkers[structs.WorkerCompositeKey{Network: network, ChainID: chain, Version: connInfo.Version}] = g
 		m.nextWorkersLock.Unlock()
 	}
 
@@ -158,6 +156,7 @@ func (m *Manager) Register(id, kind, chain string, connInfo structs.WorkerConnec
 	}
 
 	m.logger.Info("Reconnecting ", zap.String("type", connInfo.Type), zap.Any("connection_info", connInfo))
+
 	if err := g.Reconnect(context.Background(), m.logger, id); err != nil {
 		m.logger.Error("Reconnecting Error ", zap.Error(err), zap.Any("connection_info", connInfo))
 
@@ -334,8 +333,8 @@ func makeUUIDs(count int) []uuid.UUID {
 // PingInfo contract is defined here
 type PingInfo struct {
 	ID           string           `json:"id"`
-	Kind         string           `json:"kind"`
-	ChainID      string           `json:"chainID"`
+	Network      string           `json:"network"`
+	ChainID      string           `json:"chain_id"`
 	Connectivity ConnectivityInfo `json:"connectivity"`
 }
 type ConnectivityInfo struct {
@@ -386,7 +385,7 @@ func (m *Manager) AttachToMux(mux *http.ServeMux) {
 			ipTo = net.ParseIP(fwd)
 		}
 
-		m.Register(pi.ID, pi.Kind, pi.ChainID, structs.WorkerConnection{
+		m.Register(pi.ID, pi.Network, pi.ChainID, structs.WorkerConnection{
 			Version: pi.Connectivity.Version,
 			Type:    pi.Connectivity.Type,
 			Addresses: []structs.WorkerAddress{{

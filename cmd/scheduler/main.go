@@ -111,7 +111,10 @@ func main() {
 			log.Fatal(err)
 		}
 		if len(rcs) > 0 {
-			c.AddSchedules(ctx, rcs)
+			err := c.AddSchedules(ctx, rcs)
+			if err != nil {
+				log.Fatal(err)
+			}
 		}
 	}
 

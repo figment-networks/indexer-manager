@@ -283,9 +283,9 @@ func (d *Driver) GetTransactions(ctx context.Context, tsearch params.Transaction
 		i++
 	}
 
-	if tsearch.ChainID != "" {
-		parts = append(parts, "chain_id = $"+strconv.Itoa(i))
-		data = append(data, tsearch.ChainID)
+	if len(tsearch.ChainID) > 0 {
+		parts = append(parts, "chain_id IN $"+strconv.Itoa(i))
+		data = append(data, pq.Array(tsearch.ChainID))
 		i++
 	}
 
@@ -374,7 +374,7 @@ func (d *Driver) GetTransactions(ctx context.Context, tsearch params.Transaction
 	}
 
 	qBuilder := strings.Builder{}
-	qBuilder.WriteString("SELECT id, version, epoch, height, hash, block_hash, time, gas_wanted, gas_used, memo, data")
+	qBuilder.WriteString("SELECT id, chain_id, version, epoch, height, hash, block_hash, time, gas_wanted, gas_used, memo, data")
 	if tsearch.WithRaw {
 		qBuilder.WriteString(", raw ")
 	}
@@ -415,9 +415,9 @@ func (d *Driver) GetTransactions(ctx context.Context, tsearch params.Transaction
 	for rows.Next() {
 		tx := structs.Transaction{}
 		if tsearch.WithRaw {
-			err = rows.Scan(&tx.ID, &tx.Version, &tx.Epoch, &tx.Height, &tx.Hash, &tx.BlockHash, &tx.Time, &tx.GasWanted, &tx.GasUsed, &tx.Memo, &tx.Events, &tx.Raw)
+			err = rows.Scan(&tx.ID, &tx.ChainID, &tx.Version, &tx.Epoch, &tx.Height, &tx.Hash, &tx.BlockHash, &tx.Time, &tx.GasWanted, &tx.GasUsed, &tx.Memo, &tx.Events, &tx.Raw)
 		} else {
-			err = rows.Scan(&tx.ID, &tx.Version, &tx.Epoch, &tx.Height, &tx.Hash, &tx.BlockHash, &tx.Time, &tx.GasWanted, &tx.GasUsed, &tx.Memo, &tx.Events)
+			err = rows.Scan(&tx.ID, &tx.ChainID, &tx.Version, &tx.Epoch, &tx.Height, &tx.Hash, &tx.BlockHash, &tx.Time, &tx.GasWanted, &tx.GasUsed, &tx.Memo, &tx.Events)
 		}
 
 		if err != nil {

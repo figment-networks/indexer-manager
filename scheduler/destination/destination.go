@@ -25,7 +25,7 @@ type NVCKey struct {
 }
 
 func (nv NVCKey) String() string {
-	return fmt.Sprintf("%s:%s", nv.Network, nv.Version)
+	return fmt.Sprintf("%s:%s (%s)", nv.Network, nv.ChainID, nv.Version)
 }
 
 type Scheme struct {
@@ -138,7 +138,6 @@ func (s *Scheme) Refresh(ctx context.Context) error {
 	}
 
 	// (lukanus): link to destination
-
 	for addr := range s.destinations {
 		delete(s.destinations, addr)
 	}

@@ -59,7 +59,6 @@ func attachScheduler(ctx context.Context, db *sql.DB, mux *http.ServeMux, cfg co
 			if err != nil {
 				return err
 			}
-
 			rcs = append(rcs, schedulerStructures.RunConfig{
 				Network:  rConf.Network,
 				ChainID:  rConf.ChainID,
@@ -69,8 +68,7 @@ func attachScheduler(ctx context.Context, db *sql.DB, mux *http.ServeMux, cfg co
 			})
 		}
 
-		err = c.AddSchedules(ctx, rcs)
-		if err != nil {
+		if err := c.AddSchedules(ctx, rcs); err != nil {
 			return err
 		}
 	}
@@ -85,6 +83,7 @@ func reloadScheduler(ctx context.Context, logger *zap.Logger, c *schedulerCore.C
 	for range tckr.C {
 		if err := c.LoadScheduler(ctx); err != nil {
 			logger.Error("[Manager-Scheduler] Error during loading of scheduler", zap.Error(err))
+			logger.Sync()
 		}
 	}
 }

@@ -80,7 +80,7 @@ func (hc *Client) getMissingTransactions(ctx context.Context, nv NetworkVersion,
 
 	hc.logger.Info("[Client] GetMissingTransactions CheckMissingTransactions", zap.Any("range", heightRange), zap.Any("network", nv))
 	now := time.Now()
-	missingBlocks, missingTransactions, err := hc.CheckMissingTransactions(ctx, nv, heightRange, 1000)
+	missingBlocks, missingTransactions, err := hc.CheckMissingTransactions(ctx, nv, heightRange, 999)
 	if err != nil {
 		if progress != nil {
 			progress.Report(shared.HeightRange{}, time.Since(now), []error{err}, true)
@@ -113,7 +113,7 @@ func (hc *Client) getMissingTransactions(ctx context.Context, nv NetworkVersion,
 	if len(missingBlocks) > 0 {
 		hc.logger.Info("[Client] GetMissingTransactions CheckMissingTransactions #2", zap.Any("range", heightRange), zap.Any("network", nv))
 		now = time.Now()
-		missingBlocks, missingTransactions, err = hc.CheckMissingTransactions(ctx, nv, heightRange, 1000)
+		missingBlocks, missingTransactions, err = hc.CheckMissingTransactions(ctx, nv, heightRange, 999)
 		if err != nil {
 			if progress != nil {
 				progress.Report(shared.HeightRange{}, time.Since(now), []error{err}, true)

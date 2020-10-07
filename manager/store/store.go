@@ -8,6 +8,8 @@ import (
 	"github.com/figment-networks/cosmos-indexer/structs"
 )
 
+//go:generate mockgen -destination=./mocks/mock_store.go -package=mocks github.com/figment-networks/cosmos-indexer/manager/store DataStore
+
 type DBDriver interface {
 	TransactionStore
 	BlockStore

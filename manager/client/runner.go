@@ -121,7 +121,6 @@ func (r *Runner) Run() {
 					rReq.Resp <- RunResp{IsNew: true, Run: run, Err: nil}
 					continue
 				}
-
 				rReq.Resp <- RunResp{IsNew: false, Run: nil, Err: errors.New("error occurred")}
 			} else if rReq.Kind == "stop" {
 				currentlyRunning, ok := r.checkExisting(rReq)
@@ -130,7 +129,6 @@ func (r *Runner) Run() {
 				}
 				rReq.Resp <- RunResp{IsNew: false, Run: nil, Err: nil}
 			}
-
 			rReq.Resp <- RunResp{IsNew: false, Run: nil, Err: errors.New("unknown request kind")}
 		}
 	}
@@ -145,13 +143,11 @@ func (r *Runner) cleanup() {
 				newRuns = append(newRuns, rt)
 			}
 		}
-
 		if len(newRuns) > 0 {
 			r.runs[k] = newRuns
 		} else {
 			delete(r.runs, k)
 		}
-
 	}
 }
 
@@ -164,7 +160,6 @@ func (r *Runner) checkExisting(req RunReq) (currentlyRunning *Run, ok bool) {
 				(req.HeightRange.EndHeight <= run.HeightRange.EndHeight && req.HeightRange.EndHeight >= run.HeightRange.StartHeight) {
 				return run, true
 			}
-
 			// TODO(lukanus): support other ranges (split), this is just optimization
 		}
 	}

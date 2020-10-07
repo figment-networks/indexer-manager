@@ -151,16 +151,11 @@ func (ic *IndexerClient) GetTransactions(ctx context.Context, tr cStructs.TaskRe
 	// (lukanus): in separate goroutine take transaction format wrap it in transport message and send
 	go sendResp(sCtx, tr.Id, out, ic.logger, stream, fin)
 
-	diff := hr.EndHeight - hr.StartHeight
-	bigPages := uint64(math.Ceil(float64(diff) / float64(ic.bigPage)))
-	if diff == 0 {
-		bigPages = 1
-	}
-
-	for i := uint64(0); i < bigPages; i++ {
+	var i uint64
+	for {
 		hrInner := structs.HeightRange{
 			StartHeight: hr.StartHeight + i*ic.bigPage,
-			EndHeight:   hr.StartHeight + i*ic.bigPage + ic.bigPage,
+			EndHeight:   hr.StartHeight + i*ic.bigPage + ic.bigPage - 1,
 		}
 		if hrInner.EndHeight > hr.EndHeight {
 			hrInner.EndHeight = hr.EndHeight
@@ -174,6 +169,11 @@ func (ic *IndexerClient) GetTransactions(ctx context.Context, tr cStructs.TaskRe
 			})
 			ic.logger.Error("[COSMOS-CLIENT] Error getting range (Get Transactions) ", zap.Error(err), zap.Stringer("taskID", tr.Id))
 			return
+		}
+
+		i++
+		if hrInner.EndHeight == hr.EndHeight {
+			break
 		}
 	}
 
@@ -256,26 +256,22 @@ func (ic *IndexerClient) GetLatest(ctx context.Context, tr cStructs.TaskRequest,
 
 	ic.logger.Debug("[COSMOS-CLIENT] Get last block ", zap.Any("block", block), zap.Any("in", ldr))
 	startingHeight := getStartingHeight(ldr.LastHeight, ic.maximumHeightsToGet, block.Height)
-
-	diff := block.Height - startingHeight
-	bigPages := uint64(math.Ceil(float64(diff) / float64(ic.bigPage)))
-	if diff == 0 {
-		bigPages = 1
-	}
-
 	out := make(chan cStructs.OutResp, page)
 	fin := make(chan bool, 2)
 	// (lukanus): in separate goroutine take transaction format wrap it in transport message and send
 	go sendResp(sCtx, tr.Id, out, ic.logger, stream, fin)
-	for i := uint64(0); i < bigPages; i++ {
+
+	var i uint64
+	for {
 		hr := structs.HeightRange{
-			StartHeight: startingHeight + i*ic.bigPage,
-			EndHeight:   startingHeight + i*ic.bigPage + ic.bigPage,
+			StartHeight: startingHeight + i*(ic.bigPage),
+			EndHeight:   startingHeight + i*(ic.bigPage) + ic.bigPage - 1,
 		}
 		if hr.EndHeight > block.Height {
 			hr.EndHeight = block.Height
 		}
 
+		i++
 		if err := getRange(sCtx, ic.logger, client, hr, out); err != nil {
 			stream.Send(cStructs.TaskResponse{
 				Id:    tr.Id,
@@ -283,6 +279,10 @@ func (ic *IndexerClient) GetLatest(ctx context.Context, tr cStructs.TaskRequest,
 				Final: true,
 			})
 			ic.logger.Error("[COSMOS-CLIENT] Error GettingRange from get latest ", zap.Error(err), zap.Stringer("taskID", tr.Id))
+			break
+		}
+
+		if block.Height == hr.EndHeight {
 			break
 		}
 	}
@@ -325,19 +325,15 @@ func getStartingHeight(lastHeight, maximumHeightsToGet, blockHeightFromDB uint64
 func getRange(ctx context.Context, logger *zap.Logger, client *api.Client, hr structs.HeightRange, out chan cStructs.OutResp) error {
 	defer logger.Sync()
 
-	blocksAllCount := hr.EndHeight - hr.StartHeight
-	numBatches := int(math.Ceil(float64(blocksAllCount) / blockchainEndpointLimit))
-	if blocksAllCount == 0 {
-		numBatches = 1
-	}
 	batchesCtrl := make(chan error, 2)
 	defer close(batchesCtrl)
 	blocksAll := &api.BlocksMap{Blocks: map[uint64]structs.Block{}}
 
-	for i := 0; i < numBatches; i++ {
+	var i, responses uint64
+	for {
 		bhr := structs.HeightRange{
 			StartHeight: hr.StartHeight + uint64(i*blockchainEndpointLimit),
-			EndHeight:   hr.StartHeight + uint64(i*blockchainEndpointLimit) + uint64(blockchainEndpointLimit),
+			EndHeight:   hr.StartHeight + uint64(i*blockchainEndpointLimit) + uint64(blockchainEndpointLimit) - 1,
 		}
 		if bhr.EndHeight > hr.EndHeight {
 			bhr.EndHeight = hr.EndHeight
@@ -345,16 +341,20 @@ func getRange(ctx context.Context, logger *zap.Logger, client *api.Client, hr st
 
 		logger.Debug("[COSMOS-CLIENT] Getting blocks", zap.Uint64("end", bhr.EndHeight), zap.Uint64("start", bhr.StartHeight))
 		go client.GetBlocksMeta(ctx, bhr, blocksAll, batchesCtrl)
+		i++
+
+		if bhr.EndHeight == hr.EndHeight {
+			break
+		}
 	}
 
-	var responses int
 	var errors = []error{}
 	for err := range batchesCtrl {
 		responses++
 		if err != nil {
 			errors = append(errors, err)
 		}
-		if responses == numBatches {
+		if responses == i {
 			break
 		}
 	}

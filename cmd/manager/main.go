@@ -99,7 +99,7 @@ func main() {
 	connManager.AddTransport(grpcCli)
 
 	client.InitMetrics()
-	hClient := client.NewClient(managerStore, logger.GetLogger())
+	hClient := client.NewClient(managerStore, logger.GetLogger(), client.NewRunner())
 	hClient.LinkSender(connManager)
 	HTTPTransport := httpTransport.NewConnector(hClient)
 

@@ -2,6 +2,7 @@
 package grpc
 
 import (
+	"context"
 	"io"
 
 	"github.com/figment-networks/cosmos-indexer/worker/transport/grpc/indexer"
@@ -14,20 +15,22 @@ import (
 // IndexerServer is implemantation of GRPC IndexerServiceServer
 type IndexerServer struct {
 	indexer.UnimplementedIndexerServiceServer
+	ctx    context.Context
 	client cStructs.IndexerClienter
 	logger *zap.Logger
 }
 
 // NewIndexerServer if IndexerServer constructor
-func NewIndexerServer(client cStructs.IndexerClienter, logger *zap.Logger) *IndexerServer {
+func NewIndexerServer(ctx context.Context, client cStructs.IndexerClienter, logger *zap.Logger) *IndexerServer {
 	return &IndexerServer{
 		client: client,
 		logger: logger,
+		ctx:    ctx,
 	}
 }
 
 // TaskRPC is fullfilment of TaskRPC endpoint from grpc.
-// it receives new stream requests and creates the second stream, afterwards just controls incoming mesasges
+// it receives new stream requests and creates the second stream, afterwards just controls incoming messages
 func (is *IndexerServer) TaskRPC(taskStream indexer.IndexerService_TaskRPCServer) error {
 	ctx := taskStream.Context()
 	receiverClosed := make(chan error)
@@ -37,7 +40,6 @@ func (is *IndexerServer) TaskRPC(taskStream indexer.IndexerService_TaskRPCServer
 	var after bool
 	var stream *cStructs.StreamAccess
 	var streamID uuid.UUID
-
 	for {
 		select {
 		case <-ctx.Done():
@@ -71,7 +73,7 @@ func (is *IndexerServer) TaskRPC(taskStream indexer.IndexerService_TaskRPCServer
 				continue
 			}
 
-			go Send(taskStream, stream, is.logger, receiverClosed)
+			go Send(is.ctx, taskStream, stream, is.logger, receiverClosed)
 			after = true
 		}
 
@@ -101,16 +103,18 @@ func (is *IndexerServer) TaskRPC(taskStream indexer.IndexerService_TaskRPCServer
 }
 
 // Send pairs outgoing messages, with proper stream. It shoud run in separate goroutine than TaskRPC
-func Send(taskStream indexer.IndexerService_TaskRPCServer, accessCh *cStructs.StreamAccess, logger *zap.Logger, receiverClosed chan error) {
+func Send(workerContext context.Context, taskStream indexer.IndexerService_TaskRPCServer, accessCh *cStructs.StreamAccess, logger *zap.Logger, receiverClosed chan error) {
 	logger.Debug("[GRPC] Send started ")
 	defer logger.Debug("[GRPC] Send finished ")
 	defer logger.Sync()
 
-	ctx := taskStream.Context()
+	streamCtx := taskStream.Context()
 ControlRPC:
 	for {
 		select {
-		case <-ctx.Done():
+		case <-streamCtx.Done():
+			break ControlRPC
+		case <-workerContext.Done():
 			break ControlRPC
 		case <-receiverClosed:
 			break ControlRPC
