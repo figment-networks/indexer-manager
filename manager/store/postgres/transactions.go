@@ -284,9 +284,16 @@ func (d *Driver) GetTransactions(ctx context.Context, tsearch params.Transaction
 	}
 
 	if len(tsearch.ChainID) > 0 {
-		parts = append(parts, "chain_id IN $"+strconv.Itoa(i))
-		data = append(data, pq.Array(tsearch.ChainID))
-		i++
+		chains := "chain_id IN ("
+		for j, c := range tsearch.ChainID {
+			if j > 0 {
+				chains += ","
+			}
+			data = append(data, c)
+			chains += "$" + strconv.Itoa(i)
+			i++
+		}
+		parts = append(parts, chains+")")
 	}
 
 	if tsearch.Epoch != "" {
