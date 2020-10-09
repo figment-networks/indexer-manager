@@ -4,11 +4,11 @@ import (
 	"context"
 	"time"
 
-	"github.com/figment-networks/cosmos-indexer/manager/store/params"
-	"github.com/figment-networks/cosmos-indexer/structs"
+	"github.com/figment-networks/indexer-manager/manager/store/params"
+	"github.com/figment-networks/indexer-manager/structs"
 )
 
-//go:generate mockgen -destination=./mocks/mock_store.go -package=mocks github.com/figment-networks/cosmos-indexer/manager/store DataStore
+//go:generate mockgen -destination=./mocks/mock_store.go -package=mocks github.com/figment-networks/indexer-manager/manager/store DataStore
 
 type DBDriver interface {
 	TransactionStore

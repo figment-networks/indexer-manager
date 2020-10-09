@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/figment-networks/cosmos-indexer/manager/connectivity/structs"
+	"github.com/figment-networks/indexer-manager/manager/connectivity/structs"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 )

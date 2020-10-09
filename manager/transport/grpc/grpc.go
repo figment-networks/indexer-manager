@@ -6,8 +6,8 @@ import (
 	"io"
 	"time"
 
-	"github.com/figment-networks/cosmos-indexer/manager/connectivity/structs"
-	"github.com/figment-networks/cosmos-indexer/manager/transport/grpc/indexer"
+	"github.com/figment-networks/indexer-manager/manager/connectivity/structs"
+	"github.com/figment-networks/indexer-manager/manager/transport/grpc/indexer"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"

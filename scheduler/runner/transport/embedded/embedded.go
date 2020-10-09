@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/figment-networks/cosmos-indexer/scheduler/structures"
-	"github.com/figment-networks/cosmos-indexer/structs"
+	"github.com/figment-networks/indexer-manager/scheduler/structures"
+	"github.com/figment-networks/indexer-manager/structs"
 )
 
 type SchedulerContractor interface {

@@ -7,8 +7,8 @@ import (
 	"database/sql"
 	"net/http"
 
-	"github.com/figment-networks/cosmos-indexer/cmd/manager/config"
-	"github.com/figment-networks/cosmos-indexer/manager/client"
+	"github.com/figment-networks/indexer-manager/cmd/manager/config"
+	"github.com/figment-networks/indexer-manager/manager/client"
 	"go.uber.org/zap"
 )
 

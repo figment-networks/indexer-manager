@@ -3,7 +3,7 @@
 # ------------------------------------------------------------------------------
 FROM golang:1.14 AS buildManager
 
-WORKDIR /go/src/github.com/figment-networks/cosmos-indexer/
+WORKDIR /go/src/github.com/figment-networks/indexer-manager/
 
 COPY ./go.mod .
 COPY ./go.sum .
@@ -35,7 +35,7 @@ RUN \
 FROM alpine:3.10 AS releaseManager
 
 WORKDIR /app/manager
-COPY --from=buildManager /go/src/github.com/figment-networks/cosmos-indexer/manager_bin /app/manager/manager
+COPY --from=buildManager /go/src/github.com/figment-networks/indexer-manager/manager_bin /app/manager/manager
 
 RUN chmod a+x ./manager
 CMD ["./manager"]

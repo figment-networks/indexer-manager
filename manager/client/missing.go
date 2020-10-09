@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/figment-networks/cosmos-indexer/manager/store/params"
-	shared "github.com/figment-networks/cosmos-indexer/structs"
+	"github.com/figment-networks/indexer-manager/manager/store/params"
+	shared "github.com/figment-networks/indexer-manager/structs"
 	"github.com/figment-networks/indexing-engine/metrics"
 	"go.uber.org/zap"
 )

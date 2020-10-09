@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/figment-networks/cosmos-indexer/scheduler/structures"
+	"github.com/figment-networks/indexer-manager/scheduler/structures"
 	"go.uber.org/zap"
 )
 

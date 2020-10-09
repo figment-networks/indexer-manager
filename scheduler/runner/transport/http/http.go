@@ -8,9 +8,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/figment-networks/cosmos-indexer/scheduler/destination"
-	"github.com/figment-networks/cosmos-indexer/scheduler/structures"
-	"github.com/figment-networks/cosmos-indexer/structs"
+	"github.com/figment-networks/indexer-manager/scheduler/destination"
+	"github.com/figment-networks/indexer-manager/scheduler/structures"
+	"github.com/figment-networks/indexer-manager/structs"
 )
 
 type LastDataHTTPTransport struct {

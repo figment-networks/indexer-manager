@@ -5,11 +5,11 @@ import (
 	"context"
 	"io"
 
-	"github.com/figment-networks/cosmos-indexer/worker/transport/grpc/indexer"
+	"github.com/figment-networks/indexer-manager/worker/transport/grpc/indexer"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 
-	cStructs "github.com/figment-networks/cosmos-indexer/worker/connectivity/structs"
+	cStructs "github.com/figment-networks/indexer-manager/worker/connectivity/structs"
 )
 
 // IndexerServer is implemantation of GRPC IndexerServiceServer

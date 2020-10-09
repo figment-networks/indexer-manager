@@ -12,8 +12,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/figment-networks/cosmos-indexer/manager/store/params"
-	"github.com/figment-networks/cosmos-indexer/structs"
+	"github.com/figment-networks/indexer-manager/manager/store/params"
+	"github.com/figment-networks/indexer-manager/structs"
 	"github.com/lib/pq"
 )
 
@@ -283,7 +283,7 @@ func (d *Driver) GetTransactions(ctx context.Context, tsearch params.Transaction
 		i++
 	}
 
-	if len(tsearch.ChainID) > 0 {
+	if len(tsearch.ChainIDs) > 0 {
 		chains := "chain_id IN ("
 		for j, c := range tsearch.ChainIDs {
 			if j > 0 {

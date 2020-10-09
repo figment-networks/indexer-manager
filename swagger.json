@@ -216,7 +216,7 @@
                         "x-go-name": "WithRaw"
                     }
                 },
-                "x-go-package": "github.com/figment-networks/cosmos-indexer/manager/transport/http"
+                "x-go-package": "github.com/figment-networks/indexer-manager/manager/transport/http"
             },
             "Account": {
                 "description": "Account - Extended Account information",
@@ -231,7 +231,7 @@
                         "x-go-name": "ID"
                     }
                 },
-                "x-go-package": "github.com/figment-networks/cosmos-indexer/structs"
+                "x-go-package": "github.com/figment-networks/indexer-manager/structs"
             },
             "AccountDetails": {
                 "description": "AccountDetails External optional account details (if applies)",
@@ -254,7 +254,7 @@
                         "x-go-name": "Website"
                     }
                 },
-                "x-go-package": "github.com/figment-networks/cosmos-indexer/structs"
+                "x-go-package": "github.com/figment-networks/indexer-manager/structs"
             },
             "EventTransfer": {
                 "description": "EventTransfer - Account and Amounts pair",
@@ -271,7 +271,7 @@
                         "x-go-name": "Amounts"
                     }
                 },
-                "x-go-package": "github.com/figment-networks/cosmos-indexer/structs"
+                "x-go-package": "github.com/figment-networks/indexer-manager/structs"
             },
             "Int": {
                 "description": "Operations always take pointer arguments (*Int) rather\nthan Int values, and each unique Int value requires\nits own unique *Int pointer. To \"copy\" an Int value,\nan existing (or newly allocated) Int must be set to\na new value using the Int.Set method; shallow copies\nof Ints are not supported and may lead to errors.",
@@ -350,7 +350,7 @@
                         "x-go-name": "Type"
                     }
                 },
-                "x-go-package": "github.com/figment-networks/cosmos-indexer/structs"
+                "x-go-package": "github.com/figment-networks/indexer-manager/structs"
             },
             "SubsetEventError": {
                 "description": "SubsetEventError  error structure for event",
@@ -361,7 +361,7 @@
                         "x-go-name": "Message"
                     }
                 },
-                "x-go-package": "github.com/figment-networks/cosmos-indexer/structs"
+                "x-go-package": "github.com/figment-networks/indexer-manager/structs"
             },
             "Transaction": {
                 "description": "Transaction contains the blockchain transaction details",
@@ -456,7 +456,7 @@
                         "x-go-name": "Version"
                     }
                 },
-                "x-go-package": "github.com/figment-networks/cosmos-indexer/structs"
+                "x-go-package": "github.com/figment-networks/indexer-manager/structs"
             },
             "TransactionAmount": {
                 "description": "TransactionAmount structure holding amount information with decimal implementation (numeric * 10 ^ exp)",
@@ -482,7 +482,7 @@
                         "x-go-name": "Text"
                     }
                 },
-                "x-go-package": "github.com/figment-networks/cosmos-indexer/structs"
+                "x-go-package": "github.com/figment-networks/indexer-manager/structs"
             },
             "TransactionEvent": {
                 "description": "TransactionEvent part of transaction contents",
@@ -507,7 +507,7 @@
                         "x-go-name": "Sub"
                     }
                 },
-                "x-go-package": "github.com/figment-networks/cosmos-indexer/structs"
+                "x-go-package": "github.com/figment-networks/indexer-manager/structs"
             },
             "TransactionEvents": {
                 "description": "TransactionEvents - a set of TransactionEvent",
@@ -515,7 +515,7 @@
                 "items": {
                     "$ref": "#/components/schemas/TransactionEvent"
                 },
-                "x-go-package": "github.com/figment-networks/cosmos-indexer/structs"
+                "x-go-package": "github.com/figment-networks/indexer-manager/structs"
             },
             "UUID": {
                 "description": "A UUID is a 128 bit (16 byte) Universal Unique IDentifier as defined in RFC\n4122.",

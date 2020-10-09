@@ -10,18 +10,18 @@ import (
 	"os"
 	"time"
 
-	"github.com/figment-networks/cosmos-indexer/cmd/manager/config"
-	"github.com/figment-networks/cosmos-indexer/manager/client"
+	"github.com/figment-networks/indexer-manager/cmd/manager/config"
+	"github.com/figment-networks/indexer-manager/manager/client"
 	"go.uber.org/zap"
 
-	schedulerCore "github.com/figment-networks/cosmos-indexer/scheduler/core"
-	schedulerDestination "github.com/figment-networks/cosmos-indexer/scheduler/destination"
-	schedulerPersistence "github.com/figment-networks/cosmos-indexer/scheduler/persistence"
-	schedulerPostgres "github.com/figment-networks/cosmos-indexer/scheduler/persistence/postgresstore"
-	schedulerProcess "github.com/figment-networks/cosmos-indexer/scheduler/process"
-	schedulerLastData "github.com/figment-networks/cosmos-indexer/scheduler/runner/lastdata"
-	runnerEmbedded "github.com/figment-networks/cosmos-indexer/scheduler/runner/transport/embedded"
-	schedulerStructures "github.com/figment-networks/cosmos-indexer/scheduler/structures"
+	schedulerCore "github.com/figment-networks/indexer-manager/scheduler/core"
+	schedulerDestination "github.com/figment-networks/indexer-manager/scheduler/destination"
+	schedulerPersistence "github.com/figment-networks/indexer-manager/scheduler/persistence"
+	schedulerPostgres "github.com/figment-networks/indexer-manager/scheduler/persistence/postgresstore"
+	schedulerProcess "github.com/figment-networks/indexer-manager/scheduler/process"
+	schedulerLastData "github.com/figment-networks/indexer-manager/scheduler/runner/lastdata"
+	runnerEmbedded "github.com/figment-networks/indexer-manager/scheduler/runner/transport/embedded"
+	schedulerStructures "github.com/figment-networks/indexer-manager/scheduler/structures"
 )
 
 func attachScheduler(ctx context.Context, db *sql.DB, mux *http.ServeMux, cfg config.Config, logger *zap.Logger, client client.SchedulerContractor) error {

@@ -10,8 +10,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/figment-networks/cosmos-indexer/manager/store/params"
-	"github.com/figment-networks/cosmos-indexer/structs"
+	"github.com/figment-networks/indexer-manager/manager/store/params"
+	"github.com/figment-networks/indexer-manager/structs"
 )
 
 const (

@@ -3,7 +3,7 @@ package persistence
 import (
 	"context"
 
-	"github.com/figment-networks/cosmos-indexer/scheduler/structures"
+	"github.com/figment-networks/indexer-manager/scheduler/structures"
 )
 
 type PDriver interface {

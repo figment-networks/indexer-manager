@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	shared "github.com/figment-networks/cosmos-indexer/structs"
+	shared "github.com/figment-networks/indexer-manager/structs"
 )
 
 // Progresser is interface that allows to report progress

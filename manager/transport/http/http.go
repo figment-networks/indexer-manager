@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/figment-networks/cosmos-indexer/manager/client"
-	shared "github.com/figment-networks/cosmos-indexer/structs"
+	"github.com/figment-networks/indexer-manager/manager/client"
+	shared "github.com/figment-networks/indexer-manager/structs"
 )
 
 //go:generate swagger generate spec --scan-models -o swagger.json
@@ -214,7 +214,7 @@ func (c *Connector) SearchTransactions(w http.ResponseWriter, req *http.Request)
 
 	transactions, err := c.cli.SearchTransactions(ctx, shared.TransactionSearch{
 		Network:      ts.Network,
-		ChainID:      ts.ChainID,
+		ChainIDs:     ts.ChainIDs,
 		Epoch:        ts.Epoch,
 		Height:       ts.Height,
 		Type:         ts.Type,
