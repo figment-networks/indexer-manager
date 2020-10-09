@@ -42,7 +42,7 @@ func (d *Driver) StoreTransactions(txs []structs.TransactionWithMeta) error {
 
 const (
 	txInsertHead = `INSERT INTO public.transaction_events("network", "chain_id", "version", "epoch", "height", "hash", "block_hash", "time", "type", "parties", "senders", "recipients", "amount", "fee", "gas_wanted", "gas_used", "memo", "data", "raw") VALUES `
-	txInsertFoot = ` ON CONFLICT (network, chain_id, epoch, hash)
+	txInsertFoot = ` ON CONFLICT (network, chain_id, hash)
 	DO UPDATE SET height = EXCLUDED.height,
 	time = EXCLUDED.time,
 	type = EXCLUDED.type,
