@@ -16,7 +16,7 @@ var (
 type RunConfig struct {
 	ID uuid.UUID `json:"id"`
 
-	RunID   uuid.UUID `json:"runID"`
+	RunID   uuid.UUID `json:"run_id"`
 	Network string    `json:"network"`
 	ChainID string    `json:"chain_id"`
 	Version string    `json:"version"`

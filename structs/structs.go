@@ -172,9 +172,9 @@ type Block struct {
 }
 
 type TransactionSearch struct {
-	Network string   `json:"network"`
-	ChainID []string `json:"chain_id"`
-	Epoch   string   `json:"epoch"`
+	Network  string   `json:"network"`
+	ChainIDs []string `json:"chain_ids"`
+	Epoch    string   `json:"epoch"`
 
 	Height     uint64    `json:"height"`
 	Type       []string  `json:"type"`

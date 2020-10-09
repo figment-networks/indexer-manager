@@ -38,7 +38,7 @@ type TransactionSearch struct {
 	// required: true
 	// items.unique: true
 	// example: ['cosmoshub-3']
-	ChainID []string `json:"chain_id"`
+	ChainIDs []string `json:"chain_ids"`
 	// Epoch of transaction
 	//
 	// required: true

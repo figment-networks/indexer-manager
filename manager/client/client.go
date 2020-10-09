@@ -225,7 +225,7 @@ func (hc *Client) SearchTransactions(ctx context.Context, ts shared.TransactionS
 
 	return hc.storeEng.GetTransactions(ctx, params.TransactionSearch{
 		Network:      ts.Network,
-		ChainID:      ts.ChainID,
+		ChainIDs:     ts.ChainIDs,
 		Epoch:        ts.Epoch,
 		Height:       ts.Height,
 		Type:         ts.Type,

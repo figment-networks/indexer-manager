@@ -285,7 +285,7 @@ func (d *Driver) GetTransactions(ctx context.Context, tsearch params.Transaction
 
 	if len(tsearch.ChainID) > 0 {
 		chains := "chain_id IN ("
-		for j, c := range tsearch.ChainID {
+		for j, c := range tsearch.ChainIDs {
 			if j > 0 {
 				chains += ","
 			}
