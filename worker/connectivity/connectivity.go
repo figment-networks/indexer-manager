@@ -64,8 +64,8 @@ func (wc *WorkerConnections) RemoveManager(managerAddress string) {
 
 type WorkerResponse struct {
 	ID           string                 `json:"id"`
-	Kind         string                 `json:"kind"`
-	ChainID      string                 `json:"chainID"`
+	Network      string                 `json:"network"`
+	ChainID      string                 `json:"chain_id"`
 	Connectivity WorkerInfoConnectivity `json:"connectivity"`
 }
 
@@ -76,9 +76,9 @@ type WorkerInfoConnectivity struct {
 }
 
 func (wc *WorkerConnections) gerWorkerInfo() WorkerResponse {
-	wr := WorkerResponse{
+	return WorkerResponse{
 		ID:      wc.workerID,
-		Kind:    wc.network,
+		Network: wc.network,
 		ChainID: wc.chainID,
 		Connectivity: WorkerInfoConnectivity{
 			Version: wc.version,
@@ -86,8 +86,6 @@ func (wc *WorkerConnections) gerWorkerInfo() WorkerResponse {
 			Address: wc.workerAccessibleAddress,
 		},
 	}
-
-	return wr
 }
 
 // Run controls the registration of worker in manager. Every tick it sends it's identity (with address and network type) to every configured address.

@@ -16,9 +16,9 @@ var (
 type RunConfig struct {
 	ID uuid.UUID `json:"id"`
 
-	RunID   uuid.UUID `json:"runID"`
+	RunID   uuid.UUID `json:"run_id"`
 	Network string    `json:"network"`
-	ChainID string    `json:"chainID"`
+	ChainID string    `json:"chain_id"`
 	Version string    `json:"version"`
 
 	Duration time.Duration `json:"duration"`
@@ -27,7 +27,7 @@ type RunConfig struct {
 
 type RunConfigParams struct {
 	Network  string `json:"network"`
-	ChainID  string `json:"chainID"`
+	ChainID  string `json:"chain_id"`
 	Duration string `json:"duration"`
 	Kind     string `json:"kind"`
 }

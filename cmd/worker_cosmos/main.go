@@ -95,7 +95,7 @@ func main() {
 	apiClient := api.NewClient(cfg.TendermintRPCAddr, cfg.DatahubKey, logger.GetLogger(), nil, int(cfg.RequestsPerSecond))
 	workerClient := cli.NewIndexerClient(ctx, logger.GetLogger(), apiClient, uint64(cfg.BigPage), uint64(cfg.MaximumHeightsToGet))
 
-	worker := grpcIndexer.NewIndexerServer(workerClient, logger.GetLogger())
+	worker := grpcIndexer.NewIndexerServer(ctx, workerClient, logger.GetLogger())
 	grpcProtoIndexer.RegisterIndexerServiceServer(grpcServer, worker)
 
 	mux := http.NewServeMux()
@@ -121,17 +121,28 @@ func main() {
 RunLoop:
 	for {
 		select {
-		case <-osSig:
+		case sig := <-osSig:
+			logger.Info("Stopping worker... ", zap.String("signal", sig.String()))
 			cancel()
-			grpcServer.GracefulStop()
-			s.Shutdown(ctx)
+			logger.Info("Canceled context, gracefully stopping grpc")
+			grpcServer.Stop()
+			logger.Info("Stopped grpc, stopping http")
+			err := s.Shutdown(ctx)
+			if err != nil {
+				logger.GetLogger().Error("Error stopping http server ", zap.Error(err))
+			}
 			break RunLoop
 		case k := <-exit:
+			logger.Info("Stopping worker... ", zap.String("reason", k))
 			cancel()
+			logger.Info("Canceled context, gracefully stopping grpc")
 			if k == "grpc" { // (lukanus): when grpc is finished, stop http and vice versa
-				s.Shutdown(ctx)
+				err := s.Shutdown(ctx)
+				if err != nil {
+					logger.GetLogger().Error("Error stopping http server ", zap.Error(err))
+				}
 			} else {
-				grpcServer.GracefulStop()
+				grpcServer.Stop()
 			}
 			break RunLoop
 		}

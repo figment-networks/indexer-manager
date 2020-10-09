@@ -1,8 +1,9 @@
-all: build-proto build-manager build-manager-migration build-cosmos  build-scheduler
+all: generate build-proto build-manager build-manager-migration build-cosmos build-scheduler
 
-.PHONY: swagger
-swagger:
+.PHONY: generate
+generate:
 	go generate ./...
+
 .PHONY: build-manager
 build-manager:
 	go build -o manager_bin ./cmd/manager
@@ -18,6 +19,14 @@ build-manager-migration:
 .PHONY: build-cosmos
 build-cosmos:
 	go build -o worker_cosmos_bin ./cmd/worker_cosmos
+
+.PHONY: build-terra
+build-terra:
+	CGO_ENABLED="1" go build  -o worker_terra_bin ./cmd/worker_terra
+
+.PHONY: build-artificial
+build-artificial:
+	go build -o artificial_source ./cmd/artificial-source
 
 .PHONY: build-scheduler
 build-scheduler:

@@ -27,9 +27,9 @@ type TransactionSearch struct {
 	Limit        uint64 `json:"limit"`
 	Offset       uint64 `json:"offset"`
 
-	Network string `json:"network"`
-	ChainID string `json:"chain_id"`
-	Epoch   string `json:"epoch"`
+	Network  string   `json:"network"`
+	ChainIDs []string `json:"chain_ids"`
+	Epoch    string   `json:"epoch"`
 
 	WithRaw bool `json:"with_raw"`
 }

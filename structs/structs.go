@@ -114,6 +114,8 @@ type SubsetEvent struct {
 	Error *SubsetEventError `json:"error,omitempty"`
 	// Set of additional parameters attached to transaction (used as last resort)
 	Additional map[string][]string `json:"additional,omitempty"`
+	// SubEvents because some messages are in fact carying another messages inside
+	Sub []SubsetEvent `json:"sub,omitempty"`
 }
 
 // EventTransfer - Account and Amounts pair
@@ -170,9 +172,9 @@ type Block struct {
 }
 
 type TransactionSearch struct {
-	Network string `json:"network"`
-	ChainID string `json:"chain_id"`
-	Epoch   string `json:"epoch"`
+	Network  string   `json:"network"`
+	ChainIDs []string `json:"chain_ids"`
+	Epoch    string   `json:"epoch"`
 
 	Height     uint64    `json:"height"`
 	Type       []string  `json:"type"`

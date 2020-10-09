@@ -36,8 +36,9 @@ type TransactionSearch struct {
 	// ChainID to search in
 	//
 	// required: true
-	// example: cosmoshub-3
-	ChainID string `json:"chain_id"`
+	// items.unique: true
+	// example: ['cosmoshub-3']
+	ChainIDs []string `json:"chain_ids"`
 	// Epoch of transaction
 	//
 	// required: true
@@ -302,7 +303,7 @@ func (c *Connector) CheckMissingTransactions(w http.ResponseWriter, req *http.Re
 
 	var err error
 	mtr := MissingTransactionsResponse{}
-	mtr.MissingBlocks, mtr.MissingTransactions, err = c.cli.CheckMissingTransactions(req.Context(), client.NetworkVersion{Network: network, Version: "0.0.1", ChainID: chainID}, shared.HeightRange{StartHeight: intHeight, EndHeight: intEndHeight}, 1000)
+	mtr.MissingBlocks, mtr.MissingTransactions, err = c.cli.CheckMissingTransactions(req.Context(), client.NetworkVersion{Network: network, Version: "0.0.1", ChainID: chainID}, shared.HeightRange{StartHeight: intHeight, EndHeight: intEndHeight}, 999)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(err.Error()))
@@ -403,10 +404,6 @@ func validateSearchParams(ts *TransactionSearch) error {
 
 	if ts.Network == "" {
 		return ValidationError{Msg: "network parameter is mandatory"}
-	}
-
-	if ts.ChainID == "" {
-		return ValidationError{Msg: "chain_id parameter is mandatory"}
 	}
 
 	if ts.Height > 0 &&
