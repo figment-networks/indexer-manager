@@ -81,7 +81,7 @@ First manager would (the main api) would be available under `http://0.0.0.0:8085
 
 Docker-compose version comes also with preconfigured prometheus and grafana, serving content on `:3000` and `:9090`
 
-Tip: To purge database simply run `docker volume rm cosmos-indexer_postgresdatabase` after fully stopping the run
+Tip: To purge database simply run `docker volume rm indexer-manager_postgresdatabase` after fully stopping the run
 
 ### Compile
 To compile sources you need to have go 1.14.1+ installed. For Worker and Manager it's respectively

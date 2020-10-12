@@ -12,13 +12,13 @@ import (
 	"github.com/figment-networks/indexing-engine/metrics"
 	"go.uber.org/zap"
 
-	"github.com/figment-networks/cosmos-indexer/manager/connectivity/structs"
-	"github.com/figment-networks/cosmos-indexer/manager/store"
-	"github.com/figment-networks/cosmos-indexer/manager/store/params"
-	shared "github.com/figment-networks/cosmos-indexer/structs"
+	"github.com/figment-networks/indexer-manager/manager/connectivity/structs"
+	"github.com/figment-networks/indexer-manager/manager/store"
+	"github.com/figment-networks/indexer-manager/manager/store/params"
+	shared "github.com/figment-networks/indexer-manager/structs"
 )
 
-//go:generate mockgen -destination=./mocks/mock_client.go  -package=mocks github.com/figment-networks/cosmos-indexer/manager/client TaskSender
+//go:generate mockgen -destination=./mocks/mock_client.go  -package=mocks github.com/figment-networks/indexer-manager/manager/client TaskSender
 
 // SelfCheck Flag describing should manager check anyway the latest version for network it has
 var SelfCheck = true

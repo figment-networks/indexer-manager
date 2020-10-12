@@ -7,10 +7,10 @@ import (
 	"reflect"
 	"testing"
 
-	clientMocks "github.com/figment-networks/cosmos-indexer/manager/client/mocks"
-	"github.com/figment-networks/cosmos-indexer/manager/connectivity/structs"
-	storeMocks "github.com/figment-networks/cosmos-indexer/manager/store/mocks"
-	shared "github.com/figment-networks/cosmos-indexer/structs"
+	clientMocks "github.com/figment-networks/indexer-manager/manager/client/mocks"
+	"github.com/figment-networks/indexer-manager/manager/connectivity/structs"
+	storeMocks "github.com/figment-networks/indexer-manager/manager/store/mocks"
+	shared "github.com/figment-networks/indexer-manager/structs"
 	"github.com/golang/mock/gomock"
 	"go.uber.org/zap/zaptest"
 )

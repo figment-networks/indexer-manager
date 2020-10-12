@@ -8,10 +8,10 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/figment-networks/cosmos-indexer/scheduler/persistence"
-	"github.com/figment-networks/cosmos-indexer/scheduler/persistence/params"
-	"github.com/figment-networks/cosmos-indexer/scheduler/process"
-	"github.com/figment-networks/cosmos-indexer/scheduler/structures"
+	"github.com/figment-networks/indexer-manager/scheduler/persistence"
+	"github.com/figment-networks/indexer-manager/scheduler/persistence/params"
+	"github.com/figment-networks/indexer-manager/scheduler/process"
+	"github.com/figment-networks/indexer-manager/scheduler/structures"
 	"go.uber.org/zap"
 
 	"github.com/google/uuid"

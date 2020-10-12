@@ -16,18 +16,6 @@ build-manager-w-scheduler:
 build-manager-migration:
 	go build -o manager_migration_bin ./cmd/manager-migration
 
-.PHONY: build-cosmos
-build-cosmos:
-	go build -o worker_cosmos_bin ./cmd/worker_cosmos
-
-.PHONY: build-terra
-build-terra:
-	CGO_ENABLED="1" go build  -o worker_terra_bin ./cmd/worker_terra
-
-.PHONY: build-artificial
-build-artificial:
-	go build -o artificial_source ./cmd/artificial-source
-
 .PHONY: build-scheduler
 build-scheduler:
 	go build -o scheduler_bin ./cmd/scheduler

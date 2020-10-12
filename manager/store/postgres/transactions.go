@@ -12,8 +12,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/figment-networks/cosmos-indexer/manager/store/params"
-	"github.com/figment-networks/cosmos-indexer/structs"
+	"github.com/figment-networks/indexer-manager/manager/store/params"
+	"github.com/figment-networks/indexer-manager/structs"
 	"github.com/lib/pq"
 )
 
@@ -42,7 +42,7 @@ func (d *Driver) StoreTransactions(txs []structs.TransactionWithMeta) error {
 
 const (
 	txInsertHead = `INSERT INTO public.transaction_events("network", "chain_id", "version", "epoch", "height", "hash", "block_hash", "time", "type", "parties", "senders", "recipients", "amount", "fee", "gas_wanted", "gas_used", "memo", "data", "raw") VALUES `
-	txInsertFoot = ` ON CONFLICT (network, chain_id, epoch, hash)
+	txInsertFoot = ` ON CONFLICT (network, chain_id, hash)
 	DO UPDATE SET height = EXCLUDED.height,
 	time = EXCLUDED.time,
 	type = EXCLUDED.type,
@@ -283,7 +283,7 @@ func (d *Driver) GetTransactions(ctx context.Context, tsearch params.Transaction
 		i++
 	}
 
-	if len(tsearch.ChainID) > 0 {
+	if len(tsearch.ChainIDs) > 0 {
 		chains := "chain_id IN ("
 		for j, c := range tsearch.ChainIDs {
 			if j > 0 {

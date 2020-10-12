@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 
-	"github.com/figment-networks/cosmos-indexer/scheduler/structures"
+	"github.com/figment-networks/indexer-manager/scheduler/structures"
 )
 
 func (d *Driver) GetLatest(ctx context.Context, kind, network, chainID, version string) (lRec structures.LatestRecord, err error) {

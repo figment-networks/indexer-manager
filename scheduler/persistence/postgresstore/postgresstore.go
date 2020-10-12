@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/figment-networks/cosmos-indexer/scheduler/persistence/params"
-	"github.com/figment-networks/cosmos-indexer/scheduler/structures"
+	"github.com/figment-networks/indexer-manager/scheduler/persistence/params"
+	"github.com/figment-networks/indexer-manager/scheduler/structures"
 
 	"github.com/google/uuid"
 )

@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/figment-networks/cosmos-indexer/manager/connectivity/structs"
+	"github.com/figment-networks/indexer-manager/manager/connectivity/structs"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
 )

@@ -3,7 +3,7 @@
 # ------------------------------------------------------------------------------
 FROM golang:1.14 AS build
 
-WORKDIR /go/src/github.com/figment-networks/cosmos-indexer/
+WORKDIR /go/src/github.com/figment-networks/indexer-manager/
 
 COPY ./go.mod .
 COPY ./go.sum .
@@ -32,6 +32,6 @@ RUN \
 FROM alpine:3.10 AS release
 
 WORKDIR /app/scheduler
-COPY --from=build /go/src/github.com/figment-networks/cosmos-indexer/scheduler_bin /app/scheduler/scheduler
+COPY --from=build /go/src/github.com/figment-networks/indexer-manager/scheduler_bin /app/scheduler/scheduler
 RUN chmod a+x ./scheduler
 CMD ["./scheduler"]

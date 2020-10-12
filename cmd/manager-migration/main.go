@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/figment-networks/cosmos-indexer/cmd/manager-migration/config"
+	"github.com/figment-networks/indexer-manager/cmd/manager-migration/config"
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"

@@ -10,13 +10,13 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/figment-networks/cosmos-indexer/manager/store/params"
-	"github.com/figment-networks/cosmos-indexer/structs"
+	"github.com/figment-networks/indexer-manager/manager/store/params"
+	"github.com/figment-networks/indexer-manager/structs"
 )
 
 const (
 	insertHead = `INSERT INTO public.blocks("network", "chain_id", "version", "epoch", "height", "hash",  "time", "numtxs" ) VALUES `
-	insertFoot = ` ON CONFLICT (network, chain_id, epoch, hash)
+	insertFoot = ` ON CONFLICT (network, chain_id, hash)
 	DO UPDATE SET
 	height = EXCLUDED.height,
 	time = EXCLUDED.time,

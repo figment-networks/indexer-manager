@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 
-	"github.com/figment-networks/cosmos-indexer/structs"
+	"github.com/figment-networks/indexer-manager/structs"
 )
 
 // Driver is postgres database driver implementation

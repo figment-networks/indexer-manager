@@ -26,9 +26,9 @@ services:
     ports:
       - "5432:5432"
     environment:
-      POSTGRES_USER: cosmos
-      POSTGRES_PASSWORD: cosmos
-      POSTGRES_DB: cosmos
+      POSTGRES_USER: manager
+      POSTGRES_PASSWORD: manager
+      POSTGRES_DB: manager
     volumes:
       - postgresdatabase:/var/lib/postgresql/data/
 
@@ -39,7 +39,7 @@ services:
     networks:
       - internal
     environment:
-      DATABASE_URL: postgres://cosmos:cosmos@cosmos-indexer_postgresdatabase_1/cosmos?sslmode=disable
+      DATABASE_URL: postgres://manager:manager@indexer-manager_postgresdatabase_1/manager?sslmode=disable
     depends_on:
       - postgresdatabase
 
@@ -53,11 +53,9 @@ services:
       - internal
     ports:
       - "8085:8085"
-    env_file:
-      - .cosmos.env
     environment:
       ADDRESS: 0.0.0.0:8085
-      DATABASE_URL: postgres://cosmos:cosmos@cosmos-indexer_postgresdatabase_1/cosmos?sslmode=disable
+      DATABASE_URL: postgres://manager:manager@indexer-manager_postgresdatabase_1/manager?sslmode=disable
       SCHEDULER_INITIAL_CONFIG: /schedule/schedule.json
       ENABLE_SCHEDULER: "true"
     depends_on:
@@ -74,21 +72,10 @@ services:
       - internal
     environment:
       ADDRESS: 0.0.0.0:8085
-      DATABASE_URL: postgres://cosmos:cosmos@cosmos-indexer_postgresdatabase_1/cosmos?sslmode=disable
+      DATABASE_URL: postgres://manager:manager@indexer-manager_postgresdatabase_1/manager?sslmode=disable
     depends_on:
       - postgresdatabase
       - managermigrate
-
-  workercosmos:
-    build:
-      context: .
-      dockerfile: ./Dockerfile.worker.cosmos
-    networks:
-      - internal
-    env_file:
-      - .cosmos.env
-    environment:
-      MANAGERS: cosmos-indexer_managerone_1:8085,cosmos-indexer_managertwo_1:8085
 
   scheduler:
     build:
@@ -99,9 +86,9 @@ services:
     ports:
       - "8090:8085"
     environment:
-      MANAGERS: cosmos-indexer_managerone_1:8085,cosmos-indexer_managertwo_1:8085
+      MANAGERS: indexer-manager_managerone_1:8085,indexer-manager_managertwo_1:8085
       ADDRESS: 0.0.0.0:8085
-      DATABASE_URL: postgres://cosmos:cosmos@cosmos-indexer_postgresdatabase_1/cosmos?sslmode=disable
+      DATABASE_URL: postgres://manager:manager@indexer-manager_postgresdatabase_1/manager?sslmode=disable
     depends_on:
       - postgresdatabase
       - managermigrate
