@@ -56,7 +56,7 @@ services:
     environment:
       ADDRESS: 0.0.0.0:8085
       DATABASE_URL: postgres://manager:manager@indexer-manager_postgresdatabase_1/manager?sslmode=disable
-      SCHEDULER_INITIAL_CONFIG: /schedule/schedule.json
+      SCHEDULER_INITIAL_CONFIG_PATH: /schedule/
       ENABLE_SCHEDULER: "true"
     depends_on:
       - postgresdatabase

@@ -6,8 +6,10 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"io/ioutil"
 	"net/http"
 	"os"
+	"path"
 	"time"
 
 	"github.com/figment-networks/indexer-manager/cmd/manager/config"
@@ -38,34 +40,46 @@ func attachScheduler(ctx context.Context, db *sql.DB, mux *http.ServeMux, cfg co
 	lh := schedulerLastData.NewClient(schedulerPersistence.Storage{Driver: d}, rInternal)
 	c.LoadRunner("lastdata", lh)
 
-	if cfg.SchedulerInitialConfig != "" {
+	if cfg.SchedulerInitialConfigPath != "" {
 		logger.Info("[Manager-Scheduler] Loading initial config")
-		file, err := os.Open(cfg.SchedulerInitialConfig)
-		if err != nil {
-			return err
-		}
 
-		rcp := []schedulerStructures.RunConfigParams{}
-		dec := json.NewDecoder(file)
-		err = dec.Decode(&rcp)
-		file.Close()
+		files, err := ioutil.ReadDir(cfg.SchedulerInitialConfigPath)
 		if err != nil {
 			return err
 		}
 
 		rcs := []schedulerStructures.RunConfig{}
-		for _, rConf := range rcp {
-			duration, err := time.ParseDuration(rConf.Duration)
+		for _, fileInfo := range files {
+			if fileInfo.IsDir() {
+				continue
+			}
+
+			file, err := os.Open(path.Join(cfg.SchedulerInitialConfigPath, fileInfo.Name()))
 			if err != nil {
 				return err
 			}
-			rcs = append(rcs, schedulerStructures.RunConfig{
-				Network:  rConf.Network,
-				ChainID:  rConf.ChainID,
-				Kind:     rConf.Kind,
-				Version:  "0.0.1",
-				Duration: duration,
-			})
+
+			rcp := []schedulerStructures.RunConfigParams{}
+			dec := json.NewDecoder(file)
+			err = dec.Decode(&rcp)
+			file.Close()
+			if err != nil {
+				return err
+			}
+
+			for _, rConf := range rcp {
+				duration, err := time.ParseDuration(rConf.Duration)
+				if err != nil {
+					return err
+				}
+				rcs = append(rcs, schedulerStructures.RunConfig{
+					Network:  rConf.Network,
+					ChainID:  rConf.ChainID,
+					Kind:     rConf.Kind,
+					Version:  "0.0.1",
+					Duration: duration,
+				})
+			}
 		}
 
 		if err := c.AddSchedules(ctx, rcs); err != nil {

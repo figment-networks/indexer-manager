@@ -97,7 +97,7 @@ The mandatory env variables (or json file) for both manager with embedded schedu
 ```bash
     ADDRESS=0.0.0.0:8085
     DATABASE_URL=postgres://cosmos:cosmos@cosmosdatabase/cosmos?sslmode=disable
-    SCHEDULER_INITIAL_CONFIG=schedule.json
+    SCHEDULER_INITIAL_CONFIG_PATH=./schedules/
     ENABLE_SCHEDULER=true
 ```
 Where `ADDRESS` is the ip:port string with http interface.
