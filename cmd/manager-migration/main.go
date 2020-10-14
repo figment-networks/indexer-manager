@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"os"
 
 	"github.com/figment-networks/indexer-manager/cmd/manager-migration/config"
 	"github.com/golang-migrate/migrate/v4"
@@ -16,18 +17,21 @@ type flags struct {
 	configPath    string
 	migrationPath string
 	version       uint
+	verbose       bool
 }
 
 var configFlags = flags{}
 
 func init() {
 	flag.StringVar(&configFlags.configPath, "config", "", "Path to config")
+	flag.BoolVar(&configFlags.verbose, "verbose", true, "Verbosity of logs during run")
 	flag.UintVar(&configFlags.version, "version", 0, "Version parameter sets db changes to specified revision (up or down)")
 	flag.StringVar(&configFlags.migrationPath, "path", "./migrations", "Path to migration folder")
 	flag.Parse()
 }
 
 func main() {
+	log.SetOutput(os.Stdout)
 	// Initialize configuration
 	cfg, err := initConfig(configFlags.configPath)
 	if err != nil {
@@ -40,17 +44,28 @@ func main() {
 	}
 	defer db.Close()
 	srcPath := fmt.Sprintf("file://%s", configFlags.migrationPath)
-	log.Println("Using migrations from: ", srcPath)
+
+	if configFlags.verbose {
+		log.Println("Using migrations from: ", configFlags.migrationPath)
+	}
 
 	if configFlags.version > 0 {
-		log.Println("Migrating to version: ", configFlags.version)
+		if configFlags.verbose {
+			log.Println("Migrating to version: ", configFlags.version)
+		}
 		err = migrateTo(srcPath, cfg.DatabaseURL, configFlags.version)
 	} else {
 		err = runMigrations(srcPath, cfg.DatabaseURL)
 	}
 
 	if err != nil {
-		log.Fatal(err)
+		if err != migrate.ErrNoChange {
+			log.Fatal(err)
+			return
+		}
+		if configFlags.verbose {
+			log.Println("No change")
+		}
 	}
 
 }
