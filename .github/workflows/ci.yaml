@@ -1,4 +1,4 @@
-name: Cosmos Indexer
+name: Indexer Manager
 
 on:
   push:
@@ -16,20 +16,10 @@ jobs:
       - name: Setup
         uses: actions/setup-go@v2
         with:
-          go-version: 1.14
+          go-version: 1.15
 
-      - name: Build manager binary
-        run: make build-manager-w-scheduler
-
-      - name: Build manager migration
-        run: make build-manager-migration
-
-      - name: Build cosmos binary
-        run: make build-cosmos
-
-      - name: Pack messages
-        run: |
-          zip --junk-paths cosmos-indexer manager_migration_bin manager_bin worker_cosmos_bin
+      - name: Build and pack manager binary
+        run: make pack-release
 
       - name: Set ref vars
         id: refs
@@ -56,6 +46,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./cosmos-indexer.zip
-          asset_name: cosmos-indexer.zip
+          asset_path: ./indexer-manager.zip
+          asset_name: indexer-manager.zip
           asset_content_type: application/zip
