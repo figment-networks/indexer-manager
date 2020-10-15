@@ -44,6 +44,7 @@ func init() {
 }
 
 func main() {
+
 	ctx := context.Background()
 
 	// Initialize configuration
@@ -52,11 +53,19 @@ func main() {
 		log.Fatal(fmt.Errorf("error initializing config [ERR: %+v]", err))
 	}
 
-	if cfg.AppEnv == "development" {
-		logger.Init("console", "debug", []string{"stderr"})
-	} else {
-		logger.Init("json", "info", []string{"stderr"})
+	rcfg := &logger.RollbarConfig{
+		AppEnv:             cfg.AppEnv,
+		RollbarAccessToken: cfg.RollbarAccessToken,
+		RollbarServerRoot:  cfg.RollbarServerRoot,
+		Version:            config.GitSHA,
 	}
+	if cfg.AppEnv == "development" || cfg.AppEnv == "local" {
+		logger.Init("console", "debug", []string{"stderr"}, rcfg)
+	} else {
+		logger.Init("json", "info", []string{"stderr"}, rcfg)
+	}
+
+	logger.Info(config.IdentityString())
 
 	defer logger.Sync()
 
