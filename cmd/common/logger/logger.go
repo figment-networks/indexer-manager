@@ -31,13 +31,6 @@ func GetLogger() *zap.Logger {
 
 func Init(encoding, logLevel string, logOutputs []string, rollbarConfig *RollbarConfig) error {
 
-	if rollbarConfig != nil && rollbarConfig.RollbarAccessToken != "" {
-		rollbar.SetToken(rollbarConfig.RollbarAccessToken)
-		rollbar.SetEnvironment(rollbarConfig.AppEnv)
-		rollbar.SetServerRoot(rollbarConfig.RollbarServerRoot)
-		rollbar.SetCodeVersion(rollbarConfig.Version)
-	}
-
 	logConfig := zap.Config{
 		OutputPaths: logOutputs,
 		Encoding:    "json",
@@ -59,11 +52,17 @@ func Init(encoding, logLevel string, logOutputs []string, rollbarConfig *Rollbar
 	}
 
 	if rollbarConfig != nil && rollbarConfig.RollbarAccessToken != "" {
+		rollbar.SetToken(rollbarConfig.RollbarAccessToken)
+		rollbar.SetEnvironment(rollbarConfig.AppEnv)
+		rollbar.SetServerRoot(rollbarConfig.RollbarServerRoot)
+		rollbar.SetCodeVersion(rollbarConfig.Version)
+
+		log.Info("Enabling rollbar integration", zap.String("env", rollbarConfig.AppEnv), zap.String("server_root", rollbarConfig.RollbarServerRoot), zap.String("access_token", rollbarConfig.RollbarAccessToken[0:5]))
 		// create a new core that sends zapcore.ErrorLevel and above messages to Rollbar
 		rollbarCore := rollzap.NewRollbarCore(zapcore.ErrorLevel)
 
 		// Wrap a NewTee to send log messages to both your main logger and to rollbar
-		log.WithOptions(zap.WrapCore(func(core zapcore.Core) zapcore.Core {
+		log = log.WithOptions(zap.WrapCore(func(core zapcore.Core) zapcore.Core {
 			return zapcore.NewTee(core, rollbarCore)
 		}))
 	}

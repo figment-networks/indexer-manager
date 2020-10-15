@@ -53,12 +53,17 @@ func main() {
 		log.Fatal(fmt.Errorf("error initializing config [ERR: %+v]", err))
 	}
 
+	if cfg.RollbarServerRoot == "" {
+		cfg.RollbarServerRoot = "github.com/figment-networks/indexer-manager"
+	}
+
 	rcfg := &logger.RollbarConfig{
 		AppEnv:             cfg.AppEnv,
 		RollbarAccessToken: cfg.RollbarAccessToken,
 		RollbarServerRoot:  cfg.RollbarServerRoot,
 		Version:            config.GitSHA,
 	}
+
 	if cfg.AppEnv == "development" || cfg.AppEnv == "local" {
 		logger.Init("console", "debug", []string{"stderr"}, rcfg)
 	} else {
