@@ -79,145 +79,6 @@
                     }
                 }
             },
-            "TransactionSearch": {
-                "description": "TransactionSearch - A set of fields used as params for search",
-                "type": "object",
-                "required": [
-                    "network"
-                ],
-                "properties": {
-                    "account": {
-                        "description": "Account - the account identifier to look for\nThis searches for all accounts id which exists in transaction including senders, recipients, validators, feeders etc etc",
-                        "type": "array",
-                        "items": {
-                            "type": "string",
-                            "pattern": "\\w+",
-                            "uniqueItems": true
-                        },
-                        "x-go-name": "Account"
-                    },
-                    "after_height": {
-                        "description": "AfterHeight gets all transaction bigger than given height\nHas to be bigger than BeforeHeight",
-                        "type": "integer",
-                        "format": "uint64",
-                        "minimum": 0,
-                        "x-go-name": "AfterHeight"
-                    },
-                    "after_time": {
-                        "description": "The time of transaction (if not given by chain API, the same as block)",
-                        "type": "string",
-                        "format": "date-time",
-                        "x-go-name": "AfterTime"
-                    },
-                    "before_height": {
-                        "description": "BeforeHeight gets all transaction lower than given height\nHas to be lesser than AfterHeight",
-                        "type": "integer",
-                        "format": "uint64",
-                        "minimum": 0,
-                        "x-go-name": "BeforeHeight"
-                    },
-                    "before_time": {
-                        "description": "The time of transaction (if not given by chain API, the same as block)",
-                        "type": "string",
-                        "format": "date-time",
-                        "x-go-name": "BeforeTime"
-                    },
-                    "block_hash": {
-                        "description": "BlockHash - the hash of block to get transaction from",
-                        "type": "string",
-                        "x-go-name": "BlockHash"
-                    },
-                    "chain_id": {
-                        "description": "ChainID to search in",
-                        "type": "array",
-                        "items": {
-                            "type": "string",
-                            "pattern": "\\w+",
-                            "uniqueItems": true
-                        },
-                        "x-go-name": "ChainID"
-                    },
-                    "epoch": {
-                        "description": "Epoch of transaction",
-                        "type": "string",
-                        "x-go-name": "Epoch"
-                    },
-                    "hash": {
-                        "description": "Hash - the hash of transaction",
-                        "type": "string",
-                        "x-go-name": "Hash"
-                    },
-                    "height": {
-                        "description": "Height of the transactions to get",
-                        "type": "integer",
-                        "format": "uint64",
-                        "minimum": 0,
-                        "x-go-name": "Height"
-                    },
-                    "limit": {
-                        "description": "Limit of how many requests to get in one request",
-                        "type": "integer",
-                        "format": "uint64",
-                        "default": 100,
-                        "maximum": 1000,
-                        "x-go-name": "Limit"
-                    },
-                    "memo": {
-                        "description": "Memo sets full text search for memo field",
-                        "type": "string",
-                        "x-go-name": "Memo"
-                    },
-                    "network": {
-                        "description": "Network identifier to search in",
-                        "type": "string",
-                        "x-go-name": "Network",
-                        "example": "cosmos"
-                    },
-                    "offset": {
-                        "description": "Offset the offset number or",
-                        "type": "integer",
-                        "format": "uint64",
-                        "x-go-name": "Offset"
-                    },
-                    "receiver": {
-                        "description": "Receiver looks for transactions that includes given accountIDs",
-                        "type": "array",
-                        "items": {
-                            "type": "string",
-                            "pattern": "\\w+",
-                            "uniqueItems": true
-                        },
-                        "x-go-name": "Receiver"
-                    },
-                    "sender": {
-                        "description": "Sender looks for transactions that includes given accountIDs",
-                        "type": "array",
-                        "items": {
-                            "type": "string",
-                            "pattern": "\\w+",
-                            "uniqueItems": true
-                        },
-                        "x-go-name": "Sender"
-                    },
-                    "type": {
-                        "description": "Type - the list of types of transactions",
-                        "type": "array",
-                        "items": {
-                            "type": "string",
-                            "pattern": "\\w+",
-                            "uniqueItems": true
-                        },
-                        "x-go-name": "Type"
-                    },
-                    "with_raw": {
-                        "description": "WithRaw - include base64 raw request in search response",
-                        "type": "boolean",
-                        "default": false,
-                        "x-go-name": "WithRaw"
-                    }
-                },
-                "x-go-package": "github.com/figment-networks/indexer-manager/manager/transport/http"
-            },
             "Account": {
                 "description": "Account - Extended Account information",
                 "type": "object",
@@ -280,12 +141,23 @@
                 "x-go-package": "math/big"
             },
             "SubsetEvent": {
-                "description": "SubsetEvent - structure storing main contents of transacion",
+                "description": "SubsetEvent - structure storing main contents of transaction",
                 "type": "object",
                 "properties": {
                     "action": {
                         "type": "string",
                         "x-go-name": "Action"
+                    },
+                    "additional": {
+                        "description": "Set of additional parameters attached to transaction (used as last resort)",
+                        "type": "object",
+                        "additionalProperties": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        },
+                        "x-go-name": "Additional"
                     },
                     "amount": {
                         "description": "List of Amounts",
@@ -310,7 +182,7 @@
                         "x-go-name": "Module"
                     },
                     "node": {
-                        "description": "The list of all accounts that took part in the subsetevent",
+                        "description": "The list of all accounts that took part in the subset event",
                         "type": "object",
                         "additionalProperties": {
                             "type": "array",
@@ -516,6 +388,145 @@
                     "$ref": "#/components/schemas/TransactionEvent"
                 },
                 "x-go-package": "github.com/figment-networks/indexer-manager/structs"
+            },
+            "TransactionSearch": {
+                "description": "TransactionSearch - A set of fields used as params for search",
+                "type": "object",
+                "required": [
+                    "network"
+                ],
+                "properties": {
+                    "account": {
+                        "description": "Account - the account identifier to look for\nThis searches for all accounts id which exists in transaction including senders, recipients, validators, feeders etc etc",
+                        "type": "array",
+                        "items": {
+                            "type": "string",
+                            "pattern": "\\w+",
+                            "uniqueItems": true
+                        },
+                        "x-go-name": "Account"
+                    },
+                    "after_height": {
+                        "description": "AfterHeight gets all transaction bigger than given height\nHas to be bigger than BeforeHeight",
+                        "type": "integer",
+                        "format": "uint64",
+                        "minimum": 0,
+                        "x-go-name": "AfterHeight"
+                    },
+                    "after_time": {
+                        "description": "The time of transaction (if not given by chain API, the same as block)",
+                        "type": "string",
+                        "format": "date-time",
+                        "x-go-name": "AfterTime"
+                    },
+                    "before_height": {
+                        "description": "BeforeHeight gets all transaction lower than given height\nHas to be lesser than AfterHeight",
+                        "type": "integer",
+                        "format": "uint64",
+                        "minimum": 0,
+                        "x-go-name": "BeforeHeight"
+                    },
+                    "before_time": {
+                        "description": "The time of transaction (if not given by chain API, the same as block)",
+                        "type": "string",
+                        "format": "date-time",
+                        "x-go-name": "BeforeTime"
+                    },
+                    "block_hash": {
+                        "description": "BlockHash - the hash of block to get transaction from",
+                        "type": "string",
+                        "x-go-name": "BlockHash"
+                    },
+                    "chain_ids": {
+                        "description": "ChainID to search in",
+                        "type": "array",
+                        "items": {
+                            "type": "string",
+                            "uniqueItems": true
+                        },
+                        "x-go-name": "ChainIDs",
+                        "example": "['cosmoshub-3']"
+                    },
+                    "epoch": {
+                        "description": "Epoch of transaction",
+                        "type": "string",
+                        "x-go-name": "Epoch"
+                    },
+                    "hash": {
+                        "description": "Hash - the hash of transaction",
+                        "type": "string",
+                        "x-go-name": "Hash"
+                    },
+                    "height": {
+                        "description": "Height of the transactions to get",
+                        "type": "integer",
+                        "format": "uint64",
+                        "minimum": 0,
+                        "x-go-name": "Height"
+                    },
+                    "limit": {
+                        "description": "Limit of how many requests to get in one request",
+                        "type": "integer",
+                        "format": "uint64",
+                        "default": 100,
+                        "maximum": 1000,
+                        "x-go-name": "Limit"
+                    },
+                    "memo": {
+                        "description": "Memo sets full text search for memo field",
+                        "type": "string",
+                        "x-go-name": "Memo"
+                    },
+                    "network": {
+                        "description": "Network identifier to search in",
+                        "type": "string",
+                        "x-go-name": "Network",
+                        "example": "cosmos"
+                    },
+                    "offset": {
+                        "description": "Offset the offset number or",
+                        "type": "integer",
+                        "format": "uint64",
+                        "x-go-name": "Offset"
+                    },
+                    "receiver": {
+                        "description": "Receiver looks for transactions that includes given accountIDs",
+                        "type": "array",
+                        "items": {
+                            "type": "string",
+                            "pattern": "\\w+",
+                            "uniqueItems": true
+                        },
+                        "x-go-name": "Receiver"
+                    },
+                    "sender": {
+                        "description": "Sender looks for transactions that includes given accountIDs",
+                        "type": "array",
+                        "items": {
+                            "type": "string",
+                            "pattern": "\\w+",
+                            "uniqueItems": true
+                        },
+                        "x-go-name": "Sender"
+                    },
+                    "type": {
+                        "description": "Type - the list of types of transactions",
+                        "type": "array",
+                        "items": {
+                            "type": "string",
+                            "pattern": "\\w+",
+                            "uniqueItems": true
+                        },
+                        "x-go-name": "Type"
+                    },
+                    "with_raw": {
+                        "description": "WithRaw - include base64 raw request in search response",
+                        "type": "boolean",
+                        "default": false,
+                        "x-go-name": "WithRaw"
+                    }
+                },
+                "x-go-package": "github.com/figment-networks/indexer-manager/manager/transport/http"
             },
             "UUID": {
                 "description": "A UUID is a 128 bit (16 byte) Universal Unique IDentifier as defined in RFC\n4122.",
