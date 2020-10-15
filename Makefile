@@ -1,4 +1,4 @@
-all: generate build-proto build-manager build-manager-migration build-cosmos build-scheduler
+all: generate build-proto build-manager build-manager-migration build-scheduler
 
 .PHONY: generate
 generate:
@@ -14,11 +14,11 @@ build-manager-w-scheduler:
 
 .PHONY: build-manager-migration
 build-manager-migration:
-	go build -o manager_migration_bin ./cmd/manager-migration
+	go build -o migration ./cmd/manager-migration
 
 .PHONY: build-scheduler
 build-scheduler:
-	go build -o scheduler_bin ./cmd/scheduler
+	go build -o scheduler ./cmd/scheduler
 
 .PHONY: build-proto
 build-proto:
@@ -27,3 +27,16 @@ build-proto:
 	@mkdir -p ./manager/transport/grpc/indexer
 	@cp ./proto/indexer.pb.go ./worker/transport/grpc/indexer/
 	@cp ./proto/indexer.pb.go ./manager/transport/grpc/indexer/
+
+.PHONY: pack-release
+pack-release:
+	@mkdir -p ./release
+	@make build-manager-migration
+	@mv ./migration ./release/migration
+	@make build-manager-w-scheduler
+	@mv ./manager_bin ./release/manager
+	@cp -R ./cmd/manager-migration/migrations ./release/
+	@zip -r indexer-manager ./release
+	@rm -rf ./release
+
+

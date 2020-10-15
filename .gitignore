@@ -7,3 +7,4 @@ client.json
 .monitoring/grafana/sessions/*
 .vscode/settings.json
 manager_bin
+*.zip
