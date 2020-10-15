@@ -19,8 +19,8 @@ type Config struct {
 	Address     string `json:"address" envconfig:"ADDRESS" default:"127.0.0.1:8085"`
 
 	// Embedded Scheduler
-	EnableScheduler        bool   `json:"enable_scheduler" envconfig:"ENABLE_SCHEDULER"`
-	SchedulerInitialConfig string `json:"scheduler_initial_config_path" envconfig:"SCHEDULER_INITIAL_CONFIG"`
+	EnableScheduler            bool   `json:"enable_scheduler" envconfig:"ENABLE_SCHEDULER"`
+	SchedulerInitialConfigPath string `json:"scheduler_initial_config_path" envconfig:"SCHEDULER_INITIAL_CONFIG_PATH"`
 }
 
 // FromFile reads the config from a file
