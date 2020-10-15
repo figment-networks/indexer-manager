@@ -27,7 +27,7 @@ type Config struct {
 
 	// Rollbar
 	RollbarAccessToken string `json:"rollbar_access_token" envconfig:"ROLLBAR_ACCESS_TOKEN"`
-	RollbarServerRoot  string `json:"rollbar_server_root" envconfig:"ROLLBAR_SERVER_ROOT" default:"github.com/figment-network/indexer-manager"`
+	RollbarServerRoot  string `json:"rollbar_server_root" envconfig:"ROLLBAR_SERVER_ROOT" default:"github.com/figment-networks/indexer-manager"`
 
 	// Embedded Scheduler
 	EnableScheduler            bool   `json:"enable_scheduler" envconfig:"ENABLE_SCHEDULER"`
