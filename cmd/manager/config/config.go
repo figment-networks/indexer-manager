@@ -7,6 +7,13 @@ import (
 	"github.com/kelseyhightower/envconfig"
 )
 
+var (
+	Name      = "indexer-manager"
+	Version   string
+	GitSHA    string
+	Timestamp string
+)
+
 const (
 	modeDevelopment = "development"
 	modeProduction  = "production"
@@ -17,6 +24,10 @@ type Config struct {
 	AppEnv      string `json:"app_env" envconfig:"APP_ENV" default:"development"`
 	DatabaseURL string `json:"database_url" envconfig:"DATABASE_URL" required:"true"`
 	Address     string `json:"address" envconfig:"ADDRESS" default:"127.0.0.1:8085"`
+
+	// Rollbar
+	RollbarAccessToken string `json:"rollbar_access_token" envconfig:"ROLLBAR_ACCESS_TOKEN"`
+	RollbarServerRoot  string `json:"rollbar_server_root" envconfig:"ROLLBAR_SERVER_ROOT" default:"github.com/figment-networks/indexer-manager"`
 
 	// Embedded Scheduler
 	EnableScheduler            bool   `json:"enable_scheduler" envconfig:"ENABLE_SCHEDULER"`

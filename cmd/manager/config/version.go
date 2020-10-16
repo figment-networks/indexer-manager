@@ -1,21 +1,24 @@
 package config
 
-import "fmt"
-
-const (
-	appName    = "indexer-manager"
-	appVersion = "0.1.0"
-	gitCommit  = "-"
-	goVersion  = "-"
+import (
+	"fmt"
+	"strconv"
+	"time"
 )
 
-// VersionString returns the full app version string
-func VersionString() string {
+// IdentityString returns the full app version string
+func IdentityString() string {
+
+	t, err := strconv.Atoi(Timestamp)
+	timestamp := Timestamp
+	if err == nil {
+		timestamp = time.Unix(int64(t), 0).String()
+	}
 	return fmt.Sprintf(
-		"%s %s (git: %s, %s)",
-		appName,
-		appVersion,
-		gitCommit,
-		goVersion,
+		"%s %s (git: %s) - built at %s",
+		Name,
+		Version,
+		GitSHA,
+		timestamp,
 	)
 }

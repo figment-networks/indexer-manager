@@ -53,9 +53,9 @@ func main() {
 	}
 
 	if cfg.AppEnv == "development" {
-		logger.Init("console", "debug", []string{"stderr"})
+		logger.Init("console", "debug", []string{"stderr"}, nil)
 	} else {
-		logger.Init("json", "info", []string{"stderr"})
+		logger.Init("json", "info", []string{"stderr"}, nil)
 	}
 
 	defer logger.Sync()
