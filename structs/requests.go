@@ -14,12 +14,18 @@ type HeightRange struct {
 	Hash        string
 	StartHeight uint64
 	EndHeight   uint64
+
+	ChainID string
+	Network string
 }
 
 type HeightHash struct {
 	Epoch  string
 	Height uint64
 	Hash   string
+
+	ChainID string
+	Network string
 }
 
 type TransactionWithMeta struct {

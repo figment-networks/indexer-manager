@@ -43,7 +43,7 @@ build-manager-migration:
 .PHONY: build-scheduler
 build-scheduler:
 	$(info building scheduler binary as ./scheduler)
-	go build -o scheduler ./cmd/scheduler
+	go build -o scheduler_bin ./cmd/scheduler
 
 .PHONY: build-proto
 build-proto:

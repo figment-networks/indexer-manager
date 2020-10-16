@@ -32,7 +32,7 @@ FROM alpine:3.10 AS release
 
 WORKDIR /app/migration
 
-COPY --from=build /go/src/github.com/figment-networks/indexer-manager/manager_migration_bin /app/migration/migration
+COPY --from=build /go/src/github.com/figment-networks/indexer-manager/migration /app/migration/migration
 COPY --from=build /go/src/github.com/figment-networks/indexer-manager/cmd/manager-migration/migrations/ /app/migration/migrations/
 RUN chmod a+x ./migration
 CMD ["./migration"]

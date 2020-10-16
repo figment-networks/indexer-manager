@@ -95,7 +95,11 @@ func (hc *Client) GetTransactions(ctx context.Context, nv NetworkVersion, height
 	req := []structs.TaskRequest{}
 
 	if heightRange.Hash != "" {
-		b, _ := json.Marshal(shared.HeightRange{Hash: heightRange.Hash})
+		b, _ := json.Marshal(shared.HeightRange{
+			Hash:    heightRange.Hash,
+			Network: nv.Network,
+			ChainID: nv.ChainID,
+		})
 		req = append(req, structs.TaskRequest{
 			Network: nv.Network,
 			ChainID: nv.ChainID,
@@ -112,6 +116,8 @@ func (hc *Client) GetTransactions(ctx context.Context, nv NetworkVersion, height
 			requestsToGetMetric.Observe(1)
 
 			b, _ := json.Marshal(shared.HeightRange{
+				Network:     nv.Network,
+				ChainID:     nv.ChainID,
 				StartHeight: heightRange.StartHeight,
 				EndHeight:   heightRange.EndHeight,
 				Hash:        heightRange.Hash,
