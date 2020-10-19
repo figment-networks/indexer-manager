@@ -207,6 +207,7 @@ func NewStreamAccess(transport ConnTransport, managerID string, conn *WorkerInfo
 func (sa *StreamAccess) Run(ctx context.Context, logger *zap.Logger) error {
 	sa.mapLock.Lock()
 	if sa.State == StreamReconnecting {
+		sa.mapLock.Unlock()
 		return errors.New("Already Reconnecting")
 	}
 

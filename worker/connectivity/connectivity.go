@@ -122,7 +122,7 @@ func (wc *WorkerConnections) Run(ctx context.Context, logger *zap.Logger, dur ti
 				}
 				if resp.StatusCode > 399 {
 					workerStatus.WithLabels(ad.Address, strconv.Itoa(resp.StatusCode), "err_response").Inc()
-					logger.Error(fmt.Sprintf("Error returned from manager on %s, %s", ad.Address, err.Error()), zap.String("address", ad.Address))
+					logger.Error(fmt.Sprintf("Error returned from manager", ad.Address), zap.String("address", ad.Address), zap.String("status", resp.Status))
 					timer.ObserveDuration()
 					continue
 				}

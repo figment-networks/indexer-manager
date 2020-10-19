@@ -146,6 +146,8 @@ func (hc *Client) GetTransactions(ctx context.Context, nv NetworkVersion, height
 					StartHeight: startH,
 					EndHeight:   endH,
 					Hash:        heightRange.Hash,
+					Network:     nv.Network,
+					ChainID:     nv.ChainID,
 				})
 
 				req = append(req, structs.TaskRequest{

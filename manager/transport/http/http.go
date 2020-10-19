@@ -163,6 +163,8 @@ func (c *Connector) GetTransactions(w http.ResponseWriter, req *http.Request) {
 		Epoch:       "",
 		StartHeight: uint64(intHeight),
 		EndHeight:   uint64(intEndHeight),
+		Network:     network,
+		ChainID:     chainID,
 	}
 	if hash != "" {
 		hr.Hash = hash
@@ -361,7 +363,11 @@ func (c *Connector) GetMissingTransactions(w http.ResponseWriter, req *http.Requ
 
 	if async == "" {
 		_, err := c.cli.GetMissingTransactions(req.Context(), client.NetworkVersion{Network: network, Version: "0.0.1", ChainID: chainID},
-			shared.HeightRange{StartHeight: intHeight, EndHeight: intEndHeight}, 1000, false, force)
+			shared.HeightRange{
+				StartHeight: intHeight,
+				EndHeight:   intEndHeight,
+				Network:     network,
+				ChainID:     chainID}, 1000, false, force)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			w.Write([]byte(err.Error()))
@@ -372,7 +378,11 @@ func (c *Connector) GetMissingTransactions(w http.ResponseWriter, req *http.Requ
 	}
 
 	run, err := c.cli.GetMissingTransactions(req.Context(), client.NetworkVersion{Network: network, Version: "0.0.1", ChainID: chainID},
-		shared.HeightRange{StartHeight: intHeight, EndHeight: intEndHeight}, 1000, true, force)
+		shared.HeightRange{
+			StartHeight: intHeight,
+			EndHeight:   intEndHeight,
+			Network:     network,
+			ChainID:     chainID}, 1000, true, force)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(err.Error()))
