@@ -77,11 +77,8 @@ func (hc *Client) CheckMissingTransactions(ctx context.Context, nv NetworkVersio
 			}
 		}
 
-		if errs != nil {
-			if len(errs) > 0 {
-				err = fmt.Errorf("CheckMissingTransactions errors")
-			}
-
+		if len(errs) > 0 {
+			err = fmt.Errorf("CheckMissingTransactions errors")
 		}
 
 		for i := range allRespBlocks {
