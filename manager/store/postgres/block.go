@@ -307,3 +307,35 @@ func (d *Driver) BlockTransactionCheck(ctx context.Context, blx structs.BlockWit
 	}
 	return problems, nil
 }
+
+type heightCountPair struct {
+	Height uint64
+	Count  uint64
+}
+
+const blockTransactionHeightsQuery = "SELECT height, numtxs FROM blocks WHERE network = $1 AND chain_id = $2 AND height >= $3 AND height <= $4 ORDER BY height ASC"
+
+// GetBlocksHeightsWithNumTx gets heights and number of transactions for each block in range
+func (d *Driver) GetBlocksHeightsWithNumTx(ctx context.Context, blx structs.BlockWithMeta, startHeight, endHeight uint64) ([][2]uint64, error) {
+	rows, err := d.db.QueryContext(ctx, blockTransactionHeightsQuery, blx.Network, blx.ChainID, startHeight, endHeight)
+	switch {
+	case err == sql.ErrNoRows:
+		return nil, params.ErrNotFound
+	case err != nil:
+		return nil, fmt.Errorf("query error: %w", err)
+	default:
+	}
+
+	defer rows.Close()
+
+	hcp := heightCountPair{}
+	pairs := [][2]uint64{}
+	for rows.Next() {
+		if err := rows.Scan(&hcp.Height, &hcp.Count); err != nil {
+			return pairs, err
+		}
+		pairs = append(pairs, [2]uint64{hcp.Height, hcp.Count})
+	}
+
+	return pairs, nil
+}

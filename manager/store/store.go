@@ -32,6 +32,8 @@ type TransactionStore interface {
 	GetTransactions(ctx context.Context, tsearch params.TransactionSearch) ([]structs.Transaction, error)
 
 	GetLatestTransaction(ctx context.Context, tx structs.TransactionWithMeta) (structs.Transaction, error)
+
+	GetTransactionsHeightsWithTxCount(ctx context.Context, blx structs.BlockWithMeta, startHeight, endHeight uint64) ([][2]uint64, error)
 }
 
 type BlockStore interface {
@@ -41,6 +43,8 @@ type BlockStore interface {
 
 	BlockContinuityCheck(ctx context.Context, blx structs.BlockWithMeta, startHeight, endHeight uint64) ([][2]uint64, error)
 	BlockTransactionCheck(ctx context.Context, blx structs.BlockWithMeta, startHeight, endHeight uint64) ([]uint64, error)
+
+	GetBlocksHeightsWithNumTx(ctx context.Context, blx structs.BlockWithMeta, startHeight, endHeight uint64) ([][2]uint64, error)
 }
 
 type Store struct {
@@ -94,4 +98,12 @@ func (s *Store) BlockContinuityCheck(ctx context.Context, blx structs.BlockWithM
 
 func (s *Store) BlockTransactionCheck(ctx context.Context, blx structs.BlockWithMeta, startHeight, endHeight uint64) ([]uint64, error) {
 	return s.driver.BlockTransactionCheck(ctx, blx, startHeight, endHeight)
+}
+
+func (s *Store) GetTransactionsHeightsWithTxCount(ctx context.Context, blx structs.BlockWithMeta, startHeight, endHeight uint64) ([][2]uint64, error) {
+	return s.driver.GetTransactionsHeightsWithTxCount(ctx, blx, startHeight, endHeight)
+}
+
+func (s *Store) GetBlocksHeightsWithNumTx(ctx context.Context, blx structs.BlockWithMeta, startHeight, endHeight uint64) ([][2]uint64, error) {
+	return s.driver.GetBlocksHeightsWithNumTx(ctx, blx, startHeight, endHeight)
 }

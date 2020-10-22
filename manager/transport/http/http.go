@@ -305,7 +305,7 @@ func (c *Connector) CheckMissingTransactions(w http.ResponseWriter, req *http.Re
 
 	var err error
 	mtr := MissingTransactionsResponse{}
-	mtr.MissingBlocks, mtr.MissingTransactions, err = c.cli.CheckMissingTransactions(req.Context(), client.NetworkVersion{Network: network, Version: "0.0.1", ChainID: chainID}, shared.HeightRange{StartHeight: intHeight, EndHeight: intEndHeight}, 999)
+	mtr.MissingBlocks, mtr.MissingTransactions, err = c.cli.CheckMissingTransactions(req.Context(), client.NetworkVersion{Network: network, Version: "0.0.1", ChainID: chainID}, shared.HeightRange{StartHeight: intHeight, EndHeight: intEndHeight}, client.MissingDiffTypeSQLHybrid, 999)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(err.Error()))
