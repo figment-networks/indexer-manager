@@ -403,7 +403,7 @@ func (d *Driver) GetTransactions(ctx context.Context, tsearch params.Transaction
 		qBuilder.WriteString(" LIMIT " + strconv.FormatUint(uint64(tsearch.Limit), 10))
 
 		if tsearch.Offset > 0 {
-			qBuilder.WriteString(" OFFSET  " + strconv.FormatUint(uint64(tsearch.Limit), 10))
+			qBuilder.WriteString(" OFFSET " + strconv.FormatUint(uint64(tsearch.Limit), 10))
 		}
 	}
 
@@ -462,4 +462,31 @@ func (d *Driver) GetLatestTransaction(ctx context.Context, in structs.Transactio
 		return out, params.ErrNotFound
 	}
 	return out, err
+}
+
+const numTransactionHeightsQuery = "SELECT height, count(height) as count FROM public.transaction_events WHERE network = $1 AND chain_id = $2 AND height >= $3 AND height <= $4 GROUP BY height ORDER BY height ASC"
+
+// GetTransactionsHeightsWithTxCount gets the count of transaction groupped by heights
+func (d *Driver) GetTransactionsHeightsWithTxCount(ctx context.Context, blx structs.BlockWithMeta, startHeight, endHeight uint64) ([][2]uint64, error) {
+	rows, err := d.db.QueryContext(ctx, numTransactionHeightsQuery, blx.Network, blx.ChainID, startHeight, endHeight)
+	switch {
+	case err == sql.ErrNoRows:
+		return nil, params.ErrNotFound
+	case err != nil:
+		return nil, fmt.Errorf("query error: %w", err)
+	default:
+	}
+
+	defer rows.Close()
+
+	hcp := heightCountPair{}
+	pairs := [][2]uint64{}
+	for rows.Next() {
+		if err := rows.Scan(&hcp.Height, &hcp.Count); err != nil {
+			return pairs, err
+		}
+		pairs = append(pairs, [2]uint64{hcp.Height, hcp.Count})
+	}
+
+	return pairs, nil
 }

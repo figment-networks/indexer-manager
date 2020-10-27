@@ -65,6 +65,21 @@ func (mr *MockDataStoreMockRecorder) BlockTransactionCheck(arg0, arg1, arg2, arg
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BlockTransactionCheck", reflect.TypeOf((*MockDataStore)(nil).BlockTransactionCheck), arg0, arg1, arg2, arg3)
 }
 
+// GetBlocksHeightsWithNumTx mocks base method
+func (m *MockDataStore) GetBlocksHeightsWithNumTx(arg0 context.Context, arg1 structs.BlockWithMeta, arg2, arg3 uint64) ([][2]uint64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetBlocksHeightsWithNumTx", arg0, arg1, arg2, arg3)
+	ret0, _ := ret[0].([][2]uint64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetBlocksHeightsWithNumTx indicates an expected call of GetBlocksHeightsWithNumTx
+func (mr *MockDataStoreMockRecorder) GetBlocksHeightsWithNumTx(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBlocksHeightsWithNumTx", reflect.TypeOf((*MockDataStore)(nil).GetBlocksHeightsWithNumTx), arg0, arg1, arg2, arg3)
+}
+
 // GetLatestBlock mocks base method
 func (m *MockDataStore) GetLatestBlock(arg0 context.Context, arg1 structs.BlockWithMeta) (structs.Block, error) {
 	m.ctrl.T.Helper()
@@ -108,6 +123,21 @@ func (m *MockDataStore) GetTransactions(arg0 context.Context, arg1 params.Transa
 func (mr *MockDataStoreMockRecorder) GetTransactions(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTransactions", reflect.TypeOf((*MockDataStore)(nil).GetTransactions), arg0, arg1)
+}
+
+// GetTransactionsHeightsWithTxCount mocks base method
+func (m *MockDataStore) GetTransactionsHeightsWithTxCount(arg0 context.Context, arg1 structs.BlockWithMeta, arg2, arg3 uint64) ([][2]uint64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetTransactionsHeightsWithTxCount", arg0, arg1, arg2, arg3)
+	ret0, _ := ret[0].([][2]uint64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetTransactionsHeightsWithTxCount indicates an expected call of GetTransactionsHeightsWithTxCount
+func (mr *MockDataStoreMockRecorder) GetTransactionsHeightsWithTxCount(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTransactionsHeightsWithTxCount", reflect.TypeOf((*MockDataStore)(nil).GetTransactionsHeightsWithTxCount), arg0, arg1, arg2, arg3)
 }
 
 // StoreBlock mocks base method

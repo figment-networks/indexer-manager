@@ -11,6 +11,8 @@ import (
 	"go.uber.org/zap"
 )
 
+var WorkerStateOnline int64 = 1
+
 type Target struct {
 	ChainID string
 	Network string
@@ -128,7 +130,7 @@ func (s *Scheme) Refresh(ctx context.Context) error {
 		for network, sub := range wns {
 			for _, w := range sub.Workers {
 				for _, ci := range w.ConnectionInfo {
-					k[NVCKey{network, ci.Version, ci.ChainID}] = (w.State == 1) // (lukanus): 1 is  online
+					k[NVCKey{Network: network, Version: ci.Version, ChainID: ci.ChainID}] = (w.State == WorkerStateOnline)
 				}
 			}
 		}

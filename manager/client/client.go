@@ -48,7 +48,7 @@ type SchedulerContractor interface {
 type ControllContractor interface {
 	InsertTransactions(ctx context.Context, nv NetworkVersion, read io.ReadCloser) error
 
-	CheckMissingTransactions(ctx context.Context, nv NetworkVersion, heightRange shared.HeightRange, window uint64) (missingBlocks, missingTransactions [][2]uint64, err error)
+	CheckMissingTransactions(ctx context.Context, nv NetworkVersion, heightRange shared.HeightRange, mode MissingDiffType, window uint64) (missingBlocks, missingTransactions [][2]uint64, err error)
 	GetMissingTransactions(ctx context.Context, nv NetworkVersion, heightRange shared.HeightRange, window uint64, async bool, force bool) (run *Run, err error)
 
 	GetRunningTransactions(ctx context.Context) (run []Run, err error)
@@ -95,7 +95,11 @@ func (hc *Client) GetTransactions(ctx context.Context, nv NetworkVersion, height
 	req := []structs.TaskRequest{}
 
 	if heightRange.Hash != "" {
-		b, _ := json.Marshal(shared.HeightRange{Hash: heightRange.Hash})
+		b, _ := json.Marshal(shared.HeightRange{
+			Hash:    heightRange.Hash,
+			Network: nv.Network,
+			ChainID: nv.ChainID,
+		})
 		req = append(req, structs.TaskRequest{
 			Network: nv.Network,
 			ChainID: nv.ChainID,
@@ -112,6 +116,8 @@ func (hc *Client) GetTransactions(ctx context.Context, nv NetworkVersion, height
 			requestsToGetMetric.Observe(1)
 
 			b, _ := json.Marshal(shared.HeightRange{
+				Network:     nv.Network,
+				ChainID:     nv.ChainID,
 				StartHeight: heightRange.StartHeight,
 				EndHeight:   heightRange.EndHeight,
 				Hash:        heightRange.Hash,
@@ -140,6 +146,8 @@ func (hc *Client) GetTransactions(ctx context.Context, nv NetworkVersion, height
 					StartHeight: startH,
 					EndHeight:   endH,
 					Hash:        heightRange.Hash,
+					Network:     nv.Network,
+					ChainID:     nv.ChainID,
 				})
 
 				req = append(req, structs.TaskRequest{

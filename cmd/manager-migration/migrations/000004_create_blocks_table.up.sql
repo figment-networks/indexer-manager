@@ -23,5 +23,4 @@ CREATE TABLE IF NOT EXISTS blocks
 CREATE INDEX idx_blx_height on blocks (network, chain_id, height);
 CREATE INDEX idx_blx_time on blocks (network, chain_id, time);
 CREATE UNIQUE INDEX idx_blx_hash on blocks (network, chain_id, hash);
-
 CREATE INDEX idx_partial_blx_height on blocks (height);
