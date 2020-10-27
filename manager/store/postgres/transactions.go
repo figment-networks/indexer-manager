@@ -403,7 +403,7 @@ func (d *Driver) GetTransactions(ctx context.Context, tsearch params.Transaction
 		qBuilder.WriteString(" LIMIT " + strconv.FormatUint(uint64(tsearch.Limit), 10))
 
 		if tsearch.Offset > 0 {
-			qBuilder.WriteString(" OFFSET " + strconv.FormatUint(uint64(tsearch.Limit), 10))
+			qBuilder.WriteString(" OFFSET " + strconv.FormatUint(uint64(tsearch.Offset), 10))
 		}
 	}
 
