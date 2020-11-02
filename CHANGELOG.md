@@ -1,5 +1,18 @@
 # Change Log
 
+# Change Log
+
+## [0.0.3] - 2020-11-02
+
+### Added
+### Changed
+- Memo search is now taking place using full text search
+- New database column was added for transactions
+- Accounts are also conditionally added to full text as the support for array approach
+
+### Fixed
+- Decoder issue after error in the beginning of the transaction list.
+
 ## [0.0.2] - 2020-10-28
 
 Here we would have the update steps for 1.2.4 for people to follow.

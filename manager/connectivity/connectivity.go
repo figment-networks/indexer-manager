@@ -363,22 +363,13 @@ func (m *Manager) AttachToMux(mux *http.ServeMux) {
 
 		err = dec.Decode(pi)
 		if err != nil {
+			dec = json.NewDecoder(b)
 			block.Unlock()
 			m.logger.Error("Error decoding request body in /client_ping", zap.Error(err))
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
 		block.Unlock()
-		/*
-			receivedSyncMetric = metrics.MustNewCounterWithTags(metrics.Options{
-				Namespace: "indexers",
-				Subsystem: "manager_main",
-				Name:      "received_sync",
-				Desc:      "Register attempts received from workers",
-				Tags:      []string{"network", "version", "address"},
-			})
-		*/
-		//	receivedSyncMetric.WithLabels(pi.Kind, pi.Connectivity.Version, pi.Connectivity.Address)
 		ipTo := net.ParseIP(r.RemoteAddr)
 		fwd := r.Header.Get("X-FORWARDED-FOR")
 		if fwd != "" {
