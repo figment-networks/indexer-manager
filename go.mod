@@ -1,6 +1,6 @@
 module github.com/figment-networks/indexer-manager
 
-go 1.14
+go 1.15
 
 require (
 	github.com/bearcherian/rollzap v1.0.2
