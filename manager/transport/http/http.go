@@ -113,7 +113,7 @@ func NewConnector(cli client.ClientContractor) *Connector {
 
 // InsertTransactions is http handler for InsertTransactions method
 func (c *Connector) InsertTransactions(w http.ResponseWriter, req *http.Request) {
-	nv := client.NetworkVersion{Network: "cosmos", Version: "0.0.1"}
+	nv := client.NetworkVersion{Network: "", Version: "0.0.1"}
 	s := strings.Split(req.URL.Path, "/")
 
 	if len(s) > 0 {

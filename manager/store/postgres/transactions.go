@@ -17,6 +17,12 @@ import (
 	"github.com/lib/pq"
 )
 
+type accountSearch string
+
+const asBoth accountSearch = "Both"
+const asOnlyArray accountSearch = "OnlyArray"
+const accountSearchMode = asBoth
+
 // StoreTransaction adds transaction to storage buffer
 func (d *Driver) StoreTransaction(tx structs.TransactionWithMeta) error {
 	select {
@@ -41,7 +47,7 @@ func (d *Driver) StoreTransactions(txs []structs.TransactionWithMeta) error {
 }
 
 const (
-	txInsertHead = `INSERT INTO public.transaction_events("network", "chain_id", "version", "epoch", "height", "hash", "block_hash", "time", "type", "parties", "senders", "recipients", "amount", "fee", "gas_wanted", "gas_used", "memo", "data", "raw") VALUES `
+	txInsertHead = `INSERT INTO public.transaction_events("network", "chain_id", "version", "epoch", "height", "hash", "block_hash", "time", "type", "parties", "senders", "recipients", "amount", "fee", "gas_wanted", "gas_used", "memo", "data", "raw", "fulltext_col" ) VALUES `
 	txInsertFoot = ` ON CONFLICT (network, chain_id, hash)
 	DO UPDATE SET height = EXCLUDED.height,
 	time = EXCLUDED.time,
@@ -56,6 +62,7 @@ const (
 	gas_wanted = EXCLUDED.gas_wanted,
 	gas_used = EXCLUDED.gas_used,
 	memo = EXCLUDED.memo,
+	fulltext_col = to_tsvector('english', CONCAT( EXCLUDED.memo, ' ', array_to_string(EXCLUDED.parties, ' ', ' '))),
 	fee = EXCLUDED.fee`
 )
 
@@ -133,16 +140,18 @@ ReadAll:
 			qBuilder.WriteString(`(`)
 			for j := 1; j < 20; j++ {
 				qBuilder.WriteString(`$`)
-				current := i*19 + j
+				current := i*20 + j
 				qBuilder.WriteString(strconv.Itoa(current))
-				if current == 1 || math.Mod(float64(current), 19) != 0 {
+				if current == 1 || math.Mod(float64(current), 20) != 0 {
 					qBuilder.WriteString(`,`)
 				}
 			}
 
+			qBuilder.WriteString(` to_tsvector('english', $` + strconv.Itoa((i*20)+20) + `)`)
+
 			qBuilder.WriteString(`)`)
 
-			base := i * 19
+			base := i * 20
 			va[base] = transaction.Network
 			va[base+1] = t.ChainID
 			va[base+2] = transaction.Version
@@ -162,9 +171,10 @@ ReadAll:
 			va[base+16] = strings.Map(removeCharacters, t.Memo)
 			va[base+17] = buff.String()
 			va[base+18] = t.Raw
+			va[base+19] = strings.Map(removeCharacters, t.Memo) + " " + strings.Join(parties, " ")
 			i++
 
-			last = base + 18
+			last = base + 19
 
 			buff.Reset()
 
@@ -342,7 +352,11 @@ func (d *Driver) GetTransactions(ctx context.Context, tsearch params.Transaction
 	}
 
 	if len(tsearch.Account) > 0 {
-		//parts = append(parts, "$"+strconv.Itoa(i)+"=ANY(parties)")
+		if accountSearchMode != asOnlyArray {
+			parts = append(parts, "fulltext_col @@ to_tsquery('english', $"+strconv.Itoa(i)+")")
+			data = append(data, strings.Join(tsearch.Account, " | "))
+			i++
+		}
 		parts = append(parts, "parties @> $"+strconv.Itoa(i))
 		data = append(data, pq.Array(tsearch.Account))
 		i++
@@ -355,15 +369,14 @@ func (d *Driver) GetTransactions(ctx context.Context, tsearch params.Transaction
 	}
 
 	if len(tsearch.Receiver) > 0 {
-		//parts = append(parts, "$"+strconv.Itoa(i)+"=ANY(recipients)")
 		parts = append(parts, "recipients @> $"+strconv.Itoa(i))
 		data = append(data, pq.Array(tsearch.Receiver))
 		i++
 	}
 
-	if len(tsearch.Memo) > 2 {
-		parts = append(parts, "memo ILIKE $"+strconv.Itoa(i))
-		data = append(data, fmt.Sprintf("%%%s%%", tsearch.Memo))
+	if len(tsearch.Memo) > 0 {
+		parts = append(parts, "fulltext_col @@ to_tsquery('english', $"+strconv.Itoa(i)+")")
+		data = append(data, tsearch.Memo)
 		i++
 	}
 
