@@ -83,11 +83,15 @@ func (hc *Client) LinkSender(sender TaskSender) {
 }
 
 func (hc *Client) GetTransaction(ctx context.Context, nv NetworkVersion, id string) ([]shared.Transaction, error) {
+	defer hc.recoverPanic()
+
 	return hc.GetTransactions(ctx, nv, shared.HeightRange{Hash: id}, 1, false)
 }
 
 // GetTransactions gets transaction range and stores it in the database with respective blocks
 func (hc *Client) GetTransactions(ctx context.Context, nv NetworkVersion, heightRange shared.HeightRange, batchLimit uint64, silent bool) ([]shared.Transaction, error) {
+	defer hc.recoverPanic()
+
 	timer := metrics.NewTimer(callDurationGetTransactions)
 	defer timer.ObserveDuration()
 
@@ -228,6 +232,8 @@ WaitForAllData:
 
 // SearchTransactions is the search
 func (hc *Client) SearchTransactions(ctx context.Context, ts shared.TransactionSearch) ([]shared.Transaction, error) {
+	defer hc.recoverPanic()
+
 	timer := metrics.NewTimer(callDurationSearchTransactions)
 	defer timer.ObserveDuration()
 
@@ -254,6 +260,8 @@ func (hc *Client) SearchTransactions(ctx context.Context, ts shared.TransactionS
 
 // InsertTransactions inserts external transactions batch
 func (hc *Client) InsertTransactions(ctx context.Context, nv NetworkVersion, readr io.ReadCloser) error {
+	defer hc.recoverPanic()
+
 	timer := metrics.NewTimer(callDurationInsertTransactions)
 	defer timer.ObserveDuration()
 
@@ -295,6 +303,8 @@ func (hc *Client) InsertTransactions(ctx context.Context, nv NetworkVersion, rea
 
 // ScrapeLatest scrapes latest data using the latest known block from database
 func (hc *Client) ScrapeLatest(ctx context.Context, ldr shared.LatestDataRequest) (ldResp shared.LatestDataResponse, er error) {
+	defer hc.recoverPanic()
+
 	timer := metrics.NewTimer(callDurationScrapeLatest)
 	defer timer.ObserveDuration()
 
@@ -514,5 +524,11 @@ func groupRanges(ranges [][2]uint64, window uint64) (out [][2]uint64) {
 		out = append(out, temp)
 	}
 	return out
+}
 
+func (hc *Client) recoverPanic() {
+	if p := recover(); p != nil {
+		hc.logger.Error("[Client] Panic ", zap.Any("contents", p))
+		hc.logger.Sync()
+	}
 }

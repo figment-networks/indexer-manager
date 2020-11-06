@@ -1,6 +1,13 @@
 # Change Log
 
-# Change Log
+## [0.0.4] - 2020-11-06
+
+### Added
+- Better handling of panics for rollbar
+### Changed
+### Fixed
+- Problem (panic) with /check_missing in certain conditions
+
 
 ## [0.0.3] - 2020-11-02
 
