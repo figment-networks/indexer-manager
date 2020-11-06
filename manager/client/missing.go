@@ -24,6 +24,8 @@ const (
 
 // CheckMissingTransactions checks consistency of database if every transaction is written correctly (all blocks + correct transaction number from blocks)
 func (hc *Client) CheckMissingTransactions(ctx context.Context, nv NetworkVersion, heightRange shared.HeightRange, mode MissingDiffType, window uint64) (missingBlocks, missingTransactions [][2]uint64, err error) {
+	defer hc.recoverPanic()
+
 	timer := metrics.NewTimer(callDurationCheckMissing)
 	defer timer.ObserveDuration()
 
@@ -182,7 +184,7 @@ func processMissingBlocksAndTransactions(blocks, txs [][2]uint64, startHeight, e
 		}
 		prevBlockHeight = block[0]
 
-		if txIndex+1 > lenTx {
+		if txIndex+1 >= lenTx {
 			break
 		}
 
@@ -249,6 +251,7 @@ func (hc *Client) GetRunningTransactions(ctx context.Context) (run []Run, err er
 // GetMissingTransactions gets missing transactions for given height range using CheckMissingTransactions.
 // This may run very very long (aka synchronize entire chain). For that kind of operations async parameter got added and runner was created.
 func (hc *Client) GetMissingTransactions(ctx context.Context, nv NetworkVersion, heightRange shared.HeightRange, window uint64, async bool, force bool) (run *Run, err error) {
+	defer hc.recoverPanic()
 
 	hc.logger.Info("[Client] GetMissingTransactions StartProcess", zap.Any("range", heightRange), zap.Any("network", nv))
 
