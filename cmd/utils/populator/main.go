@@ -74,7 +74,7 @@ func main() {
 func getTransactions(ctx context.Context, zLog *zap.Logger, db *sql.DB, decodeFee plugin.Symbol, network, chain string, from, to uint64) error {
 
 	DecodeFee := decodeFee.(func(logger *zap.Logger, reader io.Reader) []map[string]interface{})
-	rows, err := db.QueryContext(ctx, "SELECT id, height, raw FROM public.transaction_events WHERE network = $1 AND chain_id = $2 AND height => $3 AND height <= $4 ORDER BY height ASC LIMIT 1000", network, chain, from, to)
+	rows, err := db.QueryContext(ctx, "SELECT id, height, raw FROM public.transaction_events WHERE network = $1 AND chain_id = $2 AND height => $3 AND height <= $4 ORDER BY height ASC", network, chain, from, to)
 	switch {
 	case err == sql.ErrNoRows:
 		return params.ErrNotFound
