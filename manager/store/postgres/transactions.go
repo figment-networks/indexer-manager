@@ -115,7 +115,7 @@ ReadAll:
 					}
 					if len(sub.Sender) > 0 {
 						parties = uniqueEntriesEvTransfer(sub.Sender, parties)
-						senders = uniqueEntriesEvTransfer(sub.Recipient, senders)
+						senders = uniqueEntriesEvTransfer(sub.Sender, senders)
 					}
 
 					if len(sub.Node) > 0 {
@@ -165,7 +165,15 @@ ReadAll:
 			va[base+10] = pq.Array(senders)
 			va[base+11] = pq.Array(recipients)
 			va[base+12] = pq.Array([]float64{amount})
-			va[base+13] = 0
+			var err error
+			if t.Fee == nil {
+				va[base+13], err = json.Marshal(t.Fee)
+				if err != nil {
+					va[base+13] = "{}"
+				}
+			} else {
+				va[base+13] = "{}"
+			}
 			va[base+14] = t.GasWanted
 			va[base+15] = t.GasUsed
 			va[base+16] = strings.Map(removeCharacters, t.Memo)
@@ -351,14 +359,16 @@ func (d *Driver) GetTransactions(ctx context.Context, tsearch params.Transaction
 		i++
 	}
 
-	if len(tsearch.Account) > 0 {
+	if len(tsearch.Account) > 0 || len(tsearch.Sender) > 0 || len(tsearch.Receiver) > 0 {
+		accountsToFetch := append(tsearch.Account, tsearch.Sender...)
+		accountsToFetch = append(accountsToFetch, tsearch.Receiver...)
 		if accountSearchMode != asOnlyArray {
 			parts = append(parts, "fulltext_col @@ to_tsquery('english', $"+strconv.Itoa(i)+")")
-			data = append(data, strings.Join(tsearch.Account, " | "))
+			data = append(data, strings.Join(accountsToFetch, " | "))
 			i++
 		}
 		parts = append(parts, "parties @> $"+strconv.Itoa(i))
-		data = append(data, pq.Array(tsearch.Account))
+		data = append(data, pq.Array(accountsToFetch))
 		i++
 	}
 
@@ -394,7 +404,7 @@ func (d *Driver) GetTransactions(ctx context.Context, tsearch params.Transaction
 	}
 
 	qBuilder := strings.Builder{}
-	qBuilder.WriteString("SELECT id, chain_id, version, epoch, height, hash, block_hash, time, gas_wanted, gas_used, memo, data")
+	qBuilder.WriteString("SELECT id, chain_id, version, epoch, fee, height, hash, block_hash, time, gas_wanted, gas_used, memo, data")
 	if tsearch.WithRaw {
 		qBuilder.WriteString(", raw ")
 	}
@@ -421,6 +431,7 @@ func (d *Driver) GetTransactions(ctx context.Context, tsearch params.Transaction
 	}
 
 	a := qBuilder.String()
+
 	rows, err := d.db.QueryContext(ctx, a, data...)
 	switch {
 	case err == sql.ErrNoRows:
@@ -432,14 +443,20 @@ func (d *Driver) GetTransactions(ctx context.Context, tsearch params.Transaction
 
 	defer rows.Close()
 
+	br := &bytes.Reader{}
+	feeDec := json.NewDecoder(br)
+
 	for rows.Next() {
 		tx := structs.Transaction{}
+		byteFee := []byte{}
 		if tsearch.WithRaw {
-			err = rows.Scan(&tx.ID, &tx.ChainID, &tx.Version, &tx.Epoch, &tx.Height, &tx.Hash, &tx.BlockHash, &tx.Time, &tx.GasWanted, &tx.GasUsed, &tx.Memo, &tx.Events, &tx.Raw)
+			err = rows.Scan(&tx.ID, &tx.ChainID, &tx.Version, &tx.Epoch, &byteFee, &tx.Height, &tx.Hash, &tx.BlockHash, &tx.Time, &tx.GasWanted, &tx.GasUsed, &tx.Memo, &tx.Events, &tx.Raw)
 		} else {
-			err = rows.Scan(&tx.ID, &tx.ChainID, &tx.Version, &tx.Epoch, &tx.Height, &tx.Hash, &tx.BlockHash, &tx.Time, &tx.GasWanted, &tx.GasUsed, &tx.Memo, &tx.Events)
+			err = rows.Scan(&tx.ID, &tx.ChainID, &tx.Version, &tx.Epoch, &byteFee, &tx.Height, &tx.Hash, &tx.BlockHash, &tx.Time, &tx.GasWanted, &tx.GasUsed, &tx.Memo, &tx.Events)
 		}
-
+		br.Reset(byteFee)
+		feeDec.Decode(&tx.Fee)
+		byteFee = nil
 		if err != nil {
 			return nil, err
 		}
