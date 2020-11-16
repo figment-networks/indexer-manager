@@ -166,7 +166,7 @@ ReadAll:
 			va[base+11] = pq.Array(recipients)
 			va[base+12] = pq.Array([]float64{amount})
 			var err error
-			if t.Fee == nil {
+			if t.Fee != nil {
 				va[base+13], err = json.Marshal(t.Fee)
 				if err != nil {
 					va[base+13] = "{}"
