@@ -241,6 +241,7 @@ func (hc *Client) SearchTransactions(ctx context.Context, ts shared.TransactionS
 		Network:      ts.Network,
 		ChainIDs:     ts.ChainIDs,
 		Epoch:        ts.Epoch,
+		Hash:         ts.Hash,
 		Height:       ts.Height,
 		Type:         ts.Type,
 		BlockHash:    ts.BlockHash,

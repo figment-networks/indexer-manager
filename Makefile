@@ -40,6 +40,13 @@ build-manager-migration:
 	$(info building migration binary as ./migration)
 	go build -o migration ./cmd/manager-migration
 
+
+.PHONY:  populator
+populator:
+	$(info building populator binary as ./populator)
+	CGO_ENABLED="1" go build -o populator -trimpath ./cmd/utils/populator
+
+
 .PHONY: build-scheduler
 build-scheduler:
 	$(info building scheduler binary as ./scheduler)
