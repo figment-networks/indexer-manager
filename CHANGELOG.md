@@ -1,5 +1,20 @@
 # Change Log
 
+
+## [0.0.5] - 2020-11-17
+
+### Added
+- Indices for senders and receiver
+- Populator util for populating changes in database (this version only for fee)
+### Changed
+- Fee is now correct type in database (jsonb) instead of decimal
+- Senders/Receivers search now uses full text and then filters.
+### Fixed
+- Corrected wrong assignation of senders
+- Fee assignations / return type / decode
+- Hash search is fixed
+
+
 ## [0.0.4] - 2020-11-06
 
 ### Added
