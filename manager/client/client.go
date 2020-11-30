@@ -47,10 +47,8 @@ type SchedulerContractor interface {
 
 type ControllContractor interface {
 	InsertTransactions(ctx context.Context, nv NetworkVersion, read io.ReadCloser) error
-
 	CheckMissingTransactions(ctx context.Context, nv NetworkVersion, heightRange shared.HeightRange, mode MissingDiffType, window uint64) (missingBlocks, missingTransactions [][2]uint64, err error)
-	GetMissingTransactions(ctx context.Context, nv NetworkVersion, heightRange shared.HeightRange, window uint64, async bool, force bool) (run *Run, err error)
-
+	GetMissingTransactions(ctx context.Context, nv NetworkVersion, heightRange shared.HeightRange, params GetMissingTxParams) (run *Run, err error)
 	GetRunningTransactions(ctx context.Context) (run []Run, err error)
 }
 
@@ -256,6 +254,7 @@ func (hc *Client) SearchTransactions(ctx context.Context, ts shared.TransactionS
 		Limit:        ts.Limit,
 		Offset:       ts.Offset,
 		WithRaw:      ts.WithRaw,
+		WithRawLog:   ts.WithRawLog,
 	})
 }
 

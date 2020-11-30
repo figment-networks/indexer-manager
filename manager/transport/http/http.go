@@ -99,6 +99,10 @@ type TransactionSearch struct {
 	// WithRaw - include base64 raw request in search response
 	// default: false
 	WithRaw bool `json:"with_raw"`
+
+	// WithRawLog - include raw log data in search response
+	// default: false
+	WithRawLog bool `json:"with_raw_log"`
 }
 
 // Connector is main HTTP connector for manager
@@ -160,7 +164,6 @@ func (c *Connector) GetTransactions(w http.ResponseWriter, req *http.Request) {
 	defer cancel()
 
 	hr := shared.HeightRange{
-		Epoch:       "",
 		StartHeight: uint64(intHeight),
 		EndHeight:   uint64(intEndHeight),
 		Network:     network,
@@ -233,6 +236,7 @@ func (c *Connector) SearchTransactions(w http.ResponseWriter, req *http.Request)
 		AfterHeight:  ts.AfterHeight,
 		BeforeHeight: ts.BeforeHeight,
 		WithRaw:      ts.WithRaw,
+		WithRawLog:   ts.WithRawLog,
 	})
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -346,6 +350,9 @@ func (c *Connector) GetMissingTransactions(w http.ResponseWriter, req *http.Requ
 
 	force := (req.URL.Query().Get("force") != "")
 
+	overwriteAll := (req.URL.Query().Get("overwrite_all") != "")
+	simplified := (req.URL.Query().Get("simplified") != "")
+
 	network := req.URL.Query().Get("network")
 	chainID := req.URL.Query().Get("chain_id")
 
@@ -367,7 +374,14 @@ func (c *Connector) GetMissingTransactions(w http.ResponseWriter, req *http.Requ
 				StartHeight: intHeight,
 				EndHeight:   intEndHeight,
 				Network:     network,
-				ChainID:     chainID}, 1000, false, force)
+				ChainID:     chainID},
+			client.GetMissingTxParams{
+				Window:       1000,
+				Async:        false,
+				Force:        force,
+				OverwriteAll: overwriteAll,
+				Simplified:   simplified,
+			})
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			w.Write([]byte(err.Error()))
@@ -382,7 +396,14 @@ func (c *Connector) GetMissingTransactions(w http.ResponseWriter, req *http.Requ
 			StartHeight: intHeight,
 			EndHeight:   intEndHeight,
 			Network:     network,
-			ChainID:     chainID}, 1000, true, force)
+			ChainID:     chainID},
+		client.GetMissingTxParams{
+			Window:       1000,
+			Async:        true,
+			Force:        force,
+			OverwriteAll: overwriteAll,
+			Simplified:   simplified,
+		})
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(err.Error()))
@@ -392,6 +413,20 @@ func (c *Connector) GetMissingTransactions(w http.ResponseWriter, req *http.Requ
 	enc := json.NewEncoder(w)
 	w.Header().Add("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
+	if simplified {
+		enc.Encode(client.Run{ // remove whole progress
+			NV:               run.NV,
+			HeightRange:      run.HeightRange,
+			ProgressSummary:  run.ProgressSummary,
+			Success:          run.Success,
+			Finished:         run.Finished,
+			StartedTime:      run.StartedTime,
+			FinishTime:       run.FinishTime,
+			LastProgressTime: run.LastProgressTime,
+		})
+		return
+	}
+
 	enc.Encode(run)
 
 }

@@ -50,6 +50,12 @@ type Transaction struct {
 
 	// Raw - Raw transaction bytes
 	Raw []byte `json:"raw,omitempty"`
+
+	// RawLog - RawLog transaction's log bytes
+	RawLog []byte `json:"raw_log,omitempty"`
+
+	// HasErrors - indicates if Transaction has any errors inside
+	HasErrors bool `json:"has_errors"`
 }
 
 // TransactionEvents - a set of TransactionEvent
@@ -192,5 +198,6 @@ type TransactionSearch struct {
 	AfterHeight  uint64 `form:"after_id"`
 	BeforeHeight uint64 `form:"before_id"`
 
-	WithRaw bool `json:"with_raw"`
+	WithRaw    bool `json:"with_raw"`
+	WithRawLog bool `json:"with_raw_log"`
 }

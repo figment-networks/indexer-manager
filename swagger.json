@@ -302,6 +302,15 @@
                         },
                         "x-go-name": "Raw"
                     },
+                    "raw_log": {
+                        "description": "RawLog - RawLog transaction's log bytes",
+                        "type": "array",
+                        "items": {
+                            "type": "integer",
+                            "format": "uint8"
+                        },
+                        "x-go-name": "RawLog"
+                    },
                     "time": {
                         "description": "Time - time of transaction",
                         "type": "string",
@@ -326,6 +335,11 @@
                         "description": "Version - Version of transaction record",
                         "type": "string",
                         "x-go-name": "Version"
+                    },
+                    "has_errors": {
+                        "description": "HasErrors - indicates if transaction has any errors inside",
+                        "type": "boolean",
+                        "x-go-name": "HasErrors"
                     }
                 },
                 "x-go-package": "github.com/figment-networks/indexer-manager/structs"
@@ -520,10 +534,16 @@
                         "x-go-name": "Type"
                     },
                     "with_raw": {
-                        "description": "WithRaw - include base64 raw request in search response",
+                        "description": "WithRaw - include base64 raw response in search response",
                         "type": "boolean",
                         "default": false,
                         "x-go-name": "WithRaw"
+                    },
+                    "with_raw_log": {
+                        "description": "WithRawLog - include base64 raw log from in search response",
+                        "type": "boolean",
+                        "default": false,
+                        "x-go-name": "WithRawLog"
                     }
                 },
                 "x-go-package": "github.com/figment-networks/indexer-manager/manager/transport/http"
