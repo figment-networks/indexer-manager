@@ -163,6 +163,8 @@ To start scraping, make following request within *existing* range.
 Where
     - `force` indicate the start/restart of scraping process. The next call without this parameter will return current state of scraping
     - `async` runs scraping process as goroutine. otherwise the process will die on any network timeout.
+    - `simplified` returns only approximated progress from get missing process, helpful with very big ranges.
+    - `overwrite_all` skips any checks and forcefully overwrites records found for given range .
 
 ### Transaction Search
 Transaction Search is available by making a post request on `/transaction_search`.

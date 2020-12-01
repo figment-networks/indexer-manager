@@ -23,18 +23,24 @@ type RollbarConfig struct {
 
 type Logger struct {
 	*zap.Logger
+	Level zap.AtomicLevel
 }
 
 func GetLogger() *zap.Logger {
 	return Log.Logger
 }
 
+func SetLevel(logLevel string) {
+	Log.Level.SetLevel(getLevel(logLevel))
+}
+
 func Init(encoding, logLevel string, logOutputs []string, rollbarConfig *RollbarConfig) error {
 
+	lLev := zap.NewAtomicLevelAt(getLevel(logLevel))
 	logConfig := zap.Config{
 		OutputPaths: logOutputs,
 		Encoding:    "json",
-		Level:       zap.NewAtomicLevelAt(getLevel(logLevel)),
+		Level:       lLev,
 		EncoderConfig: zapcore.EncoderConfig{
 			MessageKey:     "msg",
 			LevelKey:       "level",
@@ -67,6 +73,7 @@ func Init(encoding, logLevel string, logOutputs []string, rollbarConfig *Rollbar
 		}))
 	}
 	Log.Logger = log
+	Log.Level = lLev
 
 	return nil
 }

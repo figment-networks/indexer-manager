@@ -22,8 +22,8 @@ type Driver struct {
 func NewDriver(ctx context.Context, db *sql.DB) *Driver {
 	return &Driver{
 		db:     db,
-		txBuff: make(chan structs.TransactionWithMeta, 21),
-		txPool: NewValuesPool(21, 20, 21),
+		txBuff: make(chan structs.TransactionWithMeta, NumberOfTxFields),
+		txPool: NewValuesPool(20, NumberOfTxFields, 20),
 		blBuff: make(chan structs.BlockWithMeta, 20),
 		blPool: NewValuesPool(20, 8, 20),
 	}

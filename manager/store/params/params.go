@@ -31,5 +31,8 @@ type TransactionSearch struct {
 	ChainIDs []string `json:"chain_ids"`
 	Epoch    string   `json:"epoch"`
 
-	WithRaw bool `json:"with_raw"`
+	WithRaw    bool `json:"with_raw"`
+	WithRawLog bool `json:"with_raw_log"`
+
+	HasErrors bool `json:"has_errors"`
 }

@@ -22,6 +22,14 @@ const (
 	SQLHybridRangeLimit = 100000
 )
 
+type GetMissingTxParams struct {
+	Window       uint64
+	Async        bool
+	Force        bool
+	OverwriteAll bool
+	Simplified   bool
+}
+
 // CheckMissingTransactions checks consistency of database if every transaction is written correctly (all blocks + correct transaction number from blocks)
 func (hc *Client) CheckMissingTransactions(ctx context.Context, nv NetworkVersion, heightRange shared.HeightRange, mode MissingDiffType, window uint64) (missingBlocks, missingTransactions [][2]uint64, err error) {
 	defer hc.recoverPanic()
@@ -193,7 +201,7 @@ func processMissingBlocksAndTransactions(blocks, txs [][2]uint64, startHeight, e
 		var missed bool
 		if tx[0] > block[0] { // for non existing tx
 			if block[1] > 0 {
-				logger.Info("for non existing tx", zap.Any("tx", tx), zap.Any("block", block))
+				logger.Info("[CLIENT] Got blocks for non existing tx", zap.Any("tx", tx), zap.Any("block", block))
 				missingTransactions = append(missingTransactions, [2]uint64{block[0], block[0]})
 			}
 			continue
@@ -227,7 +235,7 @@ func processMissingBlocksAndTransactions(blocks, txs [][2]uint64, startHeight, e
 		}
 
 		if tx[0] != block[0] && tx[1] != block[1] {
-			logger.Info("end", zap.Any("tx_index", txIndex), zap.Any("tx", tx), zap.Any("block", block))
+			logger.Info("[CLIENT]  end", zap.Any("tx_index", txIndex), zap.Any("tx", tx), zap.Any("block", block))
 			missingTransactions = append(missingTransactions, [2]uint64{block[0], block[0]})
 		}
 
@@ -250,12 +258,12 @@ func (hc *Client) GetRunningTransactions(ctx context.Context) (run []Run, err er
 
 // GetMissingTransactions gets missing transactions for given height range using CheckMissingTransactions.
 // This may run very very long (aka synchronize entire chain). For that kind of operations async parameter got added and runner was created.
-func (hc *Client) GetMissingTransactions(ctx context.Context, nv NetworkVersion, heightRange shared.HeightRange, window uint64, async bool, force bool) (run *Run, err error) {
+func (hc *Client) GetMissingTransactions(ctx context.Context, nv NetworkVersion, heightRange shared.HeightRange, params GetMissingTxParams) (run *Run, err error) {
 	defer hc.recoverPanic()
 
 	hc.logger.Info("[Client] GetMissingTransactions StartProcess", zap.Any("range", heightRange), zap.Any("network", nv))
 
-	isNew, progress, err := hc.runner.StartProcess(nv, heightRange, force)
+	isNew, progress, err := hc.runner.StartProcess(nv, heightRange, params.Force)
 	if err != nil {
 		return nil, err
 	}
@@ -265,18 +273,59 @@ func (hc *Client) GetMissingTransactions(ctx context.Context, nv NetworkVersion,
 		return progress, err
 	}
 
-	if !async {
-		err := hc.getMissingTransactions(ctx, nv, heightRange, window, nil)
+	if !params.Async {
+		if params.OverwriteAll {
+			err := hc.getMissingTransactions(ctx, nv, heightRange, params.Window, nil)
+			return nil, err
+		}
+		err := hc.forceGetTransactions(ctx, nv, heightRange, params.Window, nil)
 		return nil, err
 	}
 
 	nCtx := progress.Ctx
-	go hc.getMissingTransactions(nCtx, nv, heightRange, window, progress)
+	if params.OverwriteAll {
+		go hc.forceGetTransactions(nCtx, nv, heightRange, params.Window, progress)
+	} else {
+		go hc.getMissingTransactions(nCtx, nv, heightRange, params.Window, progress)
+	}
 
 	hc.logger.Info("[Client] Returning Progress", zap.Any("range", heightRange), zap.Any("network", nv))
 	<-time.After(time.Second)
 	return progress, nil
 
+}
+
+func (hc *Client) forceGetTransactions(ctx context.Context, nv NetworkVersion, heightRange shared.HeightRange, window uint64, progress *Run) (err error) {
+	timer := metrics.NewTimer(callDurationGetMissing)
+	defer timer.ObserveDuration()
+	defer hc.logger.Sync()
+
+	toScrape := groupRanges([][2]uint64{{heightRange.StartHeight, heightRange.EndHeight}}, window)
+
+	hc.logger.Info("[Client] forceGetTransactions CheckMissingTransactions", zap.Any("range", heightRange), zap.Any("network", nv), zap.Int("number_of_requests", len(toScrape)))
+	for _, blocks := range toScrape {
+		// (lukanus): has to be blocking op
+		missingRange := shared.HeightRange{
+			Network:     nv.Network,
+			ChainID:     nv.ChainID,
+			StartHeight: blocks[0],
+			EndHeight:   blocks[1],
+		}
+		now := time.Now()
+		hc.logger.Info("[Client] forceGetTransactions  GetTransactions", zap.Any("range", missingRange), zap.Any("network", nv))
+		if _, err := hc.GetTransactions(ctx, nv, missingRange, 10001, true); err != nil {
+			if progress != nil {
+				progress.Report(missingRange, time.Since(now), []error{err}, true)
+			}
+			hc.logger.Error("[Client] forceGetTransactions missingBlocks GetTransactions error", zap.Error(err), zap.Any("range", missingRange), zap.Any("network", nv))
+			return fmt.Errorf("error getting missing transactions from missing blocks:  %w ", err)
+		}
+		if progress != nil {
+			hc.logger.Info("[Client] forceGetTransactions missingBlocks GetTransactions success", zap.Any("range", missingRange), zap.Any("network", nv))
+			progress.Report(missingRange, time.Since(now), nil, false)
+		}
+	}
+	return
 }
 
 // getMissingTransactions scrape missing transactions based on height
@@ -296,7 +345,6 @@ func (hc *Client) getMissingTransactions(ctx context.Context, nv NetworkVersion,
 	}
 
 	for _, blocks := range missingBlocks {
-
 		// (lukanus): has to be blocking op
 		missingRange := shared.HeightRange{
 			Network:     nv.Network,

@@ -23,6 +23,8 @@ const asBoth accountSearch = "Both"
 const asOnlyArray accountSearch = "OnlyArray"
 const accountSearchMode = asBoth
 
+const NumberOfTxFields = 21
+
 // StoreTransaction adds transaction to storage buffer
 func (d *Driver) StoreTransaction(tx structs.TransactionWithMeta) error {
 	select {
@@ -47,7 +49,7 @@ func (d *Driver) StoreTransactions(txs []structs.TransactionWithMeta) error {
 }
 
 const (
-	txInsertHead = `INSERT INTO public.transaction_events("network", "chain_id", "version", "epoch", "height", "hash", "block_hash", "time", "type", "parties", "senders", "recipients", "amount", "fee", "gas_wanted", "gas_used", "memo", "data", "raw", "fulltext_col" ) VALUES `
+	txInsertHead = `INSERT INTO public.transaction_events("network", "chain_id", "version", "epoch", "height", "hash", "block_hash", "time", "type", "parties", "senders", "recipients", "amount", "fee", "gas_wanted", "gas_used", "memo", "data", "raw", "raw_log", "fulltext_col") VALUES `
 	txInsertFoot = ` ON CONFLICT (network, chain_id, hash)
 	DO UPDATE SET height = EXCLUDED.height,
 	time = EXCLUDED.time,
@@ -63,7 +65,8 @@ const (
 	gas_used = EXCLUDED.gas_used,
 	memo = EXCLUDED.memo,
 	fulltext_col = to_tsvector('english', CONCAT( EXCLUDED.memo, ' ', array_to_string(EXCLUDED.parties, ' ', ' '))),
-	fee = EXCLUDED.fee`
+	fee = EXCLUDED.fee,
+	raw_log = EXCLUDED.raw_log`
 )
 
 // flushTransactions persist buffer into postgres
@@ -138,20 +141,20 @@ ReadAll:
 				qBuilder.WriteString(`,`)
 			}
 			qBuilder.WriteString(`(`)
-			for j := 1; j < 20; j++ {
+			for j := 1; j < NumberOfTxFields; j++ {
 				qBuilder.WriteString(`$`)
-				current := i*20 + j
+				current := i*NumberOfTxFields + j
 				qBuilder.WriteString(strconv.Itoa(current))
-				if current == 1 || math.Mod(float64(current), 20) != 0 {
+				if current == 1 || math.Mod(float64(current), NumberOfTxFields) != 0 {
 					qBuilder.WriteString(`,`)
 				}
 			}
 
-			qBuilder.WriteString(` to_tsvector('english', $` + strconv.Itoa((i*20)+20) + `)`)
+			qBuilder.WriteString(` to_tsvector('english', $` + strconv.Itoa((i*NumberOfTxFields)+NumberOfTxFields) + `)`)
 
 			qBuilder.WriteString(`)`)
 
-			base := i * 20
+			base := i * NumberOfTxFields
 			va[base] = transaction.Network
 			va[base+1] = t.ChainID
 			va[base+2] = transaction.Version
@@ -179,10 +182,12 @@ ReadAll:
 			va[base+16] = strings.Map(removeCharacters, t.Memo)
 			va[base+17] = buff.String()
 			va[base+18] = t.Raw
-			va[base+19] = strings.Map(removeCharacters, t.Memo) + " " + strings.Join(parties, " ")
+			va[base+19] = t.RawLog
+			va[base+20] = strings.Map(removeCharacters, t.Memo) + " " + strings.Join(parties, " ")
+
 			i++
 
-			last = base + 19
+			last = base + (NumberOfTxFields - 1)
 
 			buff.Reset()
 
@@ -404,10 +409,16 @@ func (d *Driver) GetTransactions(ctx context.Context, tsearch params.Transaction
 	}
 
 	qBuilder := strings.Builder{}
-	qBuilder.WriteString("SELECT id, chain_id, version, epoch, fee, height, hash, block_hash, time, gas_wanted, gas_used, memo, data")
+	qBuilder.WriteString("SELECT id, chain_id, version, epoch, fee, height, hash, block_hash, time, gas_wanted, gas_used, memo, data, (type @> '{error}') as has_errors")
+
 	if tsearch.WithRaw {
 		qBuilder.WriteString(", raw ")
 	}
+
+	if tsearch.WithRawLog {
+		qBuilder.WriteString(", raw_log ")
+	}
+
 	qBuilder.WriteString(" FROM public.transaction_events WHERE ")
 	for i, par := range parts {
 		if i != 0 {
@@ -449,10 +460,15 @@ func (d *Driver) GetTransactions(ctx context.Context, tsearch params.Transaction
 	for rows.Next() {
 		tx := structs.Transaction{}
 		byteFee := []byte{}
-		if tsearch.WithRaw {
-			err = rows.Scan(&tx.ID, &tx.ChainID, &tx.Version, &tx.Epoch, &byteFee, &tx.Height, &tx.Hash, &tx.BlockHash, &tx.Time, &tx.GasWanted, &tx.GasUsed, &tx.Memo, &tx.Events, &tx.Raw)
+
+		if tsearch.WithRaw && tsearch.WithRawLog {
+			err = rows.Scan(&tx.ID, &tx.ChainID, &tx.Version, &tx.Epoch, &byteFee, &tx.Height, &tx.Hash, &tx.BlockHash, &tx.Time, &tx.GasWanted, &tx.GasUsed, &tx.Memo, &tx.Events, &tx.HasErrors, &tx.Raw, &tx.RawLog)
+		} else if tsearch.WithRaw {
+			err = rows.Scan(&tx.ID, &tx.ChainID, &tx.Version, &tx.Epoch, &byteFee, &tx.Height, &tx.Hash, &tx.BlockHash, &tx.Time, &tx.GasWanted, &tx.GasUsed, &tx.Memo, &tx.Events, &tx.HasErrors, &tx.Raw)
+		} else if tsearch.WithRawLog {
+			err = rows.Scan(&tx.ID, &tx.ChainID, &tx.Version, &tx.Epoch, &byteFee, &tx.Height, &tx.Hash, &tx.BlockHash, &tx.Time, &tx.GasWanted, &tx.GasUsed, &tx.Memo, &tx.Events, &tx.HasErrors, &tx.RawLog)
 		} else {
-			err = rows.Scan(&tx.ID, &tx.ChainID, &tx.Version, &tx.Epoch, &byteFee, &tx.Height, &tx.Hash, &tx.BlockHash, &tx.Time, &tx.GasWanted, &tx.GasUsed, &tx.Memo, &tx.Events)
+			err = rows.Scan(&tx.ID, &tx.ChainID, &tx.Version, &tx.Epoch, &byteFee, &tx.Height, &tx.Hash, &tx.BlockHash, &tx.Time, &tx.GasWanted, &tx.GasUsed, &tx.Memo, &tx.Events, &tx.HasErrors)
 		}
 		br.Reset(byteFee)
 		feeDec.Decode(&tx.Fee)

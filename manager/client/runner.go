@@ -177,7 +177,8 @@ type Run struct {
 	Ctx    context.Context    `json:"-"`
 	Cancel context.CancelFunc `json:"-"`
 
-	Progress []RunProgress `json:"run_progress"`
+	Progress        []RunProgress `json:"run_progress"`
+	ProgressSummary []RunProgress `json:"run_progress_summary"`
 
 	Success bool `json:"success"`
 
@@ -222,6 +223,22 @@ func (r *Run) Report(done shared.HeightRange, duration time.Duration, err []erro
 
 	if !finished || err != nil {
 		r.Progress = append(r.Progress, RunProgress{Done: done, D: duration, T: time.Now(), Errors: err})
+	}
+
+	if len(r.ProgressSummary) == 0 {
+		r.ProgressSummary = append(r.ProgressSummary, RunProgress{Done: done, D: duration, T: time.Now(), Errors: err})
+	} else {
+		if err != nil {
+			r.ProgressSummary = append(r.ProgressSummary, RunProgress{Done: done, D: duration, T: time.Now(), Errors: err})
+		}
+
+		ps := r.ProgressSummary[0]
+		ps.D = time.Since(r.StartedTime)
+		ps.T = time.Now()
+		ps.Done.EndHeight = done.EndHeight
+		r.ProgressSummary[0] = ps
+		return
+
 	}
 }
 

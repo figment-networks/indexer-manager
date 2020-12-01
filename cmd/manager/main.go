@@ -119,9 +119,9 @@ func main() {
 
 	mux := http.NewServeMux()
 	HTTPTransport.AttachToHandler(mux)
-
 	connManager.AttachToMux(mux)
 
+	attachDynamic(ctx, mux)
 	attachHealthCheck(ctx, mux, db)
 	attachProfiling(mux)
 
