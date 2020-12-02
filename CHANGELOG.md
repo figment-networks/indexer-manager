@@ -1,6 +1,12 @@
 # Change Log
 
-## [0.0.6] -
+## [0.0.7] -
+### Added
+- Ability to stop running sync process
+### Changed
+### Fixed
+
+## [0.0.6] - 2020-12-01
 ### Added
 - 'has_errors' field for transaction search return - contains a boolean describing error occurrence
 - 'raw_log' field for transaction search return - contains a log information from transaction
