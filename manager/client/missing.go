@@ -235,7 +235,7 @@ func processMissingBlocksAndTransactions(blocks, txs [][2]uint64, startHeight, e
 		}
 
 		if tx[0] != block[0] && tx[1] != block[1] {
-			logger.Info("[CLIENT]  end", zap.Any("tx_index", txIndex), zap.Any("tx", tx), zap.Any("block", block))
+			logger.Info("[CLIENT] end", zap.Any("tx_index", txIndex), zap.Any("tx", tx), zap.Any("block", block))
 			missingTransactions = append(missingTransactions, [2]uint64{block[0], block[0]})
 		}
 
@@ -260,6 +260,7 @@ func (hc *Client) GetRunningTransactions(ctx context.Context) (run []Run, err er
 // This may run very very long (aka synchronize entire chain). For that kind of operations async parameter got added and runner was created.
 func (hc *Client) GetMissingTransactions(ctx context.Context, nv NetworkVersion, heightRange shared.HeightRange, params GetMissingTxParams) (run *Run, err error) {
 	defer hc.recoverPanic()
+	defer hc.logger.Sync()
 
 	hc.logger.Info("[Client] GetMissingTransactions StartProcess", zap.Any("range", heightRange), zap.Any("network", nv))
 
@@ -302,6 +303,7 @@ func (hc *Client) forceGetTransactions(ctx context.Context, nv NetworkVersion, h
 
 	toScrape := groupRanges([][2]uint64{{heightRange.StartHeight, heightRange.EndHeight}}, window)
 
+	progress.Report(shared.HeightRange{}, 0, nil, false)
 	hc.logger.Info("[Client] forceGetTransactions CheckMissingTransactions", zap.Any("range", heightRange), zap.Any("network", nv), zap.Int("number_of_requests", len(toScrape)))
 	for _, blocks := range toScrape {
 		// (lukanus): has to be blocking op
@@ -325,6 +327,10 @@ func (hc *Client) forceGetTransactions(ctx context.Context, nv NetworkVersion, h
 			progress.Report(missingRange, time.Since(now), nil, false)
 		}
 	}
+
+	if progress != nil {
+		progress.Report(shared.HeightRange{}, 0, nil, true)
+	}
 	return
 }
 
@@ -332,6 +338,7 @@ func (hc *Client) forceGetTransactions(ctx context.Context, nv NetworkVersion, h
 func (hc *Client) getMissingTransactions(ctx context.Context, nv NetworkVersion, heightRange shared.HeightRange, window uint64, progress *Run) (err error) {
 	timer := metrics.NewTimer(callDurationGetMissing)
 	defer timer.ObserveDuration()
+	defer hc.logger.Sync()
 
 	hc.logger.Info("[Client] GetMissingTransactions CheckMissingTransactions", zap.Any("range", heightRange), zap.Any("network", nv))
 	now := time.Now()
@@ -416,4 +423,9 @@ func (hc *Client) getMissingTransactions(ctx context.Context, nv NetworkVersion,
 		progress.Report(shared.HeightRange{}, 0, nil, true)
 	}
 	return
+}
+
+// StopRunningTransactions gets running transactions
+func (hc *Client) StopRunningTransactions(ctx context.Context, nv NetworkVersion, clean bool) (err error) {
+	return hc.runner.StopRunning(nv, clean)
 }

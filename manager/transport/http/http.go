@@ -337,6 +337,29 @@ func (c *Connector) GetRunningTransactions(w http.ResponseWriter, req *http.Requ
 	enc.Encode(run)
 }
 
+// StopRunningTransactions stops currently running transactions
+func (c *Connector) StopRunningTransactions(w http.ResponseWriter, req *http.Request) {
+	clean := (req.URL.Query().Get("clean") != "")
+	network := req.URL.Query().Get("network")
+	chainID := req.URL.Query().Get("chain_id")
+
+	if network == "" || chainID == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(`{"error":"network and chain_id parameters are required"}`))
+		return
+	}
+
+	if err := c.cli.StopRunningTransactions(req.Context(), client.NetworkVersion{Network: network, Version: "0.0.1", ChainID: chainID}, clean); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	}
+
+	w.Header().Add("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(`{"state":"success"}`))
+}
+
 // GetMissingTransactions is http handler for GetMissingTransactions method
 func (c *Connector) GetMissingTransactions(w http.ResponseWriter, req *http.Request) {
 
@@ -442,6 +465,7 @@ func (c *Connector) AttachToHandler(mux *http.ServeMux) {
 	mux.HandleFunc("/check_missing", c.CheckMissingTransactions)
 	mux.HandleFunc("/get_missing", c.GetMissingTransactions)
 	mux.HandleFunc("/get_running", c.GetRunningTransactions)
+	mux.HandleFunc("/stop_running", c.StopRunningTransactions)
 
 }
 

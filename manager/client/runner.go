@@ -51,6 +51,8 @@ type RunReq struct {
 	HeightRange shared.HeightRange
 
 	Force bool
+
+	Clean bool
 	Resp  chan RunResp
 }
 
@@ -79,6 +81,14 @@ func (r *Runner) GetRunning() ReqOut {
 	return <-resp
 }
 
+func (r *Runner) StopRunning(nv NetworkVersion, clean bool) error {
+	resp := make(chan RunResp, 1)
+	defer close(resp)
+	r.in <- RunReq{Kind: "stop_all", NV: nv, Clean: clean, Resp: resp}
+	response := <-resp
+	return response.Err
+}
+
 func (r *Runner) Run() {
 	ctx := context.Background()
 	tckr := time.NewTicker(time.Hour)
@@ -96,6 +106,7 @@ func (r *Runner) Run() {
 						FinishTime:       run.FinishTime,
 						Finished:         run.Finished,
 						Progress:         run.Progress,
+						ProgressSummary:  run.ProgressSummary,
 						LastProgressTime: run.LastProgressTime})
 				}
 			}
@@ -128,7 +139,28 @@ func (r *Runner) Run() {
 					currentlyRunning.Stop()
 				}
 				rReq.Resp <- RunResp{IsNew: false, Run: nil, Err: nil}
+				continue
+			} else if rReq.Kind == "stop_all" {
+				current, ok := r.runs[rReq.NV]
+				if !ok {
+					rReq.Resp <- RunResp{IsNew: false, Run: nil, Err: errors.New("Network/Chain doesn't exist")}
+					continue
+				}
+
+				for k, c := range current {
+					c.Stop()
+					if rReq.Clean {
+						current[k] = nil
+					}
+				}
+				if rReq.Clean {
+					delete(r.runs, rReq.NV)
+				}
+
+				rReq.Resp <- RunResp{IsNew: false, Run: nil, Err: nil}
+				continue
 			}
+
 			rReq.Resp <- RunResp{IsNew: false, Run: nil, Err: errors.New("unknown request kind")}
 		}
 	}
