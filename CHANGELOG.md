@@ -1,6 +1,6 @@
 # Change Log
 
-## [0.0.7] -
+## [0.0.7] - 2020-12-03
 ### Added
 - Ability to stop running sync process
 ### Changed
