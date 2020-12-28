@@ -116,6 +116,8 @@ type SubsetEvent struct {
 	Completion *time.Time `json:"completion,omitempty"`
 	// List of Amounts
 	Amount map[string]TransactionAmount `json:"amount,omitempty"`
+	// List of Transfers with amounts and optional recipients
+	Transfers map[string][]EventTransfer `json:"transfers,omitempty"`
 	// Optional error if occurred
 	Error *SubsetEventError `json:"error,omitempty"`
 	// Set of additional parameters attached to transaction (used as last resort)
