@@ -1,5 +1,11 @@
 # Change Log
 
+## [0.0.8] - 2020-12-28
+### Added
+- 'transfers' field to 'sub' in transaction events. This field contains reward information.
+### Changed
+### Fixed
+
 ## [0.0.7] - 2020-12-03
 ### Added
 - Ability to stop running sync process
