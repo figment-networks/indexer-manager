@@ -3,10 +3,15 @@ package structs
 import (
 	"encoding/json"
 	"errors"
+	"math"
 	"math/big"
 	"time"
 
 	"github.com/google/uuid"
+)
+
+var (
+	tenInt = big.NewInt(10)
 )
 
 //go:generate swagger generate spec --scan-models -o swagger.json
@@ -94,6 +99,53 @@ type TransactionAmount struct {
 	Numeric *big.Int `json:"numeric,omitempty"`
 	// Exponential part of amount obviously 0 by default
 	Exp int32 `json:"exp,omitempty"`
+}
+
+func (t *TransactionAmount) Add(o TransactionAmount) {
+	expDiff := (t.Exp - o.Exp)
+
+	if expDiff < 0 {
+		zerosToAdd := math.Abs(float64(expDiff))
+		multiplier := new(big.Int).Exp(tenInt, big.NewInt(int64(zerosToAdd)), nil)
+		t.Numeric.Mul(t.Numeric, multiplier)
+		t.Numeric.Add(t.Numeric, o.Numeric)
+		t.Exp = t.Exp - expDiff
+		return
+	}
+
+	zerosToAdd := int64(expDiff)
+	multiplier := new(big.Int).Exp(tenInt, big.NewInt(zerosToAdd), nil)
+	tmp := o.Clone()
+	tmp.Numeric.Mul(tmp.Numeric, multiplier)
+	t.Numeric.Add(tmp.Numeric, t.Numeric)
+}
+
+func (t *TransactionAmount) Sub(o TransactionAmount) {
+	expDiff := (t.Exp - o.Exp)
+
+	if expDiff < 0 {
+		zerosToAdd := math.Abs(float64(expDiff))
+		multiplier := new(big.Int).Exp(tenInt, big.NewInt(int64(zerosToAdd)), nil)
+		t.Numeric.Mul(t.Numeric, multiplier)
+		t.Numeric.Sub(t.Numeric, o.Numeric)
+		t.Exp = t.Exp - expDiff
+		return
+	}
+
+	zerosToAdd := int64(expDiff)
+	multiplier := new(big.Int).Exp(tenInt, big.NewInt(zerosToAdd), nil)
+	tmp := o.Clone()
+	tmp.Numeric.Mul(tmp.Numeric, multiplier)
+	t.Numeric.Sub(t.Numeric, tmp.Numeric)
+}
+
+func (t *TransactionAmount) Clone() TransactionAmount {
+	tmp := TransactionAmount{
+		Numeric: &big.Int{},
+		Exp:     t.Exp,
+	}
+	tmp.Numeric.Set(t.Numeric)
+	return tmp
 }
 
 // SubsetEvent - structure storing main contents of transacion
