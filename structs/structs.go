@@ -144,6 +144,10 @@ func (t *TransactionAmount) Clone() TransactionAmount {
 		Numeric: &big.Int{},
 		Exp:     t.Exp,
 	}
+	if t.Numeric == nil {
+		tmp.Numeric.Set(big.NewInt(0))
+		return tmp
+	}
 	tmp.Numeric.Set(t.Numeric)
 	return tmp
 }
