@@ -573,14 +573,20 @@ WaitForAllData:
 					}
 					for _, evtr := range evtrs {
 						for _, amt := range evtr.Amounts {
-							total.Add(amt)
+							err := total.Add(amt)
+							if err != nil {
+								return rewards, err
+							}
 						}
 					}
 				}
 			}
 		}
 
-		total.Sub(prevDayEndReward)
+		err = total.Sub(prevDayEndReward)
+		if err != nil {
+			return rewards, err
+		}
 		rewards = append(rewards, shared.RewardSummary{
 			Time:   row.dayStart,
 			Amount: total,

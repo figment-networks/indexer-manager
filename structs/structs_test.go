@@ -6,7 +6,6 @@ import (
 )
 
 func TestTransactionAmount_Add(t *testing.T) {
-
 	tests := []struct {
 		name string
 		args []TransactionAmount

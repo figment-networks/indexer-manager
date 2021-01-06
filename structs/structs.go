@@ -101,7 +101,10 @@ type TransactionAmount struct {
 	Exp int32 `json:"exp,omitempty"`
 }
 
-func (t *TransactionAmount) Add(o TransactionAmount) {
+func (t *TransactionAmount) Add(o TransactionAmount) error {
+	if t.Currency != o.Currency {
+		return fmt.Errorf("coin currency different: %v %v\n", t.Currency, o.Currency)
+	}
 	expDiff := (t.Exp - o.Exp)
 
 	if expDiff < 0 {
@@ -110,7 +113,7 @@ func (t *TransactionAmount) Add(o TransactionAmount) {
 		t.Numeric.Mul(t.Numeric, multiplier)
 		t.Numeric.Add(t.Numeric, o.Numeric)
 		t.Exp = t.Exp - expDiff
-		return
+		return nil
 	}
 
 	zerosToAdd := int64(expDiff)
@@ -118,9 +121,15 @@ func (t *TransactionAmount) Add(o TransactionAmount) {
 	tmp := o.Clone()
 	tmp.Numeric.Mul(tmp.Numeric, multiplier)
 	t.Numeric.Add(tmp.Numeric, t.Numeric)
+	return nil
 }
 
-func (t *TransactionAmount) Sub(o TransactionAmount) {
+func (t *TransactionAmount) Sub(o TransactionAmount) error {
+	if t.Currency != o.Currency {
+		return fmt.Errorf("coin currency different: %v %v\n", t.Currency, o.Currency)
+
+	}
+
 	expDiff := (t.Exp - o.Exp)
 
 	if expDiff < 0 {
@@ -129,7 +138,7 @@ func (t *TransactionAmount) Sub(o TransactionAmount) {
 		t.Numeric.Mul(t.Numeric, multiplier)
 		t.Numeric.Sub(t.Numeric, o.Numeric)
 		t.Exp = t.Exp - expDiff
-		return
+		return nil
 	}
 
 	zerosToAdd := int64(expDiff)
@@ -137,12 +146,14 @@ func (t *TransactionAmount) Sub(o TransactionAmount) {
 	tmp := o.Clone()
 	tmp.Numeric.Mul(tmp.Numeric, multiplier)
 	t.Numeric.Sub(t.Numeric, tmp.Numeric)
+	return nil
 }
 
 func (t *TransactionAmount) Clone() TransactionAmount {
 	tmp := TransactionAmount{
-		Numeric: &big.Int{},
-		Exp:     t.Exp,
+		Currency: t.Currency,
+		Numeric:  &big.Int{},
+		Exp:      t.Exp,
 	}
 	if t.Numeric == nil {
 		tmp.Numeric.Set(big.NewInt(0))
