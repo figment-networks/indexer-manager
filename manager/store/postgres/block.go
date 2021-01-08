@@ -9,6 +9,7 @@ import (
 	"math"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/figment-networks/indexer-manager/manager/store/params"
 	"github.com/figment-networks/indexer-manager/structs"
@@ -135,6 +136,31 @@ func (d *Driver) GetLatestBlock(ctx context.Context, blx structs.BlockWithMeta) 
 	returnBlx := structs.Block{}
 
 	row := d.db.QueryRowContext(ctx, getLatestBlockQuery, blx.ChainID, blx.Network)
+	if row == nil {
+		return out, params.ErrNotFound
+	}
+
+	err = row.Scan(&returnBlx.ID, &returnBlx.Epoch, &returnBlx.Height, &returnBlx.Hash, &returnBlx.Time, &returnBlx.NumberOfTransactions)
+	if err == sql.ErrNoRows {
+		return returnBlx, params.ErrNotFound
+	}
+	return returnBlx, err
+}
+
+const getBlockForMinTimeQuery = `SELECT id, epoch, height, hash, time, numtxs
+							FROM public.blocks
+							WHERE
+								chain_id = $1 AND
+								network = $2 AND
+								time >= $3
+							ORDER BY time ASC
+							LIMIT 1`
+
+// GetBlockForMinTime returns first block that comes on or after given time
+func (d *Driver) GetBlockForMinTime(ctx context.Context, blx structs.BlockWithMeta, time time.Time) (out structs.Block, err error) {
+	returnBlx := structs.Block{}
+
+	row := d.db.QueryRowContext(ctx, getBlockForMinTimeQuery, blx.ChainID, blx.Network, time)
 	if row == nil {
 		return out, params.ErrNotFound
 	}

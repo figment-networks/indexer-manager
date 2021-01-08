@@ -3,10 +3,15 @@ package structs
 import (
 	"encoding/json"
 	"errors"
+	"math"
 	"math/big"
 	"time"
 
 	"github.com/google/uuid"
+)
+
+var (
+	tenInt = big.NewInt(10)
 )
 
 //go:generate swagger generate spec --scan-models -o swagger.json
@@ -94,6 +99,68 @@ type TransactionAmount struct {
 	Numeric *big.Int `json:"numeric,omitempty"`
 	// Exponential part of amount obviously 0 by default
 	Exp int32 `json:"exp,omitempty"`
+}
+
+func (t *TransactionAmount) Add(o TransactionAmount) error {
+	if t.Currency != o.Currency {
+		return fmt.Errorf("coin currency different: %v %v\n", t.Currency, o.Currency)
+	}
+	expDiff := (t.Exp - o.Exp)
+
+	if expDiff < 0 {
+		zerosToAdd := math.Abs(float64(expDiff))
+		multiplier := new(big.Int).Exp(tenInt, big.NewInt(int64(zerosToAdd)), nil)
+		t.Numeric.Mul(t.Numeric, multiplier)
+		t.Numeric.Add(t.Numeric, o.Numeric)
+		t.Exp = t.Exp - expDiff
+		return nil
+	}
+
+	zerosToAdd := int64(expDiff)
+	multiplier := new(big.Int).Exp(tenInt, big.NewInt(zerosToAdd), nil)
+	tmp := o.Clone()
+	tmp.Numeric.Mul(tmp.Numeric, multiplier)
+	t.Numeric.Add(tmp.Numeric, t.Numeric)
+	return nil
+}
+
+func (t *TransactionAmount) Sub(o TransactionAmount) error {
+	if t.Currency != o.Currency {
+		return fmt.Errorf("coin currency different: %v %v\n", t.Currency, o.Currency)
+
+	}
+
+	expDiff := (t.Exp - o.Exp)
+
+	if expDiff < 0 {
+		zerosToAdd := math.Abs(float64(expDiff))
+		multiplier := new(big.Int).Exp(tenInt, big.NewInt(int64(zerosToAdd)), nil)
+		t.Numeric.Mul(t.Numeric, multiplier)
+		t.Numeric.Sub(t.Numeric, o.Numeric)
+		t.Exp = t.Exp - expDiff
+		return nil
+	}
+
+	zerosToAdd := int64(expDiff)
+	multiplier := new(big.Int).Exp(tenInt, big.NewInt(zerosToAdd), nil)
+	tmp := o.Clone()
+	tmp.Numeric.Mul(tmp.Numeric, multiplier)
+	t.Numeric.Sub(t.Numeric, tmp.Numeric)
+	return nil
+}
+
+func (t *TransactionAmount) Clone() TransactionAmount {
+	tmp := TransactionAmount{
+		Currency: t.Currency,
+		Numeric:  &big.Int{},
+		Exp:      t.Exp,
+	}
+	if t.Numeric == nil {
+		tmp.Numeric.Set(big.NewInt(0))
+		return tmp
+	}
+	tmp.Numeric.Set(t.Numeric)
+	return tmp
 }
 
 // SubsetEvent - structure storing main contents of transacion

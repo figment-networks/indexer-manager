@@ -10,14 +10,14 @@ var (
 )
 
 type TransactionSearch struct {
-	Height    uint64   `json:"height"`
-	Type      []string `json:"type"`
-	BlockHash string   `json:"block_hash"`
-	Hash      string   `json:"hash"`
-	Account   []string `json:"account"`
-	Sender    []string `json:"sender"`
-	Receiver  []string `json:"receiver"`
-	Memo      string   `json:"memo"`
+	Height    uint64    `json:"height"`
+	Type      SearchArr `json:"type"`
+	BlockHash string    `json:"block_hash"`
+	Hash      string    `json:"hash"`
+	Account   []string  `json:"account"`
+	Sender    []string  `json:"sender"`
+	Receiver  []string  `json:"receiver"`
+	Memo      string    `json:"memo"`
 
 	AfterTime  time.Time `json:"before_time"`
 	BeforeTime time.Time `json:"after_time"`
@@ -35,4 +35,9 @@ type TransactionSearch struct {
 	WithRawLog bool `json:"with_raw_log"`
 
 	HasErrors bool `json:"has_errors"`
+}
+
+type SearchArr struct {
+	Value []string `json:"value"`
+	Any   bool     `json:"any"`
 }

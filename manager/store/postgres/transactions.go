@@ -358,9 +358,14 @@ func (d *Driver) GetTransactions(ctx context.Context, tsearch params.Transaction
 		}
 	}
 
-	if len(tsearch.Type) > 0 {
-		parts = append(parts, "type @> $"+strconv.Itoa(i))
-		data = append(data, pq.Array(tsearch.Type))
+	// SELECT * FROM transaction_events WHERE type @> ARRAY['delegate']::varchar[] limit 1;
+	if len(tsearch.Type.Value) > 0 {
+		var q string = "type @> $"
+		if tsearch.Type.Any {
+			q = "type <@ $"
+		}
+		parts = append(parts, q+strconv.Itoa(i))
+		data = append(data, pq.Array(tsearch.Type.Value))
 		i++
 	}
 

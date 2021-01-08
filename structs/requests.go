@@ -7,6 +7,7 @@ import (
 const (
 	ReqIDGetTransactions = "GetTransactions"
 	ReqIDLatestData      = "GetLatest"
+	ReqIDGetReward       = "GetReward"
 )
 
 type HeightRange struct {
@@ -23,6 +24,15 @@ type HeightHash struct {
 	Epoch  string
 	Height uint64
 	Hash   string
+
+	ChainID string
+	Network string
+}
+
+type HeightAccount struct {
+	Epoch   string
+	Height  uint64
+	Account string
 
 	ChainID string
 	Network string
@@ -55,4 +65,14 @@ type LatestDataResponse struct {
 	LastTime   time.Time `json:"lastTime"`
 	LastEpoch  string    `json:"lastEpoch"`
 	Nonce      []byte    `json:"nonce"`
+}
+
+type GetRewardResponse struct {
+	Height  uint64            `json:"height"`
+	Rewards TransactionAmount `json:"rewards"`
+}
+
+type RewardSummary struct {
+	Time   time.Time         `json:"time"`
+	Amount TransactionAmount `json:"amount"`
 }

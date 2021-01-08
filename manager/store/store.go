@@ -40,6 +40,7 @@ type BlockStore interface {
 	StoreBlock(structs.BlockWithMeta) error
 
 	GetLatestBlock(ctx context.Context, blx structs.BlockWithMeta) (structs.Block, error)
+	GetBlockForMinTime(ctx context.Context, blx structs.BlockWithMeta, time time.Time) (structs.Block, error)
 
 	BlockContinuityCheck(ctx context.Context, blx structs.BlockWithMeta, startHeight, endHeight uint64) ([][2]uint64, error)
 	BlockTransactionCheck(ctx context.Context, blx structs.BlockWithMeta, startHeight, endHeight uint64) ([]uint64, error)
@@ -90,6 +91,10 @@ func (s *Store) StoreBlock(bl structs.BlockWithMeta) error {
 
 func (s *Store) GetLatestBlock(ctx context.Context, blx structs.BlockWithMeta) (structs.Block, error) {
 	return s.driver.GetLatestBlock(ctx, blx)
+}
+
+func (s *Store) GetBlockForMinTime(ctx context.Context, blx structs.BlockWithMeta, time time.Time) (structs.Block, error) {
+	return s.driver.GetBlockForMinTime(ctx, blx, time)
 }
 
 func (s *Store) BlockContinuityCheck(ctx context.Context, blx structs.BlockWithMeta, startHeight, endHeight uint64) ([][2]uint64, error) {
