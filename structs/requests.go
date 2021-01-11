@@ -68,11 +68,13 @@ type LatestDataResponse struct {
 }
 
 type GetRewardResponse struct {
-	Height  uint64            `json:"height"`
-	Rewards TransactionAmount `json:"rewards"`
+	Height  uint64              `json:"height"`
+	Rewards []TransactionAmount `json:"rewards"`
 }
 
 type RewardSummary struct {
-	Time   time.Time         `json:"time"`
-	Amount TransactionAmount `json:"amount"`
+	Start  uint64              `json:"start"`
+	End    uint64              `json:"end"`
+	Time   time.Time           `json:"time"`
+	Amount []TransactionAmount `json:"amount"`
 }
