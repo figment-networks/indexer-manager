@@ -508,7 +508,7 @@ func (hc *Client) GetRewards(ctx context.Context, nv NetworkVersion, start, end 
 	buff := &bytes.Buffer{}
 	dec := json.NewDecoder(buff)
 
-	rewardsMap := make(map[uint64]shared.TransactionAmount)
+	rewardsMap := make(map[uint64][]shared.TransactionAmount)
 
 	var receivedFinals int
 WaitForAllData:
@@ -548,8 +548,8 @@ WaitForAllData:
 	// reward earned = rewards balance at end of day - rewards balance at end of prev day + sum rewards from txs from prev end to end
 	rewardTxTypes := []string{"delegate", "withdraw_delegator_reward", "begin_unbonding", "begin_redelegate"}
 	for _, row := range rows {
-		prevDayEndReward := rewardsMap[row.startHeight]
-		dayEndReward := rewardsMap[row.endHeight]
+		prevDayEndRewards := rewardsMap[row.startHeight]
+		dayEndRewards := rewardsMap[row.endHeight]
 
 		txs, err := hc.storeEng.GetTransactions(ctx, params.TransactionSearch{
 			Network:      nv.Network,
@@ -562,7 +562,11 @@ WaitForAllData:
 		if err != nil {
 			return rewards, err
 		}
-		total := dayEndReward.Clone()
+
+		totalCurrencyMap := make(map[string]shared.TransactionAmount)
+		for _, total := range dayEndRewards {
+			totalCurrencyMap[total.Currency] = total.Clone()
+		}
 
 		for _, tx := range txs {
 			for _, ev := range tx.Events {
@@ -573,6 +577,11 @@ WaitForAllData:
 					}
 					for _, evtr := range evtrs {
 						for _, amt := range evtr.Amounts {
+							total, ok := totalCurrencyMap[amt.Currency]
+							if !ok {
+								totalCurrencyMap[amt.Currency] = amt.Clone()
+								continue
+							}
 							err := total.Add(amt)
 							if err != nil {
 								return rewards, err
@@ -583,13 +592,27 @@ WaitForAllData:
 			}
 		}
 
-		err = total.Sub(prevDayEndReward)
-		if err != nil {
-			return rewards, err
+		for _, prev := range prevDayEndRewards {
+			total, ok := totalCurrencyMap[prev.Currency]
+			if !ok {
+				totalCurrencyMap[prev.Currency] = prev.Clone()
+				continue
+			}
+			err = total.Sub(prev)
+			if err != nil {
+				return rewards, err
+			}
+		}
+
+		totals := []shared.TransactionAmount{}
+		for _, amt := range totalCurrencyMap {
+			totals = append(totals, amt)
 		}
 		rewards = append(rewards, shared.RewardSummary{
 			Time:   row.dayStart,
-			Amount: total,
+			Start:  row.startHeight,
+			End:    row.endHeight,
+			Amount: totals,
 		})
 	}
 
