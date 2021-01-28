@@ -1,5 +1,11 @@
 # Change Log
 
+
+## [0.0.9] - 2021-01-28
+### Added
+- Implement `/rewards` endpoint which calculates daily rewards earned by an account for a given time period.
+### Changed
+### Fixed
 ## [0.0.8] - 2020-12-28
 ### Added
 - 'transfers' field to 'sub' in transaction events. This field contains reward information.
