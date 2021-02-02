@@ -192,7 +192,9 @@ func (c *Connector) SearchTransactions(w http.ResponseWriter, req *http.Request)
 	enc := json.NewEncoder(w)
 
 	ts := &TransactionSearch{}
-	if strings.Contains(ct, "json") {
+
+	// (lukanus): make json the default payload
+	if ct == "" || strings.Contains(ct, "json") {
 		dec := json.NewDecoder(req.Body)
 		err := dec.Decode(ts)
 		if err != nil {
@@ -203,6 +205,7 @@ func (c *Connector) SearchTransactions(w http.ResponseWriter, req *http.Request)
 	} else {
 		w.WriteHeader(http.StatusNotAcceptable)
 		enc.Encode(ValidationError{Msg: "Not supported content type"})
+		return
 	}
 	// (lukanus): enforce 100 limit by default
 	if ts.Limit == 0 {
