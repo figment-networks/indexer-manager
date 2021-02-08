@@ -76,5 +76,5 @@ type RewardSummary struct {
 	Start  uint64              `json:"start"`
 	End    uint64              `json:"end"`
 	Time   time.Time           `json:"time"`
-	Amount []TransactionAmount `json:"amount"`
+	Amount []TransactionAmount `json:"rewards"`
 }

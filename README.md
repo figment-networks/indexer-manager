@@ -167,7 +167,7 @@ Where
     - `overwrite_all` skips any checks and forcefully overwrites records found for given range .
 
 ### Transaction Search
-Transaction Search is available by making a post request on `/transaction_search`.
+Transaction Search is available by making a POST request on `/transaction_search`.
 The detailed description of parameters and response is available in [swagger.json](./swagger.json).
 
 Current implementation allows to query entire range, however some complex queries take time.
@@ -191,3 +191,52 @@ List of cosmos defined types (listed by modules):
     `begin_unbonding` , `edit_validator` , `create_validator` , `delegate` , `begin_redelegate`
 - internal:
     `error`
+
+### Rewards
+
+Rewards are available via a GET request to `/rewards`. 
+
+```http
+GET /rewards?network=kava&chain_id=kava-4&account=kava1u84mr5ndzx29q0pxvv9zyqq0wcth780hycrt0m&start_time=2021-01-14T02:00:00.000000Z&end_time=2021-01-15T02:00:00.000000Z
+```
+
+| Parameter | JSON Type | Description |
+| :--- | :--- | :--- |
+| `account` | `string` | **Required**. Account identifier |
+| `network` | `string` | **Required**. Network identifier to search (eg. `cosmos`) |
+| `chain_id` | `string` | **Required**. ChainID (eg. `cosmoshub-3`) |
+| `start_time` | `string` | **Required**. Start time in RFC3339Nano format |
+| `end_time` | `string` | **Required**. End time in RFC3339Nano format |
+
+
+All times are in UTC. To get daily reward summaries for your local timezone, apply the UTC offset to midnight of your desired timezone. The response is an array of total rewards per currency for an account in 24 hour periods from the provided UTC `start_time`:
+
+```
+[
+    {
+        "start": 865999,
+        "end": 867288,
+        "time": "2021-01-14T02:00:00.000000Z",
+        "rewards": [
+            {
+                "text": "1.023320944447133110740ukava",
+                "currency": "ukava",
+                "numeric": 1023320944447133110740,
+                "exp": 18
+            }
+        ]
+    }
+]
+```
+
+
+| Parameter | JSON Type | Go Type | Description |
+| :--- | :--- | :--- | :--- |
+| `start` | `number` | `int64` | Period start height |
+| `end` | `number` | `int64` | Period end height |
+| `time` | `string` | `time.Time` | Period start time in RFC3339Nano format |
+| `rewards` | `array` | `int64` | Array of total reward amounts earned for each currency |
+| `text` | `string` | `string` | **Optional** Total amount with currency in text format |
+| `currency` | `string` | `string` | Currency type (eg. `ukava`) |
+| `numeric` | `number` | `big.Tnt` | an integer representation of `amount` without decimal places, such that `amount = numeric * 10^(-exp)` |
+| `exp` | `number` | `int32` | the number of decimal places in `amount`, such that `amount = numeric * 10^(-exp)` |
