@@ -648,7 +648,7 @@ func (hc *Client) GetAccountBalance(ctx context.Context, nv NetworkVersion, star
 	if err != nil {
 		return rewards, err
 	}
-	req, err := hc.createTaskRequest(ctx, nv, account, bl.Height-1, shared.ReqAccountBalance)
+	req, err := hc.createTaskRequest(ctx, nv, account, bl.Height-1, shared.ReqIDAccountBalance)
 	if err != nil {
 		return rewards, err
 	}
@@ -671,7 +671,7 @@ func (hc *Client) GetAccountBalance(ctx context.Context, nv NetworkVersion, star
 			return rewards, err
 		}
 
-		req, err := hc.createTaskRequest(ctx, nv, account, bl.Height, shared.ReqAccountBalance)
+		req, err := hc.createTaskRequest(ctx, nv, account, bl.Height, shared.ReqIDAccountBalance)
 		if err != nil {
 			return rewards, err
 		}
