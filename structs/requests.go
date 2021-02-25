@@ -79,3 +79,8 @@ type RewardSummary struct {
 	Time   time.Time           `json:"time"`
 	Amount []TransactionAmount `json:"rewards"`
 }
+
+type GetAccountBalanceResponse struct {
+	Height   uint64          `json:"height"`
+	Balances []BalanceAmount `json:"balances"`
+}
