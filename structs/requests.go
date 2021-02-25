@@ -8,6 +8,7 @@ const (
 	ReqIDGetTransactions = "GetTransactions"
 	ReqIDLatestData      = "GetLatest"
 	ReqIDGetReward       = "GetReward"
+	ReqAccountBalance    = "GetAccountBalance"
 )
 
 type HeightRange struct {

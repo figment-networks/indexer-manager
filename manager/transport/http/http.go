@@ -456,7 +456,7 @@ func (c *Connector) GetMissingTransactions(w http.ResponseWriter, req *http.Requ
 
 }
 
-// GetRewards calulates daily rewards for provided address
+// GetRewards calculates daily rewards for provided address
 func (c *Connector) GetRewards(w http.ResponseWriter, req *http.Request) {
 	network := req.URL.Query().Get("network")
 	chainID := req.URL.Query().Get("chain_id")
@@ -506,6 +506,53 @@ func (c *Connector) GetRewards(w http.ResponseWriter, req *http.Request) {
 	w.Header().Add("Content-Type", "application/json")
 }
 
+// GetAccountBalance calculates daily balance for provided address
+func (c *Connector) GetAccountBalance(w http.ResponseWriter, req *http.Request) {
+	// TODO: should not be only for cosmos?
+	network := req.URL.Query().Get("network")
+	chainID := req.URL.Query().Get("chain_id")
+	if network == "" || chainID == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(`{"error":"network and chain_id parameters are required"}`))
+		return
+	}
+
+	address := req.URL.Query().Get("address")
+	if address == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(`{"error":"address parameter is required"}`))
+		return
+	}
+
+	start := req.URL.Query().Get("start")
+	end := req.URL.Query().Get("end")
+	if start == "" || end == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(`{"error":"start time and end time parameters are required"}`))
+		return
+	}
+	startTime, errStart := time.Parse(time.RFC3339Nano, start)
+	endTime, errEnd := time.Parse(time.RFC3339Nano, end)
+	if errStart != nil || errEnd != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(`{"error":"time range parameters should be in the format \"2006-01-02T15:04:05.999999999Z07:00\""}`))
+		return
+	}
+
+	err := c.cli.GetAccountBalance(req.Context(), client.NetworkVersion{Network: network, Version: "0.0.1", ChainID: chainID}, startTime, endTime, address)
+
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	}
+	enc := json.NewEncoder(w)
+	enc.Encode("ok")
+	//enc.Encode(resp)
+
+	w.Header().Add("Content-Type", "application/json")
+}
+
 // AttachToHandler attaches handlers to http server's mux
 func (c *Connector) AttachToHandler(mux *http.ServeMux) {
 	mux.HandleFunc("/transactions_search", c.SearchTransactions)
@@ -520,6 +567,7 @@ func (c *Connector) AttachToHandler(mux *http.ServeMux) {
 	mux.HandleFunc("/stop_running", c.StopRunningTransactions)
 
 	mux.HandleFunc("/rewards", c.GetRewards)
+	mux.HandleFunc("/account/balance", c.GetAccountBalance)
 }
 
 func validateSearchParams(ts *TransactionSearch) error {
