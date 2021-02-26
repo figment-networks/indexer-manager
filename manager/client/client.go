@@ -41,7 +41,7 @@ type ClientContractor interface {
 	GetTransaction(ctx context.Context, nv NetworkVersion, id string) ([]shared.Transaction, error)
 	GetTransactions(ctx context.Context, nv NetworkVersion, heightRange shared.HeightRange, batchLimit uint64, silent bool) ([]shared.Transaction, error)
 	GetRewards(ctx context.Context, nv NetworkVersion, start, end time.Time, account string) ([]shared.RewardSummary, error)
-	GetAccountBalance(ctx context.Context, nv NetworkVersion, start, end time.Time, address string) error
+	GetAccountBalance(ctx context.Context, nv NetworkVersion, start, end time.Time, address string) (balances []shared.BalanceSummary, err error)
 }
 
 type SchedulerContractor interface {
@@ -430,11 +430,11 @@ func (hc *Client) storeTransaction(dec *json.Decoder, network string, version st
 	return nil
 }
 
-// GetRewards calulates reward summaries for 24h segments for given time range
+// GetRewards calculates reward summaries for 24h segments for given time range
 func (hc *Client) GetRewards(ctx context.Context, nv NetworkVersion, start, end time.Time, account string) (rewards []shared.RewardSummary, err error) {
 	defer hc.recoverPanic()
 
-	timer := metrics.NewTimer(callDurationGetTransactions)
+	timer := metrics.NewTimer(callDurationReward)
 	defer timer.ObserveDuration()
 
 	blockWithMeta := shared.BlockWithMeta{
@@ -621,7 +621,7 @@ WaitForAllData:
 }
 
 // GetAccountBalance calculates balance summaries for 24h segments for given time range
-func (hc *Client) GetAccountBalance(ctx context.Context, nv NetworkVersion, start, end time.Time, account string) (rewards []shared.RewardSummary, err error) {
+func (hc *Client) GetAccountBalance(ctx context.Context, nv NetworkVersion, start, end time.Time, account string) (balances []shared.BalanceSummary, err error) {
 	defer hc.recoverPanic()
 
 	timer := metrics.NewTimer(callDurationAccountBalance)
@@ -646,11 +646,11 @@ func (hc *Client) GetAccountBalance(ctx context.Context, nv NetworkVersion, star
 
 	bl, err := hc.storeEng.GetBlockForMinTime(ctx, blockWithMeta, start)
 	if err != nil {
-		return rewards, err
+		return balances, err
 	}
 	req, err := hc.createTaskRequest(ctx, nv, account, bl.Height-1, shared.ReqIDAccountBalance)
 	if err != nil {
-		return rewards, err
+		return balances, err
 	}
 	reqs = append(reqs, req)
 
@@ -668,12 +668,12 @@ func (hc *Client) GetAccountBalance(ctx context.Context, nv NetworkVersion, star
 		bl, err := hc.storeEng.GetBlockForMinTime(ctx, blockWithMeta, dayEnd)
 
 		if err != nil {
-			return rewards, err
+			return balances, err
 		}
 
 		req, err := hc.createTaskRequest(ctx, nv, account, bl.Height, shared.ReqIDAccountBalance)
 		if err != nil {
-			return rewards, err
+			return balances, err
 		}
 		reqs = append(reqs, req)
 
@@ -691,7 +691,7 @@ func (hc *Client) GetAccountBalance(ctx context.Context, nv NetworkVersion, star
 	respAwait, err := hc.sender.Send(reqs)
 	if err != nil {
 		hc.logger.Error("[Client] Error sending data", zap.Error(err))
-		return rewards, fmt.Errorf("error sending data in GetAccountBalance: %w", err)
+		return balances, fmt.Errorf("error sending data in GetAccountBalance: %w", err)
 	}
 
 	defer respAwait.Close()
@@ -699,30 +699,30 @@ func (hc *Client) GetAccountBalance(ctx context.Context, nv NetworkVersion, star
 	buff := &bytes.Buffer{}
 	dec := json.NewDecoder(buff)
 
-	rewardsMap := make(map[uint64][]shared.TransactionAmount)
+	balancesMap := make(map[uint64][]shared.BalanceAmount)
 
 	var receivedFinals int
 WaitForAllData:
 	for {
 		select {
 		case <-ctx.Done():
-			return rewards, errors.New("Request timed out")
+			return balances, errors.New("request timed out")
 		case response := <-respAwait.Resp:
-			hc.logger.Debug("[Client] Get Reward received data:", zap.Any("type", response.Type), zap.Any("response", response))
+			hc.logger.Debug("[Client] Get account balance  received data:", zap.Any("type", response.Type), zap.Any("response", response))
 
 			if response.Error.Msg != "" {
-				return rewards, fmt.Errorf("error getting response: %s", response.Error.Msg)
+				return balances, fmt.Errorf("error getting response: %s", response.Error.Msg)
 			}
 
-			if response.Type == "Reward" {
+			if response.Type == "AccountBalance" {
 				buff.Reset()
 				buff.ReadFrom(bytes.NewReader(response.Payload))
-				b := &shared.GetRewardResponse{}
+				b := &shared.GetAccountBalanceResponse{}
 				err := dec.Decode(b)
 				if err != nil {
-					return rewards, fmt.Errorf("error decoding reward: %w", err)
+					return balances, fmt.Errorf("error decoding reward: %w", err)
 				}
-				rewardsMap[b.Height] = b.Rewards
+				balancesMap[b.Height] = b.Balances
 			}
 
 			if response.Final {
@@ -736,80 +736,7 @@ WaitForAllData:
 		}
 	}
 
-	/*
-		// reward earned = rewards balance at end of day - rewards balance at end of prev day + sum rewards from txs from prev end to end
-		rewardTxTypes := []string{"delegate", "withdraw_delegator_reward", "begin_unbonding", "begin_redelegate"}
-		for _, row := range rows {
-			prevDayEndRewards := rewardsMap[row.startHeight]
-			dayEndRewards := rewardsMap[row.endHeight]
-
-			txs, err := hc.storeEng.GetTransactions(ctx, params.TransactionSearch{
-				Network:      nv.Network,
-				ChainIDs:     []string{nv.ChainID},
-				Type:         params.SearchArr{Value: rewardTxTypes, Any: true},
-				Account:      []string{account},
-				AfterHeight:  row.startHeight,
-				BeforeHeight: row.endHeight,
-			})
-			if err != nil {
-				return rewards, err
-			}
-
-			totalCurrencyMap := make(map[string]shared.TransactionAmount)
-			for _, total := range dayEndRewards {
-				totalCurrencyMap[total.Currency] = total.Clone()
-			}
-
-			for _, tx := range txs {
-				for _, ev := range tx.Events {
-					for _, sub := range ev.Sub {
-						evtrs, ok := sub.Transfers["reward"]
-						if !ok {
-							continue
-						}
-						for _, evtr := range evtrs {
-							for _, amt := range evtr.Amounts {
-								total, ok := totalCurrencyMap[amt.Currency]
-								if !ok {
-									totalCurrencyMap[amt.Currency] = amt.Clone()
-									continue
-								}
-								err := total.Add(amt)
-								if err != nil {
-									return rewards, err
-								}
-							}
-						}
-					}
-				}
-			}
-
-			for _, prev := range prevDayEndRewards {
-				total, ok := totalCurrencyMap[prev.Currency]
-				if !ok {
-					totalCurrencyMap[prev.Currency] = prev.Clone()
-					continue
-				}
-				err = total.Sub(prev)
-				if err != nil {
-					return rewards, err
-				}
-			}
-
-			totals := []shared.TransactionAmount{}
-			for _, amt := range totalCurrencyMap {
-				totals = append(totals, amt)
-			}
-			rewards = append(rewards, shared.RewardSummary{
-				Time:   row.dayStart,
-				Start:  row.startHeight,
-				End:    row.endHeight,
-				Amount: totals,
-			})
-		}
-	*/
-
-	return rewards, nil
+	return balances, nil
 }
 
 func (hc *Client) createTaskRequest(ctx context.Context, nv NetworkVersion, account string, height uint64, reqType string) (structs.TaskRequest, error) {

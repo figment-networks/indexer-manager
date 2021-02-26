@@ -24,6 +24,7 @@ var (
 	callDurationSearchTransactions *metrics.GroupObserver
 	callDurationScrapeLatest       *metrics.GroupObserver
 	callDurationInsertTransactions *metrics.GroupObserver
+	callDurationReward             *metrics.GroupObserver
 	callDurationAccountBalance     *metrics.GroupObserver
 
 	callDurationCheckMissing *metrics.GroupObserver
@@ -36,6 +37,7 @@ func InitMetrics() {
 	callDurationSearchTransactions = callDuration.WithLabels("SearchTransactions")
 	callDurationScrapeLatest = callDuration.WithLabels("ScrapeLatest")
 	callDurationInsertTransactions = callDuration.WithLabels("InsertTransactions")
+	callDurationReward = callDuration.WithLabels("Reward")
 	callDurationAccountBalance = callDuration.WithLabels("AccountBalance")
 	callDurationCheckMissing = callDuration.WithLabels("CheckMissing")
 	callDurationGetMissing = callDuration.WithLabels("GetMissing")

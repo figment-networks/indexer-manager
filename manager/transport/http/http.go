@@ -508,7 +508,6 @@ func (c *Connector) GetRewards(w http.ResponseWriter, req *http.Request) {
 
 // GetAccountBalance calculates daily balance for provided address
 func (c *Connector) GetAccountBalance(w http.ResponseWriter, req *http.Request) {
-	// TODO: should not be only for cosmos?
 	network := req.URL.Query().Get("network")
 	chainID := req.URL.Query().Get("chain_id")
 	if network == "" || chainID == "" {
@@ -524,11 +523,11 @@ func (c *Connector) GetAccountBalance(w http.ResponseWriter, req *http.Request) 
 		return
 	}
 
-	start := req.URL.Query().Get("start")
-	end := req.URL.Query().Get("end")
+	start := req.URL.Query().Get("start_time")
+	end := req.URL.Query().Get("end_time")
 	if start == "" || end == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte(`{"error":"start time and end time parameters are required"}`))
+		w.Write([]byte(`{"error":"start_time and end_time parameters are required"}`))
 		return
 	}
 	startTime, errStart := time.Parse(time.RFC3339Nano, start)
@@ -539,7 +538,7 @@ func (c *Connector) GetAccountBalance(w http.ResponseWriter, req *http.Request) 
 		return
 	}
 
-	err := c.cli.GetAccountBalance(req.Context(), client.NetworkVersion{Network: network, Version: "0.0.1", ChainID: chainID}, startTime, endTime, address)
+	resp, err := c.cli.GetAccountBalance(req.Context(), client.NetworkVersion{Network: network, Version: "0.0.1", ChainID: chainID}, startTime, endTime, address)
 
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -547,8 +546,7 @@ func (c *Connector) GetAccountBalance(w http.ResponseWriter, req *http.Request) 
 		return
 	}
 	enc := json.NewEncoder(w)
-	enc.Encode("ok")
-	//enc.Encode(resp)
+	enc.Encode(resp)
 
 	w.Header().Add("Content-Type", "application/json")
 }
