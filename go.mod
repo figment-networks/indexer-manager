@@ -4,7 +4,7 @@ go 1.15
 
 require (
 	github.com/bearcherian/rollzap v1.0.2
-	github.com/figment-networks/indexing-engine v0.1.14
+	github.com/figment-networks/indexing-engine v0.2.1
 	github.com/golang-migrate/migrate/v4 v4.13.0
 	github.com/golang/mock v1.4.4
 	github.com/golang/protobuf v1.4.3

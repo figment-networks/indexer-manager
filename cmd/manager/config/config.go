@@ -3,6 +3,7 @@ package config
 import (
 	"encoding/json"
 	"io/ioutil"
+	"time"
 
 	"github.com/kelseyhightower/envconfig"
 )
@@ -32,6 +33,8 @@ type Config struct {
 	// Embedded Scheduler
 	EnableScheduler            bool   `json:"enable_scheduler" envconfig:"ENABLE_SCHEDULER"`
 	SchedulerInitialConfigPath string `json:"scheduler_initial_config_path" envconfig:"SCHEDULER_INITIAL_CONFIG_PATH"`
+
+	HealthCheckInterval time.Duration `json:"health_check_interval" envconfig:"HEALTH_CHECK_INTERVAL" default:"10s"`
 }
 
 // FromFile reads the config from a file

@@ -19,6 +19,8 @@ import (
 	"github.com/figment-networks/indexer-manager/manager/store/postgres"
 	grpcTransport "github.com/figment-networks/indexer-manager/manager/transport/grpc"
 	httpTransport "github.com/figment-networks/indexer-manager/manager/transport/http"
+	"github.com/figment-networks/indexing-engine/health"
+	"github.com/figment-networks/indexing-engine/health/database/postgreshealth"
 	"github.com/figment-networks/indexing-engine/metrics"
 	"github.com/figment-networks/indexing-engine/metrics/prometheusmetrics"
 
@@ -122,7 +124,13 @@ func main() {
 	connManager.AttachToMux(mux)
 
 	attachDynamic(ctx, mux)
-	attachHealthCheck(ctx, mux, db)
+
+	dbMonitor := postgreshealth.NewPostgresMonitorWithMetrics(db, logger.GetLogger())
+	monitor := &health.Monitor{}
+	monitor.AddProber(ctx, dbMonitor)
+	go monitor.RunChecks(ctx, cfg.HealthCheckInterval)
+	monitor.AttachHttp(mux)
+
 	attachProfiling(mux)
 
 	// (lukanus): only after passing param, conditionally enable scheduler
