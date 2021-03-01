@@ -736,6 +736,22 @@ WaitForAllData:
 		}
 	}
 
+	for _, row := range rows {
+		dayEndBalances := balancesMap[row.endHeight]
+
+		blns := []shared.BalanceAmount{}
+		for _, bln := range dayEndBalances {
+			blns = append(blns, bln)
+		}
+
+		balances = append(balances, shared.BalanceSummary{
+			Time:   row.dayStart,
+			Start:  row.startHeight,
+			End:    row.endHeight,
+			Amount: blns,
+		})
+	}
+
 	return balances, nil
 }
 
