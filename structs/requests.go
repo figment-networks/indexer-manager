@@ -81,13 +81,13 @@ type RewardSummary struct {
 }
 
 type GetAccountBalanceResponse struct {
-	Height   uint64          `json:"height"`
-	Balances []BalanceAmount `json:"balances"`
+	Height   uint64              `json:"height"`
+	Balances []TransactionAmount `json:"balances"`
 }
 
 type BalanceSummary struct {
-	Start  uint64          `json:"start"`
-	End    uint64          `json:"end"`
-	Time   time.Time       `json:"time"`
-	Amount []BalanceAmount `json:"balances"`
+	Start  uint64              `json:"start"`
+	End    uint64              `json:"end"`
+	Time   time.Time           `json:"time"`
+	Amount []TransactionAmount `json:"balances"`
 }

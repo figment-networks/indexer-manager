@@ -271,12 +271,3 @@ type TransactionSearch struct {
 	WithRaw    bool `json:"with_raw"`
 	WithRawLog bool `json:"with_raw_log"`
 }
-
-// BalanceAmount structure represents account balance
-// swagger:model
-type BalanceAmount struct {
-	// Denom denomination of Amount
-	Denom string `json:"denom"`
-	// Amount keeps the balance amount
-	Amount *big.Int `json:"amount"`
-}

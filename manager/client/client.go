@@ -699,7 +699,7 @@ func (hc *Client) GetAccountBalance(ctx context.Context, nv NetworkVersion, star
 	buff := &bytes.Buffer{}
 	dec := json.NewDecoder(buff)
 
-	balancesMap := make(map[uint64][]shared.BalanceAmount)
+	balancesMap := make(map[uint64][]shared.TransactionAmount)
 
 	var receivedFinals int
 WaitForAllData:
@@ -739,7 +739,7 @@ WaitForAllData:
 	for _, row := range rows {
 		dayEndBalances := balancesMap[row.endHeight]
 
-		blns := []shared.BalanceAmount{}
+		blns := []shared.TransactionAmount{}
 		for _, bln := range dayEndBalances {
 			blns = append(blns, bln)
 		}
