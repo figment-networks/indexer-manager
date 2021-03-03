@@ -8,6 +8,7 @@ const (
 	ReqIDGetTransactions = "GetTransactions"
 	ReqIDLatestData      = "GetLatest"
 	ReqIDGetReward       = "GetReward"
+	ReqIDAccountBalance  = "GetAccountBalance"
 )
 
 type HeightRange struct {
@@ -77,4 +78,15 @@ type RewardSummary struct {
 	End    uint64              `json:"end"`
 	Time   time.Time           `json:"time"`
 	Amount []TransactionAmount `json:"rewards"`
+}
+
+type GetAccountBalanceResponse struct {
+	Height   uint64              `json:"height"`
+	Balances []TransactionAmount `json:"balances"`
+}
+
+type BalanceSummary struct {
+	Height uint64              `json:"height"`
+	Time   time.Time           `json:"time"`
+	Amount []TransactionAmount `json:"balances"`
 }

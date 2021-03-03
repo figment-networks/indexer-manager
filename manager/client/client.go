@@ -41,6 +41,7 @@ type ClientContractor interface {
 	GetTransaction(ctx context.Context, nv NetworkVersion, id string) ([]shared.Transaction, error)
 	GetTransactions(ctx context.Context, nv NetworkVersion, heightRange shared.HeightRange, batchLimit uint64, silent bool) ([]shared.Transaction, error)
 	GetRewards(ctx context.Context, nv NetworkVersion, start, end time.Time, account string) ([]shared.RewardSummary, error)
+	GetAccountBalance(ctx context.Context, nv NetworkVersion, start, end time.Time, address string) (balances []shared.BalanceSummary, err error)
 }
 
 type SchedulerContractor interface {
@@ -429,11 +430,11 @@ func (hc *Client) storeTransaction(dec *json.Decoder, network string, version st
 	return nil
 }
 
-// GetRewards calulates reward summaries for 24h segments for given time range
+// GetRewards calculates reward summaries for 24h segments for given time range
 func (hc *Client) GetRewards(ctx context.Context, nv NetworkVersion, start, end time.Time, account string) (rewards []shared.RewardSummary, err error) {
 	defer hc.recoverPanic()
 
-	timer := metrics.NewTimer(callDurationGetTransactions)
+	timer := metrics.NewTimer(callDurationReward)
 	defer timer.ObserveDuration()
 
 	blockWithMeta := shared.BlockWithMeta{
@@ -457,7 +458,7 @@ func (hc *Client) GetRewards(ctx context.Context, nv NetworkVersion, start, end 
 	if err != nil {
 		return rewards, err
 	}
-	req, err := hc.createRewardTaskRequest(ctx, nv, account, bl.Height-1)
+	req, err := hc.createTaskRequest(ctx, nv, account, bl.Height-1, shared.ReqIDGetReward)
 	if err != nil {
 		return rewards, err
 	}
@@ -480,7 +481,7 @@ func (hc *Client) GetRewards(ctx context.Context, nv NetworkVersion, start, end 
 			return rewards, err
 		}
 
-		req, err := hc.createRewardTaskRequest(ctx, nv, account, bl.Height)
+		req, err := hc.createTaskRequest(ctx, nv, account, bl.Height, shared.ReqIDGetReward)
 		if err != nil {
 			return rewards, err
 		}
@@ -619,7 +620,136 @@ WaitForAllData:
 	return rewards, nil
 }
 
-func (hc *Client) createRewardTaskRequest(ctx context.Context, nv NetworkVersion, account string, height uint64) (structs.TaskRequest, error) {
+// GetAccountBalance calculates balance summaries for 24h segments for given time range
+func (hc *Client) GetAccountBalance(ctx context.Context, nv NetworkVersion, start, end time.Time, account string) (balances []shared.BalanceSummary, err error) {
+	defer hc.recoverPanic()
+
+	timer := metrics.NewTimer(callDurationAccountBalance)
+	defer timer.ObserveDuration()
+
+	blockWithMeta := shared.BlockWithMeta{
+		Network: nv.Network,
+		Version: nv.Version,
+		ChainID: nv.ChainID,
+	}
+
+	var dayStart, dayEnd time.Time
+	reqs := []structs.TaskRequest{}
+
+	type dataRow struct {
+		dayStart time.Time
+		height   uint64
+	}
+	var rows []dataRow
+
+	bl, err := hc.storeEng.GetBlockForMinTime(ctx, blockWithMeta, start)
+	if err != nil {
+		return balances, err
+	}
+	req, err := hc.createTaskRequest(ctx, nv, account, bl.Height-1, shared.ReqIDAccountBalance)
+	if err != nil {
+		return balances, err
+	}
+	reqs = append(reqs, req)
+
+	dayStart = start
+	for {
+		if dayStart == end {
+			break
+		}
+		dayEnd = dayStart.Add(time.Hour * 24)
+		if dayEnd.After(end) {
+			dayEnd = end
+		}
+
+		bl, err := hc.storeEng.GetBlockForMinTime(ctx, blockWithMeta, dayEnd)
+
+		if err != nil {
+			return balances, err
+		}
+
+		req, err := hc.createTaskRequest(ctx, nv, account, bl.Height, shared.ReqIDAccountBalance)
+		if err != nil {
+			return balances, err
+		}
+		reqs = append(reqs, req)
+
+		rows = append(rows, dataRow{
+			dayStart: dayStart,
+			height:   bl.Height,
+		})
+
+		dayStart = dayEnd
+	}
+
+	hc.logger.Info("[Client] Sending request data:", zap.Any("requests", reqs))
+	respAwait, err := hc.sender.Send(reqs)
+	if err != nil {
+		hc.logger.Error("[Client] Error sending data", zap.Error(err))
+		return balances, fmt.Errorf("error sending data in GetAccountBalance: %w", err)
+	}
+
+	defer respAwait.Close()
+
+	buff := &bytes.Buffer{}
+	dec := json.NewDecoder(buff)
+
+	balancesMap := make(map[uint64][]shared.TransactionAmount)
+
+	var receivedFinals int
+WaitForAllData:
+	for {
+		select {
+		case <-ctx.Done():
+			return balances, errors.New("request timed out")
+		case response := <-respAwait.Resp:
+			hc.logger.Debug("[Client] Get account balance  received data:", zap.Any("type", response.Type), zap.Any("response", response))
+
+			if response.Error.Msg != "" {
+				return balances, fmt.Errorf("error getting response: %s", response.Error.Msg)
+			}
+
+			if response.Type == "AccountBalance" {
+				buff.Reset()
+				buff.ReadFrom(bytes.NewReader(response.Payload))
+				b := &shared.GetAccountBalanceResponse{}
+				err := dec.Decode(b)
+				if err != nil {
+					return balances, fmt.Errorf("error decoding account balance: %w", err)
+				}
+				balancesMap[b.Height] = b.Balances
+			}
+
+			if response.Final {
+				receivedFinals++
+			}
+
+			if receivedFinals == len(reqs) {
+				hc.logger.Info("[Client] Received All for", zap.Any("requests", reqs))
+				break WaitForAllData
+			}
+		}
+	}
+
+	for _, row := range rows {
+		dayEndBalances := balancesMap[row.height]
+
+		blns := []shared.TransactionAmount{}
+		for _, bln := range dayEndBalances {
+			blns = append(blns, bln)
+		}
+
+		balances = append(balances, shared.BalanceSummary{
+			Time:   row.dayStart,
+			Height: row.height,
+			Amount: blns,
+		})
+	}
+
+	return balances, nil
+}
+
+func (hc *Client) createTaskRequest(ctx context.Context, nv NetworkVersion, account string, height uint64, reqType string) (structs.TaskRequest, error) {
 	ha, err := json.Marshal(shared.HeightAccount{
 		Height:  height,
 		Account: account,
@@ -634,7 +764,7 @@ func (hc *Client) createRewardTaskRequest(ctx context.Context, nv NetworkVersion
 		Network: nv.Network,
 		ChainID: nv.ChainID,
 		Version: nv.Version,
-		Type:    shared.ReqIDGetReward,
+		Type:    reqType,
 		Payload: ha,
 	}, nil
 }
