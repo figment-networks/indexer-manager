@@ -516,10 +516,10 @@ func (c *Connector) GetAccountBalance(w http.ResponseWriter, req *http.Request) 
 		return
 	}
 
-	address := req.URL.Query().Get("address")
-	if address == "" {
+	account := req.URL.Query().Get("account")
+	if account == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte(`{"error":"address parameter is required"}`))
+		w.Write([]byte(`{"error":"account parameter is required"}`))
 		return
 	}
 
@@ -538,7 +538,7 @@ func (c *Connector) GetAccountBalance(w http.ResponseWriter, req *http.Request) 
 		return
 	}
 
-	resp, err := c.cli.GetAccountBalance(req.Context(), client.NetworkVersion{Network: network, Version: "0.0.1", ChainID: chainID}, startTime, endTime, address)
+	resp, err := c.cli.GetAccountBalance(req.Context(), client.NetworkVersion{Network: network, Version: "0.0.1", ChainID: chainID}, startTime, endTime, account)
 
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)

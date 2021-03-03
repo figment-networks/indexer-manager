@@ -86,8 +86,7 @@ type GetAccountBalanceResponse struct {
 }
 
 type BalanceSummary struct {
-	Start  uint64              `json:"start"`
-	End    uint64              `json:"end"`
+	Height uint64              `json:"height"`
 	Time   time.Time           `json:"time"`
 	Amount []TransactionAmount `json:"balances"`
 }

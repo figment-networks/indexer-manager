@@ -633,14 +633,12 @@ func (hc *Client) GetAccountBalance(ctx context.Context, nv NetworkVersion, star
 		ChainID: nv.ChainID,
 	}
 
-	var prevDayEndHeight uint64
 	var dayStart, dayEnd time.Time
 	reqs := []structs.TaskRequest{}
 
 	type dataRow struct {
-		dayStart    time.Time
-		startHeight uint64
-		endHeight   uint64
+		dayStart time.Time
+		height   uint64
 	}
 	var rows []dataRow
 
@@ -654,7 +652,6 @@ func (hc *Client) GetAccountBalance(ctx context.Context, nv NetworkVersion, star
 	}
 	reqs = append(reqs, req)
 
-	prevDayEndHeight = bl.Height - 1
 	dayStart = start
 	for {
 		if dayStart == end {
@@ -678,12 +675,10 @@ func (hc *Client) GetAccountBalance(ctx context.Context, nv NetworkVersion, star
 		reqs = append(reqs, req)
 
 		rows = append(rows, dataRow{
-			dayStart:    dayStart,
-			startHeight: prevDayEndHeight,
-			endHeight:   bl.Height,
+			dayStart: dayStart,
+			height:   bl.Height,
 		})
 
-		prevDayEndHeight = bl.Height
 		dayStart = dayEnd
 	}
 
@@ -720,7 +715,7 @@ WaitForAllData:
 				b := &shared.GetAccountBalanceResponse{}
 				err := dec.Decode(b)
 				if err != nil {
-					return balances, fmt.Errorf("error decoding reward: %w", err)
+					return balances, fmt.Errorf("error decoding account balance: %w", err)
 				}
 				balancesMap[b.Height] = b.Balances
 			}
@@ -737,7 +732,7 @@ WaitForAllData:
 	}
 
 	for _, row := range rows {
-		dayEndBalances := balancesMap[row.endHeight]
+		dayEndBalances := balancesMap[row.height]
 
 		blns := []shared.TransactionAmount{}
 		for _, bln := range dayEndBalances {
@@ -746,8 +741,7 @@ WaitForAllData:
 
 		balances = append(balances, shared.BalanceSummary{
 			Time:   row.dayStart,
-			Start:  row.startHeight,
-			End:    row.endHeight,
+			Height: row.height,
 			Amount: blns,
 		})
 	}
