@@ -238,7 +238,7 @@ All times are in UTC. To get daily reward summaries for your local timezone, app
 | `rewards` | `array` | `int64` | Array of total reward amounts earned for each currency |
 | `text` | `string` | `string` | **Optional** Total amount with currency in text format |
 | `currency` | `string` | `string` | Currency type (eg. `ukava`) |
-| `numeric` | `number` | `big.Tnt` | an integer representation of `amount` without decimal places, such that `amount = numeric * 10^(-exp)` |
+| `numeric` | `number` | `big.Int` | an integer representation of `amount` without decimal places, such that `amount = numeric * 10^(-exp)` |
 | `exp` | `number` | `int32` | the number of decimal places in `amount`, such that `amount = numeric * 10^(-exp)` |
 
 
@@ -287,4 +287,4 @@ The response is an array of account balance per currency for an account in 24 ho
 | `balances` | `array` | `int64` | Array of account balances  |
 | `text` | `string` | `string` |  Balance amount with currency in text format |
 | `currency` | `string` | `string` | Currency type (eg. `ukava`) |
-| `numeric` | `number` | `big.Tnt` | an integer representation of `amount` without decimal places, such that `amount = numeric * 10^(-exp)` |
+| `numeric` | `number` | `big.Int` | an integer representation of `amount` without decimal places, such that `amount = numeric * 10^(-exp)` |
