@@ -1,5 +1,10 @@
 # Change Log
 
+## [0.10.0] - 2021-03-03
+### Added
+- Implement `/account/balance` endpoint which returns daily balances of an account for a given time period.
+### Changed
+### Fixed
 
 ## [0.0.9] - 2021-01-28
 ### Added
