@@ -240,3 +240,51 @@ All times are in UTC. To get daily reward summaries for your local timezone, app
 | `currency` | `string` | `string` | Currency type (eg. `ukava`) |
 | `numeric` | `number` | `big.Tnt` | an integer representation of `amount` without decimal places, such that `amount = numeric * 10^(-exp)` |
 | `exp` | `number` | `int32` | the number of decimal places in `amount`, such that `amount = numeric * 10^(-exp)` |
+
+
+
+### Account Balances
+
+Account Balances are available via a GET request to `/account/balance`. 
+
+```http
+GET /account/balance?network=kava&chain_id=kava-4&account=kava1u84mr5ndzx29q0pxvv9zyqq0wcth780hycrt0m&start_time=2021-01-14T02:00:00.000000Z&end_time=2021-01-15T02:00:00.000000Z
+```
+
+| Parameter | JSON Type | Description |
+| :--- | :--- | :--- |
+| `account` | `string` | **Required**. Account identifier |
+| `network` | `string` | **Required**. Network identifier to search (eg. `cosmos`) |
+| `chain_id` | `string` | **Required**. ChainID (eg. `cosmoshub-3`) |
+| `start_time` | `string` | **Required**. Start time in RFC3339Nano format |
+| `end_time` | `string` | **Required**. End time in RFC3339Nano format |
+
+
+All times are in UTC. To get daily account balance summaries for your local timezone, apply the UTC offset to midnight of your desired timezone. 
+The response is an array of account balance per currency for an account in 24 hour periods from the provided UTC `start_time`:
+
+```
+[
+    {
+        "height": 867288,
+        "time": "2021-01-14T02:00:00.000000Z",
+        "balances": [
+            {
+                "text": "1.023320944447133110740ukava",
+                "currency": "ukava",
+                "numeric": 1023320944447133110740,
+            }
+        ]
+    }
+]
+```
+
+
+| Parameter | JSON Type | Go Type | Description |
+| :--- | :--- | :--- | :--- |
+| `height` | `number` | `int64` | Period (end) height which shows the account balance info for |
+| `time` | `string` | `time.Time` | Period start time in RFC3339Nano format |
+| `balances` | `array` | `int64` | Array of account balances  |
+| `text` | `string` | `string` |  Balance amount with currency in text format |
+| `currency` | `string` | `string` | Currency type (eg. `ukava`) |
+| `numeric` | `number` | `big.Tnt` | an integer representation of `amount` without decimal places, such that `amount = numeric * 10^(-exp)` |
