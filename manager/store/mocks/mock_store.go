@@ -10,6 +10,7 @@ import (
 	structs "github.com/figment-networks/indexer-manager/structs"
 	gomock "github.com/golang/mock/gomock"
 	reflect "reflect"
+	time "time"
 )
 
 // MockDataStore is a mock of DataStore interface
@@ -63,6 +64,21 @@ func (m *MockDataStore) BlockTransactionCheck(arg0 context.Context, arg1 structs
 func (mr *MockDataStoreMockRecorder) BlockTransactionCheck(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BlockTransactionCheck", reflect.TypeOf((*MockDataStore)(nil).BlockTransactionCheck), arg0, arg1, arg2, arg3)
+}
+
+// GetBlockForMinTime mocks base method
+func (m *MockDataStore) GetBlockForMinTime(arg0 context.Context, arg1 structs.BlockWithMeta, arg2 time.Time) (structs.Block, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetBlockForMinTime", arg0, arg1, arg2)
+	ret0, _ := ret[0].(structs.Block)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetBlockForMinTime indicates an expected call of GetBlockForMinTime
+func (mr *MockDataStoreMockRecorder) GetBlockForMinTime(arg0, arg1, arg2 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBlockForMinTime", reflect.TypeOf((*MockDataStore)(nil).GetBlockForMinTime), arg0, arg1, arg2)
 }
 
 // GetBlocksHeightsWithNumTx mocks base method
